@@ -1,0 +1,26 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+*.xcworkspace/
+DerivedData/
+build/
+*.hmap
+*.ipa
+*.dSYM.zip
+
+# Swift / SPM
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# fonts are expected to be committed — do not ignore them
+!Resources/Fonts/*.ttf
+!Resources/Fonts/*.otf
