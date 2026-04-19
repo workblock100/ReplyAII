@@ -4,7 +4,7 @@ Native macOS AI-native messaging assistant. SwiftUI, macOS 14+, dark mode only f
 
 ## Status
 
-Screen inventory: **28 / 28** complete.
+Screen inventory: **34 / 34** complete.
 
 - [x] Main app: `app-inbox`, `app-inbox-empty`, `app-inbox-loading`, `app-offline`
 - [x] Threads: `thr-group`, `thr-media`, `thr-long`

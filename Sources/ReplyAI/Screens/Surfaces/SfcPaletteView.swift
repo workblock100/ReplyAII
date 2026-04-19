@@ -1,27 +1,12 @@
 import SwiftUI
 
-/// `sfc-palette` — ⌘K command palette over the inbox.
-struct SfcPaletteView: View {
+/// Standalone palette card — what `⌘K` actually presents over the inbox.
+/// Separated from `SfcPaletteView` so the gallery can render a blurred
+/// inbox behind it without doubling up on overlays.
+struct PalettePopover: View {
     @State private var query: String = "dinner with mom"
 
     var body: some View {
-        ZStack {
-            // Blurred inbox behind.
-            InboxScreen()
-                .blur(radius: 1)
-                .opacity(0.5)
-                .allowsHitTesting(false)
-
-            Color.black.opacity(0.5).ignoresSafeArea()
-
-            palette
-                .frame(maxHeight: .infinity, alignment: .top)
-                .padding(.top, 120)
-        }
-        .frame(minWidth: 1180, minHeight: 720)
-    }
-
-    private var palette: some View {
         VStack(spacing: 0) {
             searchRow
                 .overlay(alignment: .bottom) { Rectangle().fill(Theme.Color.line).frame(height: 1) }
@@ -147,5 +132,24 @@ struct SfcPaletteView: View {
         .foregroundStyle(Theme.Color.fgFaint)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+/// `sfc-palette` — gallery view. Blurred inbox behind + dim scrim + palette.
+struct SfcPaletteView: View {
+    var body: some View {
+        ZStack {
+            InboxScreen()
+                .blur(radius: 1)
+                .opacity(0.5)
+                .allowsHitTesting(false)
+
+            Color.black.opacity(0.5).ignoresSafeArea()
+
+            PalettePopover()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, 120)
+        }
+        .frame(minWidth: 1180, minHeight: 720)
     }
 }

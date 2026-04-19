@@ -3,6 +3,7 @@ import SwiftUI
 struct InboxScreen: View {
     @State private var model = InboxViewModel()
     @State private var engine = DraftEngine()
+    @State private var paletteOpen = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,9 +16,33 @@ struct InboxScreen: View {
         .background(Theme.Color.bg1)
         .preferredColorScheme(.dark)
         .environment(engine)
+        .overlay {
+            if paletteOpen {
+                paletteOverlay
+                    .transition(.opacity)
+            }
+        }
         // Global command shortcuts — wired through .background so they stay
         // active whenever the inbox is on screen.
         .background(keyboardCommands)
+    }
+
+    @ViewBuilder
+    private var paletteOverlay: some View {
+        ZStack(alignment: .top) {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation(Theme.Motion.fast) { paletteOpen = false } }
+            PalettePopover()
+                .padding(.top, 120)
+        }
+        .background(
+            Button("Close palette") {
+                withAnimation(Theme.Motion.fast) { paletteOpen = false }
+            }
+            .keyboardShortcut(.escape, modifiers: [])
+            .opacity(0)
+        )
     }
 
     @ViewBuilder
@@ -56,6 +81,13 @@ struct InboxScreen: View {
                     advanceToNextThread()
                 }
                 .keyboardShortcut(.return, modifiers: .command)
+                .opacity(0)
+            )
+            .background(
+                Button("Command palette") {
+                    withAnimation(Theme.Motion.std) { paletteOpen.toggle() }
+                }
+                .keyboardShortcut("k", modifiers: .command)
                 .opacity(0)
             )
     }

@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct SetPrivacyView: View {
-    @State private var crashReports = true
-    @State private var licenseUpdates = true
-    @State private var iCloudSync = false
+    @AppStorage(PreferenceKey.crashReports)   private var crashReports   = PreferenceDefaults.crashReports
+    @AppStorage(PreferenceKey.licenseUpdates) private var licenseUpdates = PreferenceDefaults.licenseUpdates
+    @AppStorage(PreferenceKey.iCloudSync)     private var iCloudSync     = PreferenceDefaults.iCloudSync
 
     var body: some View {
         SettingsShell(active: .privacy) {
@@ -42,7 +42,8 @@ struct SetPrivacyView: View {
                     SettingRow(label: "Export your data", value: "Voice profile, smart rules, and settings as a single .replyai file")
                     SettingRow(label: "Wipe everything ReplyAI has seen",
                                value: "Reset voice profile, clear all cached threads, keep app installed",
-                               danger: "Factory reset")
+                               danger: "Factory reset",
+                               dangerAction: { UserDefaults.wipeReplyAIDefaults() })
                 }
                 .padding(.top, 16)
             }

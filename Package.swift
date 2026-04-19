@@ -26,5 +26,10 @@ let package = Package(
                 .process("Resources/Assets.xcassets"),
             ]
         ),
+        .testTarget(
+            name: "ReplyAITests",
+            dependencies: ["ReplyAI"],
+            path: "Tests/ReplyAITests"
+        ),
     ]
 )
