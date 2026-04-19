@@ -6,11 +6,18 @@ struct InboxScreen: View {
     @State private var paletteOpen = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            SidebarView(model: model)
-            ThreadListView(model: model)
-            ThreadDetailView(model: model)
-                .frame(maxWidth: .infinity)
+        VStack(spacing: 0) {
+            if case .denied(let hint) = model.syncStatus {
+                FDABanner(hint: hint) {
+                    Task { await model.syncFromIMessage() }
+                }
+            }
+            HStack(spacing: 0) {
+                SidebarView(model: model)
+                ThreadListView(model: model)
+                ThreadDetailView(model: model)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .frame(minWidth: 1180, minHeight: 720)
         .background(Theme.Color.bg1)
@@ -21,6 +28,12 @@ struct InboxScreen: View {
                 paletteOverlay
                     .transition(.opacity)
             }
+        }
+        .task(id: "initial-sync") {
+            await model.syncFromIMessage()
+        }
+        .task(id: model.selectedThreadID) {
+            await model.loadMessages(for: model.selectedThreadID)
         }
         // Global command shortcuts — wired through .background so they stay
         // active whenever the inbox is on screen.
@@ -88,6 +101,13 @@ struct InboxScreen: View {
                     withAnimation(Theme.Motion.std) { paletteOpen.toggle() }
                 }
                 .keyboardShortcut("k", modifiers: .command)
+                .opacity(0)
+            )
+            .background(
+                Button("Refresh iMessage") {
+                    Task { await model.syncFromIMessage() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
                 .opacity(0)
             )
     }

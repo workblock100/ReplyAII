@@ -56,9 +56,12 @@ fi
 
 # Ad-hoc codesign so macOS will launch the bundle without quarantine warnings
 # on this machine. (Gatekeeper is strict; ad-hoc is fine for dev.)
-echo "==> codesign (ad-hoc)"
-codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/ReplyAI" >/dev/null
-codesign --force --sign - --timestamp=none "$APP" >/dev/null
+# The entitlements file must be applied at signing time, otherwise the
+# sandbox-disabled bit isn't honored and FDA can't attach to this bundle.
+echo "==> codesign (ad-hoc, entitlements)"
+ENT="$REPO/Sources/ReplyAI/Resources/ReplyAI.entitlements"
+codesign --force --sign - --timestamp=none --entitlements "$ENT" "$APP/Contents/MacOS/ReplyAI" >/dev/null
+codesign --force --sign - --timestamp=none --entitlements "$ENT" "$APP" >/dev/null
 
 echo "==> verify"
 codesign --verify --verbose=2 "$APP" 2>&1 | sed 's/^/    /'

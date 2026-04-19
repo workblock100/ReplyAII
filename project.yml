@@ -52,6 +52,7 @@ targets:
     entitlements:
       path: Sources/ReplyAI/Resources/ReplyAI.entitlements
       properties:
-        com.apple.security.app-sandbox: true
-        com.apple.security.files.user-selected.read-write: true
+        # Sandbox disabled so the bundle is eligible for Full Disk Access,
+        # which TCC only exposes to non-sandboxed apps. Without FDA we
+        # cannot read ~/Library/Messages/chat.db.
         com.apple.security.network.client: true
