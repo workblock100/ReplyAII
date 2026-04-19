@@ -36,11 +36,13 @@ final class InboxViewModel {
         self.folders = folders
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
-        // Bridge the actor-isolated resolver into a Sendable closure; the
-        // channel calls it synchronously from any task via MainActor.
+        // Resolver is NSLock-guarded and callable from any thread, so we
+        // can hand a plain Sendable closure to the SQLite worker without
+        // needing MainActor.assumeIsolated (which would crash on the
+        // cooperative executor).
         let resolver = self.contacts
         self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
-            MainActor.assumeIsolated { resolver.name(for: handle) }
+            resolver.name(for: handle)
         })
     }
 

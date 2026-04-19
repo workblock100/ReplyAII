@@ -4,71 +4,101 @@ import Contacts
 /// Resolves raw handles (`+15551234567`, `user@example.com`) to contact
 /// names via the user's address book. Gated on Contacts access (a
 /// separate TCC permission from Full Disk Access).
-@MainActor
-final class ContactsResolver {
-    enum Access {
+///
+/// Thread-safety: `name(for:)` is called from the SQLite worker thread
+/// inside IMessageChannel.recentThreads, so the resolver must not be
+/// actor-isolated. CNContactStore reads are safe from any thread; we
+/// wrap the cache in an NSLock.
+final class ContactsResolver: @unchecked Sendable {
+    enum Access: Sendable {
         case unknown
         case granted
         case denied
     }
 
     private let store = CNContactStore()
+    private let lock = NSLock()
     private var cache: [String: String] = [:]
-    private(set) var access: Access = .unknown
+    private var _access: Access = .unknown
+
+    var access: Access {
+        synced { _access }
+    }
 
     /// Kick off the permission prompt if we haven't asked yet. Safe to
     /// call repeatedly — already-authorized is a no-op.
     func ensureAccess() async {
         let status = CNContactStore.authorizationStatus(for: .contacts)
+        let resolved: Access
         switch status {
         case .authorized:
-            access = .granted
+            resolved = .granted
         case .denied, .restricted:
-            access = .denied
+            resolved = .denied
         case .notDetermined:
             do {
                 let ok = try await store.requestAccess(for: .contacts)
-                access = ok ? .granted : .denied
+                resolved = ok ? .granted : .denied
             } catch {
-                access = .denied
+                resolved = .denied
             }
         case .limited:
-            access = .granted  // partial access is usable
+            resolved = .granted  // partial access is usable
         @unknown default:
-            access = .denied
+            resolved = .denied
         }
+        setAccess(resolved)
     }
 
     /// Returns the contact's display name for a handle, or nil if we
-    /// don't have a match (or don't have permission).
+    /// don't have a match (or don't have permission). Callable from any
+    /// thread.
     func name(for handle: String) -> String? {
-        if access != .granted { return nil }
-        if let hit = cache[handle] { return hit.isEmpty ? nil : hit }
+        let (hit, gate) = synced { () -> (String?, Access) in
+            (cache[handle], _access)
+        }
+        if let hit { return hit.isEmpty ? nil : hit }
+        if gate != .granted { return nil }
 
-        let normalized = normalize(handle)
+        let resolved = lookup(handle: handle) ?? ""
+        synced { cache[handle] = resolved }
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    // MARK: - Synchronous lock helpers
+
+    /// Wraps NSLock usage in a sync method so callers from `async`
+    /// contexts don't trip Swift 6's "NSLock unavailable in async
+    /// contexts" diagnostic — the lock is never held across an await.
+    private func synced<T>(_ body: () -> T) -> T {
+        lock.lock(); defer { lock.unlock() }
+        return body()
+    }
+
+    private func setAccess(_ a: Access) {
+        synced { _access = a }
+    }
+
+    /// Uncached lookup. CNContactStore + CNContactFormatter are both
+    /// documented thread-safe for read access.
+    private func lookup(handle: String) -> String? {
         let keys: [CNKeyDescriptor] = [CNContactFormatter.descriptorForRequiredKeys(for: .fullName)]
-
-        // Try phone first, then email. The predicates below match on any
-        // contact whose phone OR email contains the handle.
         do {
             let predicate: NSPredicate
             if handle.contains("@") {
                 predicate = CNContact.predicateForContacts(matchingEmailAddress: handle)
             } else {
-                predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: normalized))
+                predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: normalize(handle)))
             }
             let matches = try store.unifiedContacts(matching: predicate, keysToFetch: keys)
             if let first = matches.first,
                let formatted = CNContactFormatter.string(from: first, style: .fullName),
                !formatted.isEmpty {
-                cache[handle] = formatted
                 return formatted
             }
         } catch {
-            // Fall through to negative cache.
+            return nil
         }
-
-        cache[handle] = ""   // negative-cache so we don't re-hit for the same handle
         return nil
     }
 
