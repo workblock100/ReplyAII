@@ -4,37 +4,40 @@ Native macOS AI-native messaging assistant. SwiftUI, macOS 14+, dark mode only f
 
 ## Status
 
-Screen inventory: **1 / 28** complete.
+Screen inventory: **28 / 28** complete.
 
-- [x] `app-inbox` — three-pane inbox with streaming drafts
-- [ ] `app-inbox-empty` / `app-inbox-loading` / `app-offline`
-- [ ] Threads (`thr-group`, `thr-media`, `thr-long`)
-- [ ] Composer variants (`cmp-tones`, `cmp-custom`, `cmp-lowconf`, `cmp-nothing`)
-- [ ] Surfaces (`sfc-palette`, `sfc-snooze`, `sfc-rules`, `sfc-menubar`, `sfc-notification`)
-- [ ] Settings (6)
-- [ ] Onboarding (9)
-- [ ] Error states (3)
+- [x] Main app: `app-inbox`, `app-inbox-empty`, `app-inbox-loading`, `app-offline`
+- [x] Threads: `thr-group`, `thr-media`, `thr-long`
+- [x] Composer: `cmp-tones`, `cmp-custom`, `cmp-lowconf`, `cmp-nothing`
+- [x] Surfaces: `sfc-palette`, `sfc-snooze`, `sfc-rules`, `sfc-menubar`, `sfc-notification`
+- [x] Settings: `set-account`, `set-voice`, `set-channels`, `set-shortcuts`, `set-privacy`, `set-model`
+- [x] Onboarding: `ob-welcome`, `ob-privacy`, `ob-permissions`, `ob-channels`, `ob-channel-detail`, `ob-voice`, `ob-tone`, `ob-shortcuts`, `ob-done`
+- [x] Errors: `err-disconnected`, `err-auth`, `err-model-update`
 
 ## Build
 
-One-time toolchain:
+Two paths — pick whichever fits. Both share the same sources + resources.
+
+### A) SwiftPM + bundler (no Xcode required)
 
 ```bash
-# 1. Xcode 15+ from the App Store (required; Command Line Tools alone won't build GUI apps).
-# 2. XcodeGen — pick one:
-brew install xcodegen
-# or: mint install yonaskolb/xcodegen
-# or: https://github.com/yonaskolb/XcodeGen/releases
+cd ~/Code/ReplyAI
+./scripts/build.sh debug open
 ```
 
-Generate and run:
+Compiles with `swift build` (Command Line Tools' toolchain), wraps the
+executable into `build/ReplyAI.app`, ad-hoc codesigns, and launches.
+
+### B) XcodeGen + Xcode
 
 ```bash
 cd ~/Code/ReplyAI
 xcodegen generate
-open ReplyAI.xcodeproj
-# Hit ⌘R in Xcode
+open ReplyAI.xcodeproj      # ⌘R in Xcode
 ```
+
+XcodeGen lives at `~/.local/bin/xcodegen`. Install from source or release
+binary if it's missing.
 
 ## Fonts
 
