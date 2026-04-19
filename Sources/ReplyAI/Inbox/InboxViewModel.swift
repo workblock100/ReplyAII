@@ -25,6 +25,7 @@ final class InboxViewModel {
 
     private var imessage: ChannelService
     let contacts = ContactsResolver()
+    private var watcher: ChatDBWatcher?
 
     init(
         threads: [MessageThread] = Fixtures.threads,
@@ -71,7 +72,9 @@ final class InboxViewModel {
     // MARK: - Live sync
 
     /// Replace fixture threads with the live iMessage inbox. Safe to call
-    /// repeatedly — each call is a fresh snapshot.
+    /// repeatedly — each call is a fresh snapshot. On a successful sync
+    /// we also arm the file watcher so subsequent chat.db writes
+    /// auto-resync without the user pressing ⌘R.
     func syncFromIMessage() async {
         syncStatus = .syncing
         await contacts.ensureAccess()   // prompts once, if .notDetermined
@@ -81,16 +84,29 @@ final class InboxViewModel {
                 syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
                 return
             }
+            let currentSelection = selectedThreadID
             threads = live
-            selectedThreadID = live.first?.id ?? selectedThreadID
+
+            // Preserve the user's current selection if still present;
+            // otherwise fall back to the top thread.
+            if live.contains(where: { $0.id == currentSelection }) == false {
+                selectedThreadID = live.first?.id ?? selectedThreadID
+            }
+
+            // Drop cached messages for threads that no longer exist.
+            liveMessages = liveMessages.filter { key, _ in live.contains(where: { $0.id == key }) }
+
             syncStatus = .live(at: Date())
 
             // Preload messages for the focused thread so the detail pane
             // is populated without a second permission round-trip.
-            if let top = live.first,
-               let msgs = try? await imessage.messages(forThreadID: top.id, limit: 40) {
-                liveMessages[top.id] = msgs
+            if let focus = live.first(where: { $0.id == selectedThreadID }),
+               liveMessages[focus.id] == nil,
+               let msgs = try? await imessage.messages(forThreadID: focus.id, limit: 40) {
+                liveMessages[focus.id] = msgs
             }
+
+            startWatchingIfNeeded()
         } catch let err as ChannelError {
             if case .permissionDenied(let hint) = err {
                 syncStatus = .denied(hint: hint)
@@ -100,6 +116,26 @@ final class InboxViewModel {
         } catch {
             syncStatus = .failed(error.localizedDescription)
         }
+    }
+
+    /// Arm the chat.db watcher once we've confirmed FDA is granted.
+    /// Idempotent — second call is a no-op.
+    private func startWatchingIfNeeded() {
+        guard watcher == nil else { return }
+        let w = ChatDBWatcher { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.syncFromIMessage()
+                // Also refresh the focused thread's messages, since the
+                // most likely cause of a write is a new message in the
+                // currently-open thread.
+                if let id = self?.selectedThreadID {
+                    self?.liveMessages[id] = nil   // force re-pull
+                    await self?.loadMessages(for: id)
+                }
+            }
+        }
+        w.start()
+        watcher = w
     }
 
     /// Pull message history for a specific thread on demand.

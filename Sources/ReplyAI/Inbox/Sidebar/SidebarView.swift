@@ -33,6 +33,10 @@ struct SidebarView: View {
 
             Spacer(minLength: 0)
 
+            syncChip
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+
             Divider().background(Color.white.opacity(0.05))
             userFooter
                 .padding(.horizontal, 14)
@@ -150,6 +154,46 @@ struct SidebarView: View {
                 .padding(.vertical, 6)
             }
         }
+    }
+
+    private var syncChip: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 6, height: 6)
+                .shadow(color: dotColor.opacity(0.6), radius: 3)
+            Text(syncLabel)
+                .font(Theme.Font.mono(10))
+                .foregroundStyle(Theme.Color.fgMute)
+            Spacer()
+        }
+    }
+
+    private var dotColor: Color {
+        switch model.syncStatus {
+        case .live:                      return Theme.Color.accent
+        case .syncing:                   return Theme.Color.warn
+        case .denied, .failed:           return Theme.Color.err
+        case .idle:                      return Theme.Color.fgFaint
+        }
+    }
+
+    private var syncLabel: String {
+        switch model.syncStatus {
+        case .idle:               return "fixtures · ⌘R to sync"
+        case .syncing:            return "syncing…"
+        case .live(let at):       return "live · \(relativeString(for: at))"
+        case .denied:             return "needs full disk access"
+        case .failed(let msg):    return "error · \(msg.prefix(24))"
+        }
+    }
+
+    private func relativeString(for date: Date) -> String {
+        let s = Int(Date().timeIntervalSince(date))
+        if s < 5 { return "just now" }
+        if s < 60 { return "\(s)s ago" }
+        let m = s / 60
+        return m < 60 ? "\(m)m ago" : "\(m / 60)h ago"
     }
 
     private var userFooter: some View {
