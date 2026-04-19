@@ -23,6 +23,12 @@ final class InboxViewModel {
     var syncStatus: SyncStatus = .idle
     var liveMessages: [String: [Message]] = [:]   // threadID → messages, filled on sync
 
+    /// User edits to the composer, keyed by "{threadID}|{tone}". When a
+    /// key has a non-nil value, it overrides whatever the DraftEngine
+    /// stream last emitted. Regenerate (⌘J) clears its own key so the
+    /// next stream can take over.
+    var userEdits: [String: String] = [:]
+
     /// A pending send awaiting user confirmation. UI presents a sheet
     /// whenever this is non-nil; setting it back to nil cancels.
     var sendConfirmation: SendConfirmation?
@@ -82,6 +88,28 @@ final class InboxViewModel {
     var handledCount: Int  { threads.count - needsYouCount }
 
     func cycleTone() { activeTone = activeTone.cycled() }
+
+    // MARK: - Composer edits
+
+    static func editKey(threadID: String, tone: Tone) -> String {
+        "\(threadID)|\(tone.rawValue)"
+    }
+
+    /// Returns the user's edit if one exists, else the fallback (typically
+    /// the live stream text from DraftEngine). Use this to render the well
+    /// and as the send payload.
+    func effectiveDraft(threadID: String, tone: Tone, fallback: String) -> String {
+        if let edit = userEdits[Self.editKey(threadID: threadID, tone: tone)] { return edit }
+        return fallback
+    }
+
+    func setEdit(threadID: String, tone: Tone, text: String) {
+        userEdits[Self.editKey(threadID: threadID, tone: tone)] = text
+    }
+
+    func clearEdit(threadID: String, tone: Tone) {
+        userEdits.removeValue(forKey: Self.editKey(threadID: threadID, tone: tone))
+    }
 
     // MARK: - Live sync
 

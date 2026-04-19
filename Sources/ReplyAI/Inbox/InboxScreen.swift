@@ -5,10 +5,16 @@ struct InboxScreen: View {
     @State private var engine = DraftEngine()
     @State private var paletteOpen = false
 
-    /// Current draft text for the selected thread + tone. We read from
-    /// DraftEngine's state lazily; `⌘↵` snapshots it into model.sendConfirmation.
+    /// Current visible draft text — user's edit if present, else the
+    /// streamed text from DraftEngine. `⌘↵` snapshots this into
+    /// model.sendConfirmation.
     private var currentDraftText: String {
-        engine.state(threadID: model.selectedThreadID, tone: model.activeTone).text
+        let state = engine.state(threadID: model.selectedThreadID, tone: model.activeTone)
+        return model.effectiveDraft(
+            threadID: model.selectedThreadID,
+            tone: model.activeTone,
+            fallback: state.text
+        )
     }
 
     var body: some View {
@@ -86,6 +92,7 @@ struct InboxScreen: View {
             .background(
                 Button("Regenerate") {
                     let thread = model.selectedThread
+                    model.clearEdit(threadID: thread.id, tone: model.activeTone)
                     engine.regenerate(
                         thread: thread,
                         tone: model.activeTone,

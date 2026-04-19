@@ -36,7 +36,7 @@ struct ComposerView: View {
         HStack {
             Text("ReplyAI draft · \(tone.rawValue)")
                 .font(Theme.Font.mono(11))
-                .tracking(0.9)  // ≈ 0.08em at 11px
+                .tracking(0.9)
                 .textCase(.uppercase)
                 .foregroundStyle(Theme.Color.fgMute)
             Spacer()
@@ -52,7 +52,7 @@ struct ComposerView: View {
             if state.isLowConfidence, !state.isStreaming {
                 lowConfidenceBody
             } else {
-                draftBody(text: state.text, isStreaming: state.isStreaming)
+                editableDraft(thread: thread, state: state)
             }
 
             HStack(spacing: 8) {
@@ -62,9 +62,19 @@ struct ComposerView: View {
                 Spacer(minLength: 8)
                 MiniButton(title: "Shorten")
                 MiniButton(title: "Regenerate") {
-                    engine.regenerate(thread: thread, tone: model.activeTone, history: model.messages(for: thread))
+                    // Clear the user's edit so the new stream can replace it.
+                    model.clearEdit(threadID: thread.id, tone: model.activeTone)
+                    engine.regenerate(
+                        thread: thread,
+                        tone: model.activeTone,
+                        history: model.messages(for: thread)
+                    )
                 }
-                MiniButton(title: "Send ↵", kind: .primary)
+                MiniButton(title: "Send ↵", kind: .primary) {
+                    let text = currentDraftText(thread: thread, state: state)
+                    guard !text.isEmpty else { return }
+                    model.requestSend(text: text)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -80,18 +90,47 @@ struct ComposerView: View {
         )
     }
 
+    /// Editable TextEditor bound via the view model so both the composer
+    /// and `⌘↵` always read the same text. When the engine is still
+    /// streaming and the user hasn't edited, we write each chunk straight
+    /// into `userEdits` so their edits can pick up from whatever the model
+    /// produced.
     @ViewBuilder
-    private func draftBody(text: String, isStreaming: Bool) -> some View {
-        HStack(alignment: .top, spacing: 2) {
-            Text(text)
+    private func editableDraft(thread: MessageThread, state: DraftEngine.DraftState) -> some View {
+        let binding = Binding<String>(
+            get: { model.effectiveDraft(threadID: thread.id, tone: model.activeTone, fallback: state.text) },
+            set: { model.setEdit(threadID: thread.id, tone: model.activeTone, text: $0) }
+        )
+
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: binding)
+                .scrollContentBackground(.hidden)
                 .font(Theme.Font.sans(13))
                 .foregroundStyle(Theme.Color.fg)
                 .lineSpacing(3.5)
-                .fixedSize(horizontal: false, vertical: true)
-            if isStreaming { Caret().padding(.top, 2) }
-            Spacer(minLength: 0)
+                .frame(minHeight: 48)
+
+            if state.isStreaming {
+                // Streaming caret sits at the top-trailing edge so it
+                // doesn't land inside the text editor's text rect.
+                HStack { Spacer(); Caret() }
+                    .padding(.top, 4)
+                    .padding(.trailing, 4)
+                    .allowsHitTesting(false)
+            }
         }
-        .animation(Theme.Motion.fast, value: text)
+        // Streamed chunks into the TextEditor — `set` on the binding
+        // routes them through userEdits so the user can immediately edit.
+        .onChange(of: state.text) { _, newValue in
+            let key = InboxViewModel.editKey(threadID: thread.id, tone: model.activeTone)
+            if model.userEdits[key] == nil || state.isStreaming {
+                model.userEdits[key] = newValue
+            }
+        }
+    }
+
+    private func currentDraftText(thread: MessageThread, state: DraftEngine.DraftState) -> String {
+        model.effectiveDraft(threadID: thread.id, tone: model.activeTone, fallback: state.text)
     }
 
     /// cmp-lowconf fallback — model declines to guess and asks for a hint.
