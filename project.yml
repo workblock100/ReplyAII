@@ -52,6 +52,10 @@ targets:
         # Prompts the user for Contacts access — used to resolve iMessage
         # handles (phone / email) to human-readable names.
         NSContactsUsageDescription: "ReplyAI reads your Contacts locally to show names next to iMessage threads instead of phone numbers."
+        # Prompts the user to authorize AppleScript control of Messages.app
+        # so ⌘↵ can dispatch a reviewed draft via `tell application
+        # "Messages"`.
+        NSAppleEventsUsageDescription: "ReplyAI sends iMessages you've explicitly approved by asking Messages.app to type them for you."
     entitlements:
       path: Sources/ReplyAI/Resources/ReplyAI.entitlements
       properties:

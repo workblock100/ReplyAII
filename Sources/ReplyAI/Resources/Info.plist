@@ -38,5 +38,7 @@
 	<false/>
 	<key>NSContactsUsageDescription</key>
 	<string>ReplyAI reads your Contacts locally to show names next to iMessage threads instead of phone numbers.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>ReplyAI sends iMessages you've explicitly approved by asking Messages.app to type them for you.</string>
 </dict>
 </plist>

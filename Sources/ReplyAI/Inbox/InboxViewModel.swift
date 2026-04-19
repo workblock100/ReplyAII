@@ -23,6 +23,20 @@ final class InboxViewModel {
     var syncStatus: SyncStatus = .idle
     var liveMessages: [String: [Message]] = [:]   // threadID → messages, filled on sync
 
+    /// A pending send awaiting user confirmation. UI presents a sheet
+    /// whenever this is non-nil; setting it back to nil cancels.
+    var sendConfirmation: SendConfirmation?
+    /// Transient toast shown in the composer for 2s after a send.
+    var sendToast: String?
+
+    struct SendConfirmation: Equatable {
+        let threadID: String
+        let recipient: String
+        let channel: Channel
+        let text: String
+        let tone: Tone
+    }
+
     private var imessage: ChannelService
     let contacts = ContactsResolver()
     private var watcher: ChatDBWatcher?
@@ -136,6 +150,58 @@ final class InboxViewModel {
         }
         w.start()
         watcher = w
+    }
+
+    // MARK: - Sending
+
+    /// Stage a send for user review. Doesn't dispatch anything yet — the
+    /// UI presents a confirm sheet and calls `confirmSend` on approval.
+    func requestSend(text: String) {
+        let thread = selectedThread
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        sendConfirmation = SendConfirmation(
+            threadID: thread.id,
+            recipient: thread.name,
+            channel: thread.channel,
+            text: text,
+            tone: activeTone
+        )
+    }
+
+    func cancelSend() {
+        sendConfirmation = nil
+    }
+
+    /// Fire the staged AppleScript. Clears confirmation on success, leaves
+    /// an error toast on failure.
+    func confirmSend() async {
+        guard let pending = sendConfirmation else { return }
+        sendConfirmation = nil
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try IMessageSender.send(pending.text, toChatIdentifier: pending.threadID, channel: pending.channel)
+            }.value
+            sendToast = "Sent to \(pending.recipient)"
+            advanceToNextThread()
+        } catch let err as IMessageSender.SendError {
+            sendToast = err.localizedDescription
+        } catch {
+            sendToast = error.localizedDescription
+        }
+
+        // Auto-dismiss the toast after 2.5s.
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            await MainActor.run { self?.sendToast = nil }
+        }
+        _ = deadline
+    }
+
+    /// After a successful send, jump to the next thread so ⌘↵ feels fast.
+    private func advanceToNextThread() {
+        guard let i = threads.firstIndex(where: { $0.id == selectedThreadID }) else { return }
+        let next = threads[(i + 1) % threads.count].id
+        selectedThreadID = next
     }
 
     /// Pull message history for a specific thread on demand.

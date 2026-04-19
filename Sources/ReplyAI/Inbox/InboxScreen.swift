@@ -5,6 +5,12 @@ struct InboxScreen: View {
     @State private var engine = DraftEngine()
     @State private var paletteOpen = false
 
+    /// Current draft text for the selected thread + tone. We read from
+    /// DraftEngine's state lazily; `⌘↵` snapshots it into model.sendConfirmation.
+    private var currentDraftText: String {
+        engine.state(threadID: model.selectedThreadID, tone: model.activeTone).text
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if case .denied(let hint) = model.syncStatus {
@@ -28,6 +34,22 @@ struct InboxScreen: View {
                 paletteOverlay
                     .transition(.opacity)
             }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = model.sendToast {
+                Text(toast)
+                    .font(Theme.Font.sans(12, weight: .medium))
+                    .foregroundStyle(Theme.Color.accentInk)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule(style: .continuous).fill(Theme.Color.accent))
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(Theme.Motion.std, value: model.sendToast)
+        .sheet(isPresented: sendConfirmPresented()) {
+            SendConfirmSheet(model: model)
         }
         .task(id: "initial-sync") {
             await model.syncFromIMessage()
@@ -88,10 +110,14 @@ struct InboxScreen: View {
                 .opacity(0)
             )
             .background(
-                // Send — channel send is stubbed until channel integrations land.
-                // Advances to next thread so the hotkey feels live.
+                // Send — stage the current draft for confirmation. The
+                // confirm sheet dispatches via AppleScript only after the
+                // user explicitly approves, so a hallucinated stub draft
+                // can't go out by accident.
                 Button("Send") {
-                    advanceToNextThread()
+                    let text = currentDraftText
+                    guard !text.isEmpty else { return }
+                    model.requestSend(text: text)
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .opacity(0)
@@ -117,5 +143,14 @@ struct InboxScreen: View {
         guard let i = ids.firstIndex(of: model.selectedThreadID) else { return }
         let next = ids[(i + 1) % ids.count]
         withAnimation(Theme.Motion.std) { model.selectThread(next) }
+    }
+}
+
+extension InboxScreen {
+    fileprivate func sendConfirmPresented() -> Binding<Bool> {
+        Binding(
+            get: { model.sendConfirmation != nil },
+            set: { present in if !present { model.cancelSend() } }
+        )
     }
 }
