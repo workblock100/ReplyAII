@@ -1,20 +1,11 @@
 import SwiftUI
 
-/// `sfc-rules` — Smart Rules builder. If-this-then-that automation surface.
+/// `sfc-rules` — Smart Rules builder. Wired to the on-disk RulesStore,
+/// so toggles and additions persist across launches.
 struct SfcRulesView: View {
-    @State private var rules: [Rule] = [
-        .init(when: "Any message contains a 2FA code",                then: "Archive & copy code",                 active: true),
-        .init(when: "Slack DM from @maya-chen with \"deck\"",          then: "Draft in Direct tone, pin to top",    active: true),
-        .init(when: "WhatsApp voice memo > 30s",                       then: "Auto-transcribe + summarize first",   active: true),
-        .init(when: "Newsletter from any @*substack.com",              then: "Archive silently",                    active: false),
-    ]
+    @State private var store = RulesStore()
 
-    struct Rule: Identifiable {
-        let id = UUID()
-        let when: String
-        let then: String
-        var active: Bool
-    }
+    private var activeCount: Int { store.rules.filter(\.active).count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,7 +17,7 @@ struct SfcRulesView: View {
                         .font(Theme.Font.sans(28))
                         .tracking(-0.56)
                         .foregroundStyle(Theme.Color.fg)
-                    Text("4 ACTIVE")
+                    Text("\(activeCount) ACTIVE")
                         .font(Theme.Font.mono(10))
                         .tracking(1.0)
                         .foregroundStyle(Theme.Color.fgMute)
@@ -37,7 +28,14 @@ struct SfcRulesView: View {
                                 .stroke(Theme.Color.lineStrong, lineWidth: 1)
                         )
                     Spacer()
-                    PrimaryButton(title: "+ New rule")
+                    PrimaryButton(title: "+ New rule") {
+                        store.add(SmartRule(
+                            name: "New rule — edit me",
+                            when: .textContains("TODO"),
+                            then: .pin,
+                            active: false
+                        ))
+                    }
                 }
 
                 Text("If-this-then-that for your inbox. Rules run on your Mac, never on our servers.")
@@ -46,12 +44,14 @@ struct SfcRulesView: View {
                     .padding(.top, 8)
                     .frame(maxWidth: 580, alignment: .leading)
 
-                VStack(spacing: 10) {
-                    ForEach($rules) { $rule in
-                        ruleCard(rule: $rule)
+                ScrollView {
+                    VStack(spacing: 10) {
+                        ForEach(store.rules) { rule in
+                            ruleCard(rule)
+                        }
                     }
+                    .padding(.top, 24)
                 }
-                .padding(.top, 24)
             }
             .padding(40)
         }
@@ -59,7 +59,7 @@ struct SfcRulesView: View {
         .background(Theme.Color.bg1)
     }
 
-    private func ruleCard(rule: Binding<Rule>) -> some View {
+    private func ruleCard(_ rule: SmartRule) -> some View {
         Card(padding: 18) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -67,9 +67,14 @@ struct SfcRulesView: View {
                         .font(Theme.Font.mono(10))
                         .tracking(0.9)
                         .foregroundStyle(Theme.Color.accent)
-                    Text(rule.wrappedValue.when)
+                    Text(rule.name)
                         .font(Theme.Font.sans(14))
                         .foregroundStyle(Theme.Color.fg)
+                        .lineLimit(2)
+                    Text(humanize(predicate: rule.when))
+                        .font(Theme.Font.mono(10))
+                        .foregroundStyle(Theme.Color.fgMute)
+                        .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -78,22 +83,67 @@ struct SfcRulesView: View {
                         .font(Theme.Font.mono(10))
                         .tracking(0.9)
                         .foregroundStyle(Theme.Color.fgMute)
-                    Text(rule.wrappedValue.then)
+                    Text(humanize(action: rule.then))
                         .font(Theme.Font.sans(14))
                         .foregroundStyle(Theme.Color.fgDim)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                PillToggle(value: rule.active)
+                PillToggle(value: toggleBinding(for: rule))
                     .padding(.top, 4)
 
-                Button("Edit") {}
-                    .buttonStyle(.plain)
-                    .font(Theme.Font.sans(11, weight: .medium))
-                    .foregroundStyle(Theme.Color.fgDim)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                Button {
+                    store.remove(rule.id)
+                } label: {
+                    Text("Remove")
+                        .font(Theme.Font.sans(11, weight: .medium))
+                        .foregroundStyle(Theme.Color.err)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Theme.Color.err.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
+        }
+    }
+
+    private func toggleBinding(for rule: SmartRule) -> Binding<Bool> {
+        Binding(
+            get: { rule.active },
+            set: { _ in store.toggle(rule.id) }
+        )
+    }
+
+    // MARK: - Display helpers
+
+    private func humanize(predicate: RulePredicate) -> String {
+        switch predicate {
+        case .senderIs(let s):          return "sender is \"\(s)\""
+        case .senderContains(let s):    return "sender contains \"\(s)\""
+        case .channelIs(let ch):        return "channel is \(ch.label.lowercased())"
+        case .textContains(let s):      return "text contains \"\(s)\""
+        case .textMatchesRegex(let r):  return "text matches /\(r)/"
+        case .isUnread:                 return "is unread"
+        case .senderUnknown:            return "sender not in contacts"
+        case .and(let clauses):
+            return clauses.map { humanize(predicate: $0) }.joined(separator: " AND ")
+        case .or(let clauses):
+            return clauses.map { humanize(predicate: $0) }.joined(separator: " OR ")
+        case .not(let p):
+            return "NOT (\(humanize(predicate: p)))"
+        }
+    }
+
+    private func humanize(action: RuleAction) -> String {
+        switch action {
+        case .archive:                return "Archive"
+        case .pin:                    return "Pin to top"
+        case .markDone:               return "Mark done"
+        case .silentlyIgnore:         return "Archive silently"
+        case .setDefaultTone(let t):  return "Default tone → \(t.rawValue)"
         }
     }
 }

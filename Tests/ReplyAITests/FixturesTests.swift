@@ -14,11 +14,17 @@ final class FixturesTests: XCTestCase {
         }
     }
 
-    func testUnknownThreadFallsBackToFirstThread() {
+    func testUnknownThreadReturnsGenericAcknowledgment() {
+        // Live iMessage threads aren't in fixtures — the stub LLM must
+        // return a neutral per-tone line instead of a canned Maya Chen
+        // response that would read absurdly to anyone else.
         for tone in Tone.allCases {
             let fallback = Fixtures.seedDraft(threadID: "nonexistent-xyz", tone: tone)
-            let reference = Fixtures.seedDraft(threadID: "t1", tone: tone)
-            XCTAssertEqual(fallback, reference)
+            XCTAssertFalse(fallback.isEmpty)
+            XCTAssertEqual(fallback, Fixtures.genericAcknowledgment(tone: tone))
+            // Must NOT leak the t1 ("review the deck") copy.
+            let t1 = Fixtures.seedDraft(threadID: "t1", tone: tone)
+            XCTAssertNotEqual(fallback, t1)
         }
     }
 
