@@ -1,8 +1,13 @@
 import SwiftUI
 
 struct InboxScreen: View {
+    @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
     @State private var model = InboxViewModel()
-    @State private var engine = DraftEngine()
+    @State private var engine: DraftEngine = {
+        let useMLXNow = UserDefaults.standard.bool(forKey: PreferenceKey.useMLX)
+        let service: LLMService = useMLXNow ? MLXDraftService() : StubLLMService()
+        return DraftEngine(service: service)
+    }()
     @State private var paletteOpen = false
 
     /// Current visible draft text — user's edit if present, else the

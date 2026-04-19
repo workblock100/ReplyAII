@@ -8,6 +8,7 @@ enum PreferenceKey {
     static let licenseUpdates = "pref.privacy.licenseUpdates"
     static let iCloudSync     = "pref.privacy.iCloudSync"
     static let defaultTone    = "pref.composer.defaultTone"
+    static let useMLX         = "pref.model.useMLX"
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
@@ -16,6 +17,8 @@ enum PreferenceDefaults {
     static let licenseUpdates = true
     static let iCloudSync     = false
     static let defaultTone    = Tone.warm.rawValue
+    /// Opt-in; enabling triggers a ~2 GB model download on first draft.
+    static let useMLX         = false
 }
 
 extension UserDefaults {
@@ -25,6 +28,7 @@ extension UserDefaults {
             PreferenceKey.licenseUpdates: PreferenceDefaults.licenseUpdates,
             PreferenceKey.iCloudSync:     PreferenceDefaults.iCloudSync,
             PreferenceKey.defaultTone:    PreferenceDefaults.defaultTone,
+            PreferenceKey.useMLX:         PreferenceDefaults.useMLX,
         ])
     }
 

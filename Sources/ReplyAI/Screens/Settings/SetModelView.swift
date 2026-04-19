@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SetModelView: View {
+    @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
+
     private struct Upgrade: Identifiable {
         let id = UUID()
         let name: String
@@ -27,6 +29,32 @@ struct SetModelView: View {
                     upgradesCard.frame(maxWidth: .infinity)
                 }
                 .padding(.top, 24)
+
+                mlxToggleCard
+                    .padding(.top, 16)
+            }
+        }
+    }
+
+    private var mlxToggleCard: some View {
+        Card(padding: 22) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("USE ON-DEVICE MODEL")
+                        .font(Theme.Font.mono(10))
+                        .tracking(1.0)
+                        .foregroundStyle(useMLX ? Theme.Color.accent : Theme.Color.fgMute)
+                    Text("Route drafts through MLX running locally on this Mac.")
+                        .font(Theme.Font.sans(14))
+                        .foregroundStyle(Theme.Color.fg)
+                    Text("First enable downloads ReplyAI-3B · q4 (~2 GB) into ~/Library/Caches/huggingface/hub/. New drafts will be slow until download + first load finishes (~60–120s). After that, ~80 tok/s. Turning this off re-routes to the stub — the 2 GB stays cached.")
+                        .font(Theme.Font.sans(12))
+                        .foregroundStyle(Theme.Color.fgMute)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                PillToggle(value: $useMLX)
             }
         }
     }

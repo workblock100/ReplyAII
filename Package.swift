@@ -3,18 +3,33 @@ import PackageDescription
 
 // SwiftPM target so the app can be built without Xcode. The resulting
 // executable is wrapped into a .app bundle by scripts/build.sh.
-//
-// Keep this in sync with project.yml — the same sources and resources
-// are consumed by both build paths.
 let package = Package(
     name: "ReplyAI",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "ReplyAI", targets: ["ReplyAI"]),
     ],
+    dependencies: [
+        // On-device LLM inference.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.0"),
+        // HubClient (HuggingFace Hub downloader). mlx-swift-lm's MLXHuggingFace
+        // macros expand to code that references HubClient.default; we must
+        // link the transport ourselves.
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", from: "0.9.0"),
+        // AutoTokenizer + Tokenizer conformances. Used via macro expansion
+        // from #huggingFaceTokenizerLoader().
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.0"),
+    ],
     targets: [
         .executableTarget(
             name: "ReplyAI",
+            dependencies: [
+                .product(name: "MLXLLM",         package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon",    package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "HuggingFace",    package: "swift-huggingface"),
+                .product(name: "Tokenizers",     package: "swift-transformers"),
+            ],
             path: "Sources/ReplyAI",
             exclude: [
                 "Resources/Info.plist",
