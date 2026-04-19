@@ -30,14 +30,12 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: Sources
-    resources:
-      - path: Resources
         excludes:
-          - "Info.plist"
-          - "ReplyAI.entitlements"
-          - "Fonts/README.md"
+          - "ReplyAI/Resources/Info.plist"
+          - "ReplyAI/Resources/ReplyAI.entitlements"
+          - "ReplyAI/Resources/Fonts/README.md"
     info:
-      path: Resources/Info.plist
+      path: Sources/ReplyAI/Resources/Info.plist
       properties:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
@@ -52,7 +50,7 @@ targets:
         ATSApplicationFontsPath: Fonts
         ApplicationFontsPath: Fonts
     entitlements:
-      path: Resources/ReplyAI.entitlements
+      path: Sources/ReplyAI/Resources/ReplyAI.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
