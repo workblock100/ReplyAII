@@ -2,6 +2,8 @@ import SwiftUI
 
 /// `ob-done` — ready; hand off to main app.
 struct ObDoneView: View {
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         OnboardingStage(
             step: 9, total: 9,
@@ -43,7 +45,9 @@ struct ObDoneView: View {
             }
             .padding(.top, 12)
         } cta: {
-            PrimaryButton(title: "Open ReplyAI", icon: "arrow.right", height: 46, fontSize: 14)
+            PrimaryButton(title: "Open ReplyAI", icon: "arrow.right", height: 46, fontSize: 14) {
+                openWindow(id: "inbox")
+            }
         } secondary: {
             Text("⌘⇧R works from anywhere now.")
                 .font(Theme.Font.mono(11))

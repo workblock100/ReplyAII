@@ -9,6 +9,7 @@ import SwiftUI
 struct AppPrototypeView: View {
     @State private var screen: ScreenID = .appInbox
     @State private var navOpen: Bool = true
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 0) {
@@ -62,6 +63,18 @@ struct AppPrototypeView: View {
             HStack(spacing: 6) {
                 navButton(title: "‹ prev") { screen = ScreenInventory.previous(before: screen) }
                 navButton(title: "next ›") { screen = ScreenInventory.next(after: screen) }
+                Button {
+                    openWindow(id: "inbox")
+                } label: {
+                    Text("Open inbox →")
+                        .font(Theme.Font.sans(11, weight: .semibold))
+                        .foregroundStyle(Theme.Color.accentInk)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Capsule(style: .continuous).fill(Theme.Color.accent))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("o", modifiers: [.command, .shift])
             }
         }
         .padding(.horizontal, 20)
