@@ -58,12 +58,24 @@ enum Fixtures {
         switch threadID {
         case "t1": return "Design review is at 4pm. You have the deck open in Figma. Maya usually wants specific line-edits, not vibes."
         case "t3": return "Ravi shipped the billing flow yesterday; Stripe webhooks are live. He owes you a Loom."
-        default:   return "A few messages across channels. Click a thread to see the full context."
+        default:   return "Live thread — context will land once on-device summarization is wired."
         }
     }
 
     static func seedDraft(threadID: String, tone: Tone) -> String {
-        drafts[threadID]?[tone] ?? (drafts["t1"]?[tone] ?? "")
+        if let d = drafts[threadID]?[tone] { return d }
+        return genericAcknowledgment(tone: tone)
+    }
+
+    /// Tone-appropriate placeholder used for live threads until a real
+    /// on-device model is wired. Avoids leaking fixture-specific text
+    /// (like "review the deck") into unrelated real conversations.
+    static func genericAcknowledgment(tone: Tone) -> String {
+        switch tone {
+        case .warm:    return "Thanks for the heads up — I'll circle back on this shortly."
+        case .direct:  return "got it. back to you in a bit."
+        case .playful: return "Consider it received. A thoughtful reply is compiling 🙃"
+        }
     }
 
     /// Baseline confidence from the stub. cmp-lowconf only triggers for threads without context.

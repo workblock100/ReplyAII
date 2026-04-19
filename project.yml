@@ -49,6 +49,9 @@ targets:
         # Auto-registers every font file in Resources/Fonts/ at launch.
         ATSApplicationFontsPath: Fonts
         ApplicationFontsPath: Fonts
+        # Prompts the user for Contacts access — used to resolve iMessage
+        # handles (phone / email) to human-readable names.
+        NSContactsUsageDescription: "ReplyAI reads your Contacts locally to show names next to iMessage threads instead of phone numbers."
     entitlements:
       path: Sources/ReplyAI/Resources/ReplyAI.entitlements
       properties:

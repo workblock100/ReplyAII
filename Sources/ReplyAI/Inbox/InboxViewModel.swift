@@ -23,19 +23,25 @@ final class InboxViewModel {
     var syncStatus: SyncStatus = .idle
     var liveMessages: [String: [Message]] = [:]   // threadID → messages, filled on sync
 
-    private let imessage: ChannelService
+    private var imessage: ChannelService
+    let contacts = ContactsResolver()
 
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
         channels: [Channel] = Fixtures.sidebarChannels,
-        imessage: ChannelService = IMessageChannel()
+        imessage: ChannelService? = nil
     ) {
         self.threads = threads
         self.folders = folders
         self.channels = channels
-        self.imessage = imessage
         self.selectedThreadID = threads.first?.id ?? "t1"
+        // Bridge the actor-isolated resolver into a Sendable closure; the
+        // channel calls it synchronously from any task via MainActor.
+        let resolver = self.contacts
+        self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
+            MainActor.assumeIsolated { resolver.name(for: handle) }
+        })
     }
 
     var selectedThread: MessageThread {
@@ -66,6 +72,7 @@ final class InboxViewModel {
     /// repeatedly — each call is a fresh snapshot.
     func syncFromIMessage() async {
         syncStatus = .syncing
+        await contacts.ensureAccess()   // prompts once, if .notDetermined
         do {
             let live = try await imessage.recentThreads(limit: 50)
             guard !live.isEmpty else {

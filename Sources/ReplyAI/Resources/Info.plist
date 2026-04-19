@@ -36,5 +36,7 @@
 	<string>NSApplication</string>
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
+	<key>NSContactsUsageDescription</key>
+	<string>ReplyAI reads your Contacts locally to show names next to iMessage threads instead of phone numbers.</string>
 </dict>
 </plist>

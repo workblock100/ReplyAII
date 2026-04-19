@@ -21,6 +21,15 @@ struct IMessageChannel: ChannelService {
         (NSString(string: "~/Library/Messages/chat.db").expandingTildeInPath as String)
     }()
 
+    /// Optional name-resolver that translates phone/email handles to
+    /// contact names. Injected from the ViewModel so we don't couple
+    /// channel code to Contacts framework directly.
+    let nameFor: @Sendable (String) -> String?
+
+    init(nameFor: @escaping @Sendable (String) -> String? = { _ in nil }) {
+        self.nameFor = nameFor
+    }
+
     // SQLite wants transient text to live long enough for bind+step; use
     // this marker like Apple's own samples.
     private static let SQLITE_TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
@@ -43,12 +52,12 @@ struct IMessageChannel: ChannelService {
                 LIMIT 1
             ) AS first_handle,
             (
-                SELECT m.text FROM message m
+                SELECT m.ROWID FROM message m
                 JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-                WHERE cmj.chat_id = c.ROWID AND m.text IS NOT NULL AND length(m.text) > 0
+                WHERE cmj.chat_id = c.ROWID
                 ORDER BY m.date DESC
                 LIMIT 1
-            ) AS last_text,
+            ) AS last_msg_rowid,
             (
                 SELECT m.date FROM message m
                 JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
@@ -75,39 +84,89 @@ struct IMessageChannel: ChannelService {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw ChannelError.query(lastError(db))
         }
-        defer { sqlite3_finalize(stmt) }
-
         sqlite3_bind_int(stmt, 1, Int32(limit))
 
-        var threads: [MessageThread] = []
+        struct Pending {
+            let chatID: String
+            let name: String
+            let channel: Channel
+            let lastMsgRowID: Int64
+            let lastDateRaw: Int64
+            let msgCount: Int
+            let unread: Int
+        }
+
+        var pending: [Pending] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             let chatID       = Self.text(stmt, 1) ?? "unknown"
             let displayName  = Self.text(stmt, 2) ?? ""
             let service      = Self.text(stmt, 3) ?? "iMessage"
             let firstHandle  = Self.text(stmt, 4) ?? ""
-            let lastText     = Self.text(stmt, 5) ?? ""
+            let lastRow      = sqlite3_column_int64(stmt, 5)
             let lastDateRaw  = sqlite3_column_int64(stmt, 6)
             let msgCount     = Int(sqlite3_column_int(stmt, 7))
             let unread       = Int(sqlite3_column_int(stmt, 8))
 
-            let name = displayName.isEmpty ? (firstHandle.isEmpty ? chatID : firstHandle) : displayName
-            let time = Self.formatRelative(appleDate: lastDateRaw)
+            let resolvedName: String = {
+                if !displayName.isEmpty { return displayName }
+                if !firstHandle.isEmpty, let contact = nameFor(firstHandle) { return contact }
+                return firstHandle.isEmpty ? chatID : firstHandle
+            }()
+
             let channel: Channel = (service.lowercased() == "sms") ? .sms : .imessage
 
-            threads.append(MessageThread(
-                id: chatID.isEmpty ? "chat_\(sqlite3_column_int64(stmt, 0))" : chatID,
+            pending.append(Pending(
+                chatID: chatID.isEmpty ? "chat_\(sqlite3_column_int64(stmt, 0))" : chatID,
+                name: resolvedName,
                 channel: channel,
-                name: name,
-                avatar: Self.avatarInitial(for: name),
-                preview: lastText,
-                time: time,
-                unread: unread,
+                lastMsgRowID: lastRow,
+                lastDateRaw: lastDateRaw,
+                msgCount: msgCount,
+                unread: unread
+            ))
+        }
+        sqlite3_finalize(stmt)
+
+        // Resolve each row's preview text — prefer `text`, fall back to
+        // a best-effort decode of `attributedBody`, else a neutral hint.
+        var out: [MessageThread] = []
+        for p in pending {
+            let preview = previewText(db: db, messageRowID: p.lastMsgRowID) ?? "[non-text message]"
+            out.append(MessageThread(
+                id: p.chatID,
+                channel: p.channel,
+                name: p.name,
+                avatar: Self.avatarInitial(for: p.name),
+                preview: preview,
+                time: Self.formatRelative(appleDate: p.lastDateRaw),
+                unread: p.unread,
                 pinned: false,
-                contextCount: msgCount,
+                contextCount: p.msgCount,
                 contextSummary: nil
             ))
         }
-        return threads
+        return out
+    }
+
+    /// Pull plain-text preview for one message, trying `text` first and
+    /// `attributedBody` as a fallback. Returns nil only if both fail.
+    private func previewText(db: OpaquePointer, messageRowID: Int64) -> String? {
+        let sql = "SELECT text, attributedBody FROM message WHERE ROWID = ?1 LIMIT 1"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, messageRowID)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+        if let t = Self.text(stmt, 0), !t.isEmpty { return t }
+
+        if sqlite3_column_type(stmt, 1) == SQLITE_BLOB,
+           let raw = sqlite3_column_blob(stmt, 1) {
+            let len = Int(sqlite3_column_bytes(stmt, 1))
+            let data = Data(bytes: raw, count: len)
+            return AttributedBodyDecoder.extractText(from: data)
+        }
+        return nil
     }
 
     func messages(forThreadID id: String, limit: Int) async throws -> [Message] {
@@ -117,12 +176,13 @@ struct IMessageChannel: ChannelService {
         let sql = """
         SELECT
             m.text,
+            m.attributedBody,
             m.is_from_me,
             m.date
         FROM message m
         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
         JOIN chat c ON c.ROWID = cmj.chat_id
-        WHERE c.chat_identifier = ?1 AND m.text IS NOT NULL AND length(m.text) > 0
+        WHERE c.chat_identifier = ?1
         ORDER BY m.date DESC
         LIMIT ?2;
         """
@@ -138,12 +198,23 @@ struct IMessageChannel: ChannelService {
 
         var out: [Message] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let text   = Self.text(stmt, 0) ?? ""
-            let fromMe = sqlite3_column_int(stmt, 1) != 0
-            let date   = sqlite3_column_int64(stmt, 2)
+            let textCol = Self.text(stmt, 0)
+            let decoded: String? = {
+                if let t = textCol, !t.isEmpty { return t }
+                if sqlite3_column_type(stmt, 1) == SQLITE_BLOB,
+                   let raw = sqlite3_column_blob(stmt, 1) {
+                    let len = Int(sqlite3_column_bytes(stmt, 1))
+                    return AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len))
+                }
+                return nil
+            }()
+            guard let body = decoded, !body.isEmpty else { continue }
+
+            let fromMe = sqlite3_column_int(stmt, 2) != 0
+            let date   = sqlite3_column_int64(stmt, 3)
             out.append(Message(
                 from: fromMe ? .me : .them,
-                text: text,
+                text: body,
                 time: Self.formatTime(appleDate: date)
             ))
         }
