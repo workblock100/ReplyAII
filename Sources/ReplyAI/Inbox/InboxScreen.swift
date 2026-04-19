@@ -29,6 +29,9 @@ struct InboxScreen: View {
                     Task { await model.syncFromIMessage() }
                 }
             }
+            if let loadStatus = engine.modelLoadStatus {
+                ModelLoadBanner(status: loadStatus)
+            }
             HStack(spacing: 0) {
                 SidebarView(model: model)
                 ThreadListView(model: model)

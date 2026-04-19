@@ -6,6 +6,11 @@ struct DraftChunk: Sendable {
     enum Kind: Sendable {
         case text(String)
         case confidence(Double)
+        /// Long-running model load — the service is downloading or loading
+        /// weights into memory and hasn't started generating yet. `fraction`
+        /// is [0, 1]; `message` is a short user-visible description like
+        /// "Downloading Llama 3.2 3B · 47%".
+        case loadProgress(fraction: Double, message: String)
         case done
     }
     let kind: Kind

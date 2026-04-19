@@ -32,8 +32,36 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
                 do {
                     continuation.yield(DraftChunk(kind: .confidence(0.85)))
 
-                    let container = try await ensureContainer()
+                    // If we don't already have a container, announce the
+                    // load immediately so the UI shows "preparing…" rather
+                    // than staring at an empty composer for 30s.
+                    if !hasCachedContainer {
+                        continuation.yield(DraftChunk(
+                            kind: .loadProgress(fraction: 0, message: "Preparing on-device model…")
+                        ))
+                    }
+
+                    let container = try await ensureContainer { progress in
+                        let fraction = progress.fractionCompleted
+                        let mb: (Int64) -> String = { bytes in
+                            let mib = Double(bytes) / (1024 * 1024)
+                            return mib > 1024
+                                ? String(format: "%.1f GB", mib / 1024)
+                                : String(format: "%.0f MB", mib)
+                        }
+                        let msg: String
+                        if progress.totalUnitCount > 0 {
+                            msg = "Downloading model · \(mb(progress.completedUnitCount)) of \(mb(progress.totalUnitCount))"
+                        } else {
+                            msg = "Downloading model · \(Int(fraction * 100))%"
+                        }
+                        continuation.yield(DraftChunk(kind: .loadProgress(fraction: fraction, message: msg)))
+                    }
                     if Task.isCancelled { continuation.finish(); return }
+
+                    continuation.yield(DraftChunk(
+                        kind: .loadProgress(fraction: 1, message: "Warming weights…")
+                    ))
 
                     let session = ChatSession(container, instructions: Self.systemPrompt(tone: tone))
                     let prompt  = Self.buildPrompt(thread: thread, tone: tone, history: history)
@@ -53,12 +81,22 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
         }
     }
 
+    private var hasCachedContainer: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return cachedContainer != nil
+    }
+
     // MARK: - Container caching
 
-    private func ensureContainer() async throws -> ModelContainer {
+    private func ensureContainer(
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> ModelContainer {
         lock.lock()
         if let cached = cachedContainer { lock.unlock(); return cached }
         if let existing = loadTask {
+            // A concurrent draft is already loading — just wait. We lose
+            // progress events for the second caller; acceptable since the
+            // UI only shows one banner at a time.
             lock.unlock()
             return try await existing.value
         }
@@ -66,7 +104,10 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
         let modelID = self.modelID
         let task = Task<ModelContainer, Error> {
             let config = ModelConfiguration(id: modelID)
-            return try await #huggingFaceLoadModelContainer(configuration: config)
+            return try await #huggingFaceLoadModelContainer(
+                configuration: config,
+                progressHandler: progressHandler
+            )
         }
         loadTask = task
         lock.unlock()

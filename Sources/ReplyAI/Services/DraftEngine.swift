@@ -21,6 +21,15 @@ final class DraftEngine {
 
     private(set) var drafts: [Key: DraftState] = [:]
 
+    /// Non-nil while the LLM service is loading weights (downloading or
+    /// warming them into memory). Cleared when a real token arrives.
+    var modelLoadStatus: ModelLoadStatus?
+
+    struct ModelLoadStatus: Equatable, Sendable {
+        var fraction: Double  // 0.0 – 1.0
+        var message: String
+    }
+
     private let service: LLMService
     private var tasks: [Key: Task<Void, Never>] = [:]
 
@@ -77,11 +86,17 @@ final class DraftEngine {
     private func apply(chunk: DraftChunk, to key: Key) {
         var s = drafts[key] ?? .init()
         switch chunk.kind {
-        case .text(let t):        s.text.append(t)
-        case .confidence(let c):  s.confidence = c
+        case .text(let t):
+            s.text.append(t)
+            modelLoadStatus = nil   // first token means load is done
+        case .confidence(let c):
+            s.confidence = c
+        case .loadProgress(let fraction, let message):
+            modelLoadStatus = ModelLoadStatus(fraction: fraction, message: message)
         case .done:
             s.isStreaming = false
             s.isDone = true
+            modelLoadStatus = nil
         }
         drafts[key] = s
     }
