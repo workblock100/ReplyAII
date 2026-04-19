@@ -46,25 +46,20 @@ enum Theme {
     }
 
     enum Font {
-        /// SwiftUI's `.weight(...)` on a `.custom(...)` font is unreliable:
-        /// it does not automatically pick a separately-registered face. We
-        /// resolve to per-weight PostScript names ourselves so Inter Tight
-        /// Medium / SemiBold actually render.
+        /// Inter Tight ships as a single variable-weight TTF. Addressing by
+        /// the family name lets CoreText resolve `.weight(...)` against the
+        /// wght axis instead of hunting for non-existent static PostScript
+        /// faces.
         static func sans(_ size: CGFloat, weight: SwiftUI.Font.Weight = .regular) -> SwiftUI.Font {
-            let name: String
-            switch weight {
-            case .bold, .heavy, .black: name = "InterTight-Bold"
-            case .semibold:             name = "InterTight-SemiBold"
-            case .medium:               name = "InterTight-Medium"
-            default:                    name = "InterTight-Regular"
-            }
-            return .custom(name, size: size, relativeTo: .body)
+            .custom("Inter Tight", size: size, relativeTo: .body).weight(weight)
         }
 
         static func serifItalic(_ size: CGFloat) -> SwiftUI.Font {
             .custom("InstrumentSerif-Italic", size: size, relativeTo: .title)
         }
 
+        /// JetBrains Mono ships as per-weight static TTFs. Pick by PostScript
+        /// name for the two weights we bundle (Regular, Medium).
         static func mono(_ size: CGFloat, weight: SwiftUI.Font.Weight = .regular) -> SwiftUI.Font {
             let name: String
             switch weight {

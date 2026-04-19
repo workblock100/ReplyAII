@@ -38,9 +38,22 @@ targets:
           - "Fonts/README.md"
     info:
       path: Resources/Info.plist
+      properties:
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        CFBundleDisplayName: ReplyAI
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "© 2026 ReplyAI"
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        NSRequiresAquaSystemAppearance: false
+        # Auto-registers every font file in Resources/Fonts/ at launch.
+        ATSApplicationFontsPath: Fonts
+        ApplicationFontsPath: Fonts
     entitlements:
       path: Resources/ReplyAI.entitlements
-    settings:
-      base:
-        INFOPLIST_FILE: Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Resources/ReplyAI.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.network.client: true

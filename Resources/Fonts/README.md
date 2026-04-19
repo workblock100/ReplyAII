@@ -1,25 +1,26 @@
 # Fonts
 
-Drop the following `.ttf` / `.otf` files into this directory. The app auto-registers every font in this folder at launch via `ATSApplicationFontsPath` in `Info.plist`.
+The app auto-registers every font in this directory at launch via
+`ATSApplicationFontsPath` in `Info.plist`. Files are bundled and committed.
 
-## Required files
+## Shipped files
 
-| File                              | Source                                                              | PostScript name used in Theme.Font |
-| --------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
-| `InterTight-Regular.ttf`          | https://fonts.google.com/specimen/Inter+Tight                       | `Inter Tight`                      |
-| `InterTight-Medium.ttf`           | —                                                                   | `Inter Tight` @ weight `.medium`   |
-| `InterTight-SemiBold.ttf`         | —                                                                   | `Inter Tight` @ weight `.semibold` |
-| `InterTight-Bold.ttf`             | —                                                                   | `Inter Tight` @ weight `.bold`     |
-| `InstrumentSerif-Italic.ttf`      | https://fonts.google.com/specimen/Instrument+Serif                  | `Instrument Serif Italic`          |
-| `JetBrainsMono-Regular.ttf`       | https://fonts.google.com/specimen/JetBrains+Mono                    | `JetBrainsMono-Regular`            |
-| `JetBrainsMono-Medium.ttf`        | —                                                                   | `JetBrainsMono-Medium`             |
+| File                         | Source                                                            | How Theme.Font references it                   |
+| ---------------------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
+| `InterTight[wght].ttf`       | google/fonts `ofl/intertight/InterTight[wght].ttf` (variable)     | `.custom("Inter Tight", size:).weight(...)`    |
+| `InstrumentSerif-Italic.ttf` | google/fonts `ofl/instrumentserif/InstrumentSerif-Italic.ttf`     | `.custom("InstrumentSerif-Italic", size:)`     |
+| `JetBrainsMono-Regular.ttf`  | JetBrains/JetBrainsMono `fonts/ttf/JetBrainsMono-Regular.ttf`     | `.custom("JetBrainsMono-Regular", size:)`      |
+| `JetBrainsMono-Medium.ttf`   | JetBrains/JetBrainsMono `fonts/ttf/JetBrainsMono-Medium.ttf`      | `.custom("JetBrainsMono-Medium", size:)`       |
 
-Everything above is OFL-licensed (free to bundle and redistribute).
+All OFL-licensed. Inter Tight is a variable font — `.weight(...)` picks the
+correct instance via the `wght` axis. JetBrains Mono ships as per-weight
+statics because we only need Regular and Medium.
 
-## Verify after install
+## Verified PostScript names
 
-1. `xcodegen generate`
-2. Build and launch the app.
-3. Open Font Book → Validate → drag one of the `.ttf` files in to confirm the PostScript name matches what `Theme.Font.sans/serifItalic/mono` expects.
+Confirmed by running a CoreText dump against each TTF at ingest time:
 
-If `Theme.Font` silently falls back to system font, the name in `Theme.swift` does not match the actual PostScript name of the installed file — fix the `.custom(...)` call, not the file name.
+- Inter Tight family exposes `InterTight-Regular` plus named instances for
+  Thin / ExtraLight / Light / Medium / SemiBold / Bold / ExtraBold / Black.
+- Instrument Serif → `InstrumentSerif-Italic`.
+- JetBrains Mono → `JetBrainsMono-Regular`, `JetBrainsMono-Medium`.
