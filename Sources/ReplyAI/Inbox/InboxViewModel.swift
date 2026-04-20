@@ -23,6 +23,17 @@ final class InboxViewModel {
     var syncStatus: SyncStatus = .idle
     var liveMessages: [String: [Message]] = [:]   // threadID → messages, filled on sync
 
+    /// Per-thread watermark. Incoming messages with `rowID > lastSeenRowID[tid]`
+    /// are new since the last rule evaluation pass. Advances strictly upward.
+    private var lastSeenRowID: [String: Int64] = [:]
+
+    /// Threads the user or a rule has hidden from the main list. Persisted
+    /// to UserDefaults so the effect survives relaunches. Filtering lives
+    /// in ThreadListView.
+    var archivedThreadIDs: Set<String> = [] {
+        didSet { InboxViewModel.saveArchivedIDs(archivedThreadIDs) }
+    }
+
     /// User edits to the composer, keyed by "{threadID}|{tone}". When a
     /// key has a non-nil value, it overrides whatever the DraftEngine
     /// stream last emitted. Regenerate (⌘J) clears its own key so the
@@ -61,6 +72,7 @@ final class InboxViewModel {
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
         self.rules = rules ?? RulesStore()
+        self.archivedThreadIDs = InboxViewModel.loadArchivedIDs()
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
         // needing MainActor.assumeIsolated (which would crash on the
@@ -205,6 +217,12 @@ final class InboxViewModel {
             let threadsSnapshot = live
             await searchIndex.rebuild(from: snapshot, threads: threadsSnapshot)
 
+            // Process any incoming messages we haven't evaluated yet.
+            // This covers first-run (every existing message is "new" to
+            // ReplyAI; rules fire against each) and every watcher refire
+            // after it.
+            await processIncomingForRules(live)
+
             startWatchingIfNeeded()
         } catch let err as ChannelError {
             if case .permissionDenied(let hint) = err {
@@ -215,6 +233,95 @@ final class InboxViewModel {
         } catch {
             syncStatus = .failed(error.localizedDescription)
         }
+    }
+
+    // MARK: - Rules on incoming
+
+    /// For each visible thread, pull incoming messages with
+    /// `rowID > lastSeenRowID[tid]` and run the rule engine against
+    /// each. Applies the incoming-only actions (archive, silentlyIgnore,
+    /// markDone); focus-time actions (setDefaultTone, pin) happen in
+    /// applyRules(for:) on select.
+    ///
+    /// After processing, the watermark advances to the tail rowID of
+    /// each thread's new batch.
+    func processIncomingForRules(_ liveThreads: [MessageThread]) async {
+        for thread in liveThreads {
+            let since = lastSeenRowID[thread.id] ?? 0
+            let newMessages: [Message]
+            do {
+                newMessages = try await imessage.newIncomingMessages(
+                    forThreadID: thread.id, sinceRowID: since
+                )
+            } catch {
+                continue
+            }
+            guard !newMessages.isEmpty else { continue }
+
+            // Evaluate with the latest incoming's text — senders can
+            // have multiple rules matching the same thread; we trust
+            // the most recent as representative for a single sync pass.
+            var ctx = RuleContext.from(thread: thread)
+            if let latest = newMessages.last { ctx.lastMessageText = latest.text }
+
+            let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+            for rule in matched {
+                switch rule.then {
+                case .archive, .silentlyIgnore:
+                    archivedThreadIDs.insert(thread.id)
+                case .markDone:
+                    markUnreadZero(thread.id)
+                case .setDefaultTone, .pin:
+                    // Focus-time actions — handled in applyRules(for:).
+                    continue
+                }
+            }
+
+            if let maxRow = newMessages.map(\.rowID).max() {
+                lastSeenRowID[thread.id] = maxRow
+            }
+        }
+    }
+
+    private func markUnreadZero(_ threadID: String) {
+        guard let i = threads.firstIndex(where: { $0.id == threadID }),
+              threads[i].unread > 0 else { return }
+        threads[i] = MessageThread(
+            id: threads[i].id,
+            channel: threads[i].channel,
+            name: threads[i].name,
+            avatar: threads[i].avatar,
+            preview: threads[i].preview,
+            time: threads[i].time,
+            unread: 0,
+            pinned: threads[i].pinned,
+            contextCount: threads[i].contextCount,
+            contextSummary: threads[i].contextSummary
+        )
+    }
+
+    // MARK: - Archived persistence
+
+    private static let archivedKey = "pref.inbox.archivedThreadIDs"
+
+    private static func loadArchivedIDs() -> Set<String> {
+        guard let data = UserDefaults.standard.data(forKey: archivedKey),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(decoded)
+    }
+
+    private static func saveArchivedIDs(_ ids: Set<String>) {
+        let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
+        UserDefaults.standard.set(data, forKey: archivedKey)
+    }
+
+    /// Undoes an archive — used for the future "Undo" UX in set-privacy /
+    /// keyboard shortcut. Not called from anywhere yet but the shape is
+    /// stable.
+    func unarchive(_ threadID: String) {
+        archivedThreadIDs.remove(threadID)
     }
 
     /// Arm the chat.db watcher once we've confirmed FDA is granted.

@@ -249,6 +249,164 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(model.activeTone, .warm, "tone should stay at default when no rule matches")
     }
 
+    // MARK: - Incoming-message rule actions
+
+    /// Minimal ChannelService double: serves a fixed thread list and
+    /// returns preconfigured incoming messages keyed by thread id,
+    /// filtered by the sinceRowID watermark.
+    private struct MockChannel: ChannelService {
+        let fixedThreads: [MessageThread]
+        let incoming: [String: [Message]]
+        func recentThreads(limit: Int) async throws -> [MessageThread] { fixedThreads }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] {
+            incoming[id] ?? []
+        }
+        func newIncomingMessages(forThreadID id: String, sinceRowID: Int64) async throws -> [Message] {
+            (incoming[id] ?? [])
+                .filter { $0.rowID > sinceRowID }
+                .sorted { $0.rowID < $1.rowID }
+        }
+    }
+
+    @MainActor
+    private func makeModelWithRules(
+        _ rules: [SmartRule],
+        threads: [MessageThread],
+        incoming: [String: [Message]]
+    ) -> InboxViewModel {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = RulesStore(fileURL: tmp)
+        for r in store.rules { store.remove(r.id) }
+        for r in rules { store.add(r) }
+
+        // Clear any archived state left behind by a previous test run.
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+
+        return InboxViewModel(
+            threads: threads,
+            imessage: MockChannel(fixedThreads: threads, incoming: incoming),
+            rules: store
+        )
+    }
+
+    @MainActor
+    func testIncomingArchiveRuleFires() async throws {
+        let thread = MessageThread(
+            id: "spam-1", channel: .sms, name: "Promo Alerts",
+            avatar: "P", preview: "weekly sale ends soon",
+            time: "now", unread: 2
+        )
+        let rule = SmartRule(
+            name: "archive promos",
+            when: .senderContains("Promo"),
+            then: .archive
+        )
+        let model = makeModelWithRules(
+            [rule],
+            threads: [thread],
+            incoming: ["spam-1": [
+                Message(from: .them, text: "weekly sale", time: "now", rowID: 100)
+            ]]
+        )
+
+        XCTAssertFalse(model.archivedThreadIDs.contains("spam-1"))
+        await model.processIncomingForRules(model.threads)
+        XCTAssertTrue(model.archivedThreadIDs.contains("spam-1"))
+    }
+
+    @MainActor
+    func testIncomingMarkDoneClearsUnread() async throws {
+        let thread = MessageThread(
+            id: "2fa-1", channel: .sms, name: "+18885551234",
+            avatar: "☎", preview: "verification code 820193",
+            time: "now", unread: 3
+        )
+        let rule = SmartRule(
+            name: "mark 2fa done",
+            when: .textMatchesRegex(#"(?i)verification code"#),
+            then: .markDone
+        )
+        let model = makeModelWithRules(
+            [rule],
+            threads: [thread],
+            incoming: ["2fa-1": [
+                Message(from: .them, text: "your verification code is 820193", time: "now", rowID: 1)
+            ]]
+        )
+
+        await model.processIncomingForRules(model.threads)
+        XCTAssertEqual(
+            model.threads.first(where: { $0.id == "2fa-1" })?.unread, 0,
+            "markDone should zero unread"
+        )
+    }
+
+    @MainActor
+    func testIncomingWatermarkPreventsDoubleFire() async throws {
+        // If we process twice with the same data, an action should fire
+        // only once. We can't observe "did the side effect run twice?"
+        // for archive (it's idempotent set insertion), so use a counter
+        // indirectly: after the first pass, changing the rule and doing
+        // a second pass with no NEW messages should NOT reapply.
+        let thread = MessageThread(
+            id: "t", channel: .imessage, name: "Mom",
+            avatar: "M", preview: "hi", time: "now", unread: 1
+        )
+        let rule = SmartRule(
+            name: "pretend-archive",
+            when: .channelIs(.imessage),
+            then: .archive
+        )
+        let model = makeModelWithRules(
+            [rule],
+            threads: [thread],
+            incoming: ["t": [
+                Message(from: .them, text: "hi", time: "now", rowID: 5)
+            ]]
+        )
+
+        await model.processIncomingForRules(model.threads)
+        XCTAssertTrue(model.archivedThreadIDs.contains("t"))
+
+        // Unarchive manually, run again with no NEW messages (rowID 5
+        // already seen). Archive rule should NOT reapply.
+        model.unarchive("t")
+        await model.processIncomingForRules(model.threads)
+        XCTAssertFalse(
+            model.archivedThreadIDs.contains("t"),
+            "watermark should have stopped the rule from re-firing on the same message"
+        )
+    }
+
+    @MainActor
+    func testArchivedIDsPersistAcrossInstances() async throws {
+        let thread = MessageThread(
+            id: "s", channel: .sms, name: "Bot",
+            avatar: "B", preview: "", time: "", unread: 0
+        )
+        let rule = SmartRule(name: "arc", when: .channelIs(.sms), then: .archive)
+        let model = makeModelWithRules(
+            [rule],
+            threads: [thread],
+            incoming: ["s": [
+                Message(from: .them, text: "x", time: "", rowID: 1)
+            ]]
+        )
+        await model.processIncomingForRules(model.threads)
+        XCTAssertTrue(model.archivedThreadIDs.contains("s"))
+
+        // New InboxViewModel instance pulls archived state from UserDefaults.
+        let second = InboxViewModel(threads: [thread])
+        XCTAssertTrue(second.archivedThreadIDs.contains("s"))
+
+        // Clean up for subsequent tests.
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+    }
+
     @MainActor
     func testStoreTogglePersists() throws {
         let tmp = FileManager.default.temporaryDirectory

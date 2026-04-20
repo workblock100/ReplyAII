@@ -49,10 +49,11 @@ struct ThreadListView: View {
 
     /// Pinned threads float to the top; within each bucket the caller's
     /// original order (usually last-message-date DESC) is preserved via
-    /// a stable sort.
+    /// a stable sort. Archived threads are filtered out entirely — they
+    /// still exist in model.threads, just hidden from the main list.
     private var sortedThreads: [MessageThread] {
-        let indexed = model.threads.enumerated()
-        return indexed.sorted { lhs, rhs in
+        let visible = model.threads.enumerated().filter { !model.archivedThreadIDs.contains($0.element.id) }
+        return visible.sorted { lhs, rhs in
             if lhs.element.pinned != rhs.element.pinned {
                 return lhs.element.pinned && !rhs.element.pinned
             }

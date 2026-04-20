@@ -175,6 +175,7 @@ struct IMessageChannel: ChannelService {
 
         let sql = """
         SELECT
+            m.ROWID,
             m.text,
             m.attributedBody,
             m.is_from_me,
@@ -198,27 +199,83 @@ struct IMessageChannel: ChannelService {
 
         var out: [Message] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let textCol = Self.text(stmt, 0)
+            let rowID   = sqlite3_column_int64(stmt, 0)
+            let textCol = Self.text(stmt, 1)
             let decoded: String? = {
                 if let t = textCol, !t.isEmpty { return t }
-                if sqlite3_column_type(stmt, 1) == SQLITE_BLOB,
-                   let raw = sqlite3_column_blob(stmt, 1) {
-                    let len = Int(sqlite3_column_bytes(stmt, 1))
+                if sqlite3_column_type(stmt, 2) == SQLITE_BLOB,
+                   let raw = sqlite3_column_blob(stmt, 2) {
+                    let len = Int(sqlite3_column_bytes(stmt, 2))
                     return AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len))
                 }
                 return nil
             }()
             guard let body = decoded, !body.isEmpty else { continue }
 
-            let fromMe = sqlite3_column_int(stmt, 2) != 0
-            let date   = sqlite3_column_int64(stmt, 3)
+            let fromMe = sqlite3_column_int(stmt, 3) != 0
+            let date   = sqlite3_column_int64(stmt, 4)
             out.append(Message(
                 from: fromMe ? .me : .them,
                 text: body,
-                time: Self.formatTime(appleDate: date)
+                time: Self.formatTime(appleDate: date),
+                rowID: rowID
             ))
         }
         return out.reversed()  // oldest → newest for thread stream
+    }
+
+    func newIncomingMessages(forThreadID id: String, sinceRowID: Int64) async throws -> [Message] {
+        let db = try openReadOnly()
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        SELECT
+            m.ROWID,
+            m.text,
+            m.attributedBody,
+            m.date
+        FROM message m
+        JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+        JOIN chat c ON c.ROWID = cmj.chat_id
+        WHERE c.chat_identifier = ?1
+          AND m.ROWID > ?2
+          AND COALESCE(m.is_from_me, 0) = 0
+        ORDER BY m.ROWID ASC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw ChannelError.query(lastError(db))
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, id, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_int64(stmt, 2, sinceRowID)
+
+        var out: [Message] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let rowID   = sqlite3_column_int64(stmt, 0)
+            let textCol = Self.text(stmt, 1)
+            let decoded: String? = {
+                if let t = textCol, !t.isEmpty { return t }
+                if sqlite3_column_type(stmt, 2) == SQLITE_BLOB,
+                   let raw = sqlite3_column_blob(stmt, 2) {
+                    let len = Int(sqlite3_column_bytes(stmt, 2))
+                    return AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len))
+                }
+                return nil
+            }()
+            guard let body = decoded, !body.isEmpty else { continue }
+
+            let date = sqlite3_column_int64(stmt, 3)
+            out.append(Message(
+                from: .them,
+                text: body,
+                time: Self.formatTime(appleDate: date),
+                rowID: rowID
+            ))
+        }
+        return out
     }
 
     // MARK: - SQLite plumbing
