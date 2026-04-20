@@ -52,6 +52,9 @@ final class InboxViewModel {
         let channel: Channel
         let text: String
         let tone: Tone
+        /// Full chat GUID from chat.db. Preferred over synthesizing a
+        /// 1:1 GUID from the identifier, which would fail for groups.
+        let chatGUID: String?
     }
 
     private var imessage: ChannelService
@@ -356,7 +359,8 @@ final class InboxViewModel {
             recipient: thread.name,
             channel: thread.channel,
             text: text,
-            tone: activeTone
+            tone: activeTone,
+            chatGUID: thread.chatGUID
         )
     }
 
@@ -370,8 +374,20 @@ final class InboxViewModel {
         guard let pending = sendConfirmation else { return }
         sendConfirmation = nil
         do {
+            // Reconstruct a minimal thread so the sender can make the
+            // guid-vs-synthesized decision using the chat.db-sourced
+            // value when we have one.
+            let threadForSend = MessageThread(
+                id: pending.threadID,
+                channel: pending.channel,
+                name: pending.recipient,
+                avatar: String(pending.recipient.prefix(1)),
+                preview: "",
+                time: "",
+                chatGUID: pending.chatGUID
+            )
             try await Task.detached(priority: .userInitiated) {
-                try IMessageSender.send(pending.text, toChatIdentifier: pending.threadID, channel: pending.channel)
+                try IMessageSender.send(pending.text, to: threadForSend)
             }.value
             sendToast = "Sent to \(pending.recipient)"
             advanceToNextThread()

@@ -11,6 +11,12 @@ struct MessageThread: Identifiable, Hashable, Sendable {
     let pinned: Bool
     let contextCount: Int
     let contextSummary: String?
+    /// Full AppleScript `chat id` value from chat.db's `chat.guid` column,
+    /// e.g. `iMessage;-;+15551234567` for 1:1 or `iMessage;+;chat1234567890`
+    /// for groups. When present, IMessageSender uses it verbatim;
+    /// otherwise it falls back to synthesizing a 1:1-shaped GUID from
+    /// the channel + chat_identifier, which only works for 1:1 threads.
+    let chatGUID: String?
 
     init(
         id: String,
@@ -22,7 +28,8 @@ struct MessageThread: Identifiable, Hashable, Sendable {
         unread: Int = 0,
         pinned: Bool = false,
         contextCount: Int = 41,
-        contextSummary: String? = nil
+        contextSummary: String? = nil,
+        chatGUID: String? = nil
     ) {
         self.id = id
         self.channel = channel
@@ -34,5 +41,6 @@ struct MessageThread: Identifiable, Hashable, Sendable {
         self.pinned = pinned
         self.contextCount = contextCount
         self.contextSummary = contextSummary
+        self.chatGUID = chatGUID
     }
 }

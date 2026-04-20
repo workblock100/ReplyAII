@@ -110,6 +110,7 @@ Tests/ReplyAITests/                34 tests
 
 Commits (newest first; run `git log` for detail):
 
+- Group chat sending (chat.guid projected + used verbatim by IMessageSender)
 - Incoming-message rule actions (archive / markDone / silentlyIgnore) fire on watcher refire
 - `82f544e` Thread list: pinned threads float top + inline pin indicator
 - `5f2a746` ⌘K palette: real FTS5 search over live threads
@@ -136,7 +137,6 @@ Commits (newest first; run `git log` for detail):
 - **UNNotification inline reply**. Gallery mock exists (`sfc-notification`); real `UNNotificationAction` with `UNTextInputNotificationAction` pending.
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
-- **Group chat sending**. `IMessageSender.send(…)` uses `iMessage;-;<handle>` form which only works for 1:1. Group chats need the full `chat.guid` — project it in `IMessageChannel.recentThreads` and plumb through `MessageThread`.
 - **Rich message decoding limits**. `AttributedBodyDecoder` is a byte-scan, not a real typedstream parser. Some messages render as `[non-text message]`. Upgrade path: port https://github.com/dgelessus/python-typedstream to Swift.
 - **FTS5 watcher updates**. `SearchIndex.rebuild` fires on `syncFromIMessage` success, which the watcher already triggers — so new messages *do* become searchable within ~1s of arrival. If the rebuild ever gets expensive (thousands of threads), switch to incremental upserts keyed by (thread_id, message_rowid).
 - **Global vs per-rule tone priority.** When multiple rules match and both set tone, the first match wins. If that's wrong, add explicit rule priority or a conflict resolution spec.
@@ -158,33 +158,26 @@ Commits (newest first; run `git log` for detail):
 
 Pick in order. Each has a concrete starting point.
 
-### 1. Group chat sending
-
-- Project `chat.guid` from the SQL in `IMessageChannel.recentThreads` (it's a real column on `chat`).
-- Add `chatGUID: String?` to `MessageThread`; `IMessageChannel` populates it.
-- `IMessageSender.send(...)` prefers `chatGUID` when present (`tell application "Messages" / send X to chat id "<guid>"`) and falls back to `iMessage;-;<handle>` for legacy 1:1.
-- Unit tests are easy for the query-shape path; send path still needs manual verification via AppleScript prompt.
-
-### 2. Global `⌘⇧R`
+### 1. Global `⌘⇧R`
 
 - Add `Sources/ReplyAI/GlobalHotkey.swift`. Use `NSEvent.addGlobalMonitorForEvents(matching: .keyDown)` (cheapest; triggers Accessibility permission prompt).
 - Hook in `ReplyAIApp.init()`, call `openWindow(id: "inbox")` when the modifier+key match.
 - `NSAccessibilityUsageDescription` needs adding to `Info.plist` + `project.yml`.
 - If Accessibility not granted, show a banner in the inbox.
 
-### 3. Animation + a11y polish
+### 2. Animation + a11y polish
 
 - Thread-select bar: animate the `Rectangle().fill(isSelected ? accent : .clear)` with `withAnimation(Theme.Motion.std)` and `matchedGeometryEffect` across rows.
 - Relative-time chip in sidebar: add a `Timer.publish(every: 10)` republisher so `"live · 12s ago"` auto-ticks.
 - Reduced motion: read `@Environment(\.accessibilityReduceMotion)`, skip crossfades in `ComposerView.editableDraft` and tone-pill animations.
 
-### 4. Slack OAuth (first non-iMessage channel)
+### 3. Slack OAuth (first non-iMessage channel)
 
 - New `Sources/ReplyAI/Channels/SlackChannel.swift`. Port the flow from `ob-channel-detail.jsx`: spin up an `NWListener` on `127.0.0.1:4242` during auth only, open the OAuth URL via `NSWorkspace.shared.open`, stop the listener on callback.
 - Store the token in Keychain (prefix `ReplyAI-`; factory reset clears by prefix — see `set-privacy`).
 - Subsequent `recentThreads` hits `conversations.list` + `conversations.history`; use Socket Mode for RTM.
 
-### 5. Better AttributedBodyDecoder
+### 4. Better AttributedBodyDecoder
 
 - Current scanner misses nested `NSMutableAttributedString` payloads and returns nil for some rich-text messages.
 - Port https://github.com/dgelessus/python-typedstream to Swift (it's well-documented) or vendor a minimal parser covering class-ref / length / UTF-8 blob extraction for `NSString` + `NSAttributedString`.

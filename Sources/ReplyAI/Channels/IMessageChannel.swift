@@ -73,7 +73,8 @@ struct IMessageChannel: ChannelService {
                 SELECT COUNT(*) FROM message m2
                 JOIN chat_message_join cmj3 ON cmj3.message_id = m2.ROWID
                 WHERE cmj3.chat_id = c.ROWID AND m2.is_from_me = 0 AND COALESCE(m2.is_read, 0) = 0
-            ) AS unread_count
+            ) AS unread_count,
+            COALESCE(c.guid, '') AS chat_guid
         FROM chat c
         WHERE EXISTS (SELECT 1 FROM chat_message_join cmj WHERE cmj.chat_id = c.ROWID)
         ORDER BY last_date DESC NULLS LAST
@@ -94,6 +95,7 @@ struct IMessageChannel: ChannelService {
             let lastDateRaw: Int64
             let msgCount: Int
             let unread: Int
+            let chatGUID: String?
         }
 
         var pending: [Pending] = []
@@ -106,6 +108,7 @@ struct IMessageChannel: ChannelService {
             let lastDateRaw  = sqlite3_column_int64(stmt, 6)
             let msgCount     = Int(sqlite3_column_int(stmt, 7))
             let unread       = Int(sqlite3_column_int(stmt, 8))
+            let guid         = Self.text(stmt, 9) ?? ""
 
             let resolvedName: String = {
                 if !displayName.isEmpty { return displayName }
@@ -122,7 +125,8 @@ struct IMessageChannel: ChannelService {
                 lastMsgRowID: lastRow,
                 lastDateRaw: lastDateRaw,
                 msgCount: msgCount,
-                unread: unread
+                unread: unread,
+                chatGUID: guid.isEmpty ? nil : guid
             ))
         }
         sqlite3_finalize(stmt)
@@ -142,7 +146,8 @@ struct IMessageChannel: ChannelService {
                 unread: p.unread,
                 pinned: false,
                 contextCount: p.msgCount,
-                contextSummary: nil
+                contextSummary: nil,
+                chatGUID: p.chatGUID
             ))
         }
         return out
