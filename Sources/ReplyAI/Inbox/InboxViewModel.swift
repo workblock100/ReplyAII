@@ -47,6 +47,7 @@ final class InboxViewModel {
     let contacts = ContactsResolver()
     private var watcher: ChatDBWatcher?
     let rules: RulesStore
+    let searchIndex = SearchIndex()
 
     init(
         threads: [MessageThread] = Fixtures.threads,
@@ -197,6 +198,12 @@ final class InboxViewModel {
                let msgs = try? await imessage.messages(forThreadID: focus.id, limit: 40) {
                 liveMessages[focus.id] = msgs
             }
+
+            // Rebuild the FTS5 search index so ⌘K searches the live
+            // thread contents, not the fixture data.
+            let snapshot = liveMessages
+            let threadsSnapshot = live
+            await searchIndex.rebuild(from: snapshot, threads: threadsSnapshot)
 
             startWatchingIfNeeded()
         } catch let err as ChannelError {

@@ -82,8 +82,14 @@ struct InboxScreen: View {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture { withAnimation(Theme.Motion.fast) { paletteOpen = false } }
-            PalettePopover()
-                .padding(.top, 120)
+            PalettePopover(
+                searchIndex: model.searchIndex,
+                onJump: { hit in
+                    withAnimation(Theme.Motion.std) { model.selectThread(hit.threadID) }
+                    paletteOpen = false
+                }
+            )
+            .padding(.top, 120)
         }
         .background(
             Button("Close palette") {
