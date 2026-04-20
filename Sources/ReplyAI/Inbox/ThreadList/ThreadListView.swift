@@ -12,7 +12,7 @@ struct ThreadListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(model.threads) { thread in
+                    ForEach(sortedThreads) { thread in
                         ThreadRow(
                             thread: thread,
                             isSelected: thread.id == model.selectedThreadID
@@ -45,6 +45,19 @@ struct ThreadListView: View {
             Spacer()
             aiOnPill
         }
+    }
+
+    /// Pinned threads float to the top; within each bucket the caller's
+    /// original order (usually last-message-date DESC) is preserved via
+    /// a stable sort.
+    private var sortedThreads: [MessageThread] {
+        let indexed = model.threads.enumerated()
+        return indexed.sorted { lhs, rhs in
+            if lhs.element.pinned != rhs.element.pinned {
+                return lhs.element.pinned && !rhs.element.pinned
+            }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
     }
 
     private var aiOnPill: some View {

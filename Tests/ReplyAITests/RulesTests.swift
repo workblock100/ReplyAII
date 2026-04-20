@@ -193,6 +193,39 @@ final class RulesTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectThreadAppliesPinRule() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = RulesStore(fileURL: tmp)
+        for r in store.rules { store.remove(r.id) }
+        store.add(SmartRule(
+            name: "pin anything Slack",
+            when: .channelIs(.slack),
+            then: .pin
+        ))
+
+        let model = InboxViewModel(
+            threads: Fixtures.threads,
+            imessage: nil,
+            rules: store
+        )
+        // t3 is Ravi (Linear) — slack, NOT pre-pinned in Fixtures.
+        XCTAssertFalse(
+            model.threads.first(where: { $0.id == "t3" })?.pinned ?? true,
+            "sanity: t3 starts unpinned"
+        )
+
+        model.selectThread("t3")
+        XCTAssertTrue(
+            model.threads.first(where: { $0.id == "t3" })?.pinned ?? false,
+            "pin rule should flip pinned to true"
+        )
+    }
+
+    @MainActor
     func testSelectThreadSkipsRulesWhenNoMatch() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")

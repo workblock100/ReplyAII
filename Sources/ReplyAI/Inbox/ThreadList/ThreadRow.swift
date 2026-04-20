@@ -18,6 +18,12 @@ struct ThreadRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
+                        if thread.pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(Theme.Color.accent)
+                                .accessibilityLabel("Pinned")
+                        }
                         Text(thread.name)
                             .font(Theme.Font.sans(13, weight: thread.unread > 0 ? .semibold : .medium))
                             .foregroundStyle(Theme.Color.fg)
