@@ -110,7 +110,11 @@ Tests/ReplyAITests/                34 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `9c86704` Smart Rules DSL + store + live UI; 34 tests green
+- `82f544e` Thread list: pinned threads float top + inline pin indicator
+- `5f2a746` ⌘K palette: real FTS5 search over live threads
+- `151217c` Rules fire on thread select + initial sync (setDefaultTone + pin)
+- `52d30f8` AGENTS.md for Codex
+- `9c86704` Smart Rules DSL + store + live UI
 - `f06b7ce` Model-load progress banner above the inbox
 - `28e2e74` MLX take 2: on-device drafts behind Settings toggle
 - `584ef3d` Composer: edit the draft before sending
@@ -124,17 +128,19 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
+46 XCTest cases, all green.
+
 ## What's still stubbed
 
-- **Rule actions don't fire live**. `RuleEvaluator` classifies correctly, `InboxViewModel` doesn't call it yet. `setDefaultTone` is the lowest-friction wiring (see priority #1 below).
-- **FTS5 palette search**. `PalettePopover` shows a static list. Need a SQLite FTS5 index backed by `liveMessages` + a query that debounces user input.
+- **archive / markDone / silentlyIgnore rule actions**. `setDefaultTone` and `pin` fire on thread-select (done). The list-mutating actions need a different trigger — they should fire on *incoming* messages (new rows in chat.db), not on focus. Requires tracking a per-thread `lastSeenRowID` and plumbing new messages through `RuleEvaluator` from the watcher path.
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
 - **UNNotification inline reply**. Gallery mock exists (`sfc-notification`); real `UNNotificationAction` with `UNTextInputNotificationAction` pending.
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
-- **Group chat sending**. `IMessageSender.send(…)` uses `iMessage;-;<handle>` form which only works for 1:1. Group chats need the full `chat.guid` — project it in `IMessageChannel.recentThreads`.
+- **Group chat sending**. `IMessageSender.send(…)` uses `iMessage;-;<handle>` form which only works for 1:1. Group chats need the full `chat.guid` — project it in `IMessageChannel.recentThreads` and plumb through `MessageThread`.
 - **Rich message decoding limits**. `AttributedBodyDecoder` is a byte-scan, not a real typedstream parser. Some messages render as `[non-text message]`. Upgrade path: port https://github.com/dgelessus/python-typedstream to Swift.
-- **Model progress UI**. `MLXDraftService` emits `DraftChunk.loadProgress(fraction:message:)` but `InboxScreen` doesn't render it yet. Add a banner above the composer when the latest stream's last chunk is `.loadProgress`.
+- **FTS5 watcher updates**. `SearchIndex.rebuild` fires on `syncFromIMessage` success, which the watcher already triggers — so new messages *do* become searchable within ~1s of arrival. If the rebuild ever gets expensive (thousands of threads), switch to incremental upserts keyed by (thread_id, message_rowid).
+- **Global vs per-rule tone priority.** When multiple rules match and both set tone, the first match wins. If that's wrong, add explicit rule priority or a conflict resolution spec.
 
 ## Gotchas (read once, save hours)
 
@@ -151,24 +157,24 @@ Commits (newest first; run `git log` for detail):
 
 ## Priority queue
 
-Pick in order. Each has a concrete starting point:
+Pick in order. Each has a concrete starting point.
 
-### 1. Wire rule actions live in `InboxViewModel`
+### 1. Incoming-message rule actions (archive / markDone / silentlyIgnore)
 
-Currently `RuleEvaluator` is a pure function with tests; nothing calls it from live code. Start with `setDefaultTone` since it's read-only:
+These rule actions mutate the thread list and should fire on *new* messages, not on focus. `RuleEvaluator` classifies; the inbox doesn't yet track new-vs-seen.
 
-- In `InboxViewModel.selectThread(_ id:)`, after updating `selectedThreadID`, compute `RuleEvaluator.defaultTone(for: rulesStore.rules, in: RuleContext.from(thread: selectedThread))` and set `activeTone` to that if non-nil.
-- Hold a `@ObservationIgnored var rules: RulesStore` on `InboxViewModel` (inject via init).
-- Tests: add a case to `RulesTests` that exercises the integration against a fake rules array.
-- Follow-up actions (`archive`, `pin`, `markDone`) need list mutations on the thread array + persistence — larger change, do second.
+- Add `var lastSeenRowID: [String: Int64] = [:]` to `InboxViewModel` (keyed by `chat_identifier`), persisted to UserDefaults.
+- Extend `IMessageChannel` with `messages(forThreadID:sinceRowID:) async throws -> [Message]` (same shape as `messages(forThreadID:limit:)` but with a `WHERE m.ROWID > ?` clause).
+- In the `ChatDBWatcher` handler, for each thread with new rows, call `RuleEvaluator.matching` against a fresh context and apply `archive` / `silentlyIgnore` → add threadID to `var archivedThreadIDs: Set<String>`; apply `markDone` → zero the unread count. `ThreadListView` filters archived IDs.
+- Persist `archivedThreadIDs` to JSON under `~/Library/Application Support/ReplyAI/archived.json` so it survives relaunches.
+- Tests: feed a mock `ChannelService` returning a thread with a new matching message, assert the rule action fires exactly once.
 
-### 2. FTS5 palette search
+### 2. Group chat sending
 
-- Add `Sources/ReplyAI/Search/SearchIndex.swift` that owns a SQLite DB at `~/Library/Application Support/ReplyAI/search.db` with an FTS5 virtual table `messages_fts(thread_id, text, sender, date UNINDEXED)`.
-- On successful `syncFromIMessage`, iterate each thread's live messages and `INSERT OR REPLACE INTO messages_fts` (dedup by a `(thread_id, message_rowid)` unique constraint).
-- Expose `func search(_ query: String) async -> [SearchResult]` that runs `MATCH ?` with a small snippet helper.
-- Rewrite `PalettePopover` to take a `SearchIndex` env value and re-query on `@State var query` change with a 120 ms debounce.
-- Test the tokenizer: query `"dinner mom"` should find "dont forget sundays dinner ♥".
+- Project `chat.guid` from the SQL in `IMessageChannel.recentThreads` (it's a real column on `chat`).
+- Add `chatGUID: String?` to `MessageThread`; `IMessageChannel` populates it.
+- `IMessageSender.send(...)` prefers `chatGUID` when present (`tell application "Messages" / send X to chat id "<guid>"`) and falls back to `iMessage;-;<handle>` for legacy 1:1.
+- Unit tests are easy for the query-shape path; send path still needs manual verification via AppleScript prompt.
 
 ### 3. Global `⌘⇧R`
 
@@ -188,6 +194,12 @@ Currently `RuleEvaluator` is a pure function with tests; nothing calls it from l
 - New `Sources/ReplyAI/Channels/SlackChannel.swift`. Port the flow from `ob-channel-detail.jsx`: spin up an `NWListener` on `127.0.0.1:4242` during auth only, open the OAuth URL via `NSWorkspace.shared.open`, stop the listener on callback.
 - Store the token in Keychain (prefix `ReplyAI-`; factory reset clears by prefix — see `set-privacy`).
 - Subsequent `recentThreads` hits `conversations.list` + `conversations.history`; use Socket Mode for RTM.
+
+### 6. Better AttributedBodyDecoder
+
+- Current scanner misses nested `NSMutableAttributedString` payloads and returns nil for some rich-text messages.
+- Port https://github.com/dgelessus/python-typedstream to Swift (it's well-documented) or vendor a minimal parser covering class-ref / length / UTF-8 blob extraction for `NSString` + `NSAttributedString`.
+- Test against a corpus of real `attributedBody` blobs harvested from chat.db (sanitized — no real content in the repo).
 
 ## Testing expectations
 
