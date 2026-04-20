@@ -160,6 +160,62 @@ final class RulesTests: XCTestCase {
         XCTAssertTrue(reopened.rules.contains(custom))
     }
 
+    // MARK: - Integration with InboxViewModel
+
+    @MainActor
+    func testSelectThreadAppliesDefaultToneRule() throws {
+        // Build a store with a single rule: when channel is slack AND
+        // sender contains "Maya", set default tone to .direct. Feed it
+        // into an InboxViewModel seeded with Maya's fixture thread.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = RulesStore(fileURL: tmp)
+        // Reset to a known single rule.
+        for r in store.rules { store.remove(r.id) }
+        store.add(SmartRule(
+            name: "test · Maya → direct",
+            when: .and([.channelIs(.slack), .senderContains("Maya")]),
+            then: .setDefaultTone(.direct)
+        ))
+
+        let model = InboxViewModel(
+            threads: Fixtures.threads,
+            imessage: nil,        // unused for this test
+            rules: store
+        )
+        XCTAssertEqual(model.activeTone, .warm, "sanity: default tone before rule fires")
+
+        model.selectThread("t1")  // Maya Chen, Slack
+        XCTAssertEqual(model.activeTone, .direct, "rule should flip tone to direct")
+    }
+
+    @MainActor
+    func testSelectThreadSkipsRulesWhenNoMatch() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = RulesStore(fileURL: tmp)
+        for r in store.rules { store.remove(r.id) }
+        store.add(SmartRule(
+            name: "only whatsapp",
+            when: .channelIs(.whatsapp),
+            then: .setDefaultTone(.playful)
+        ))
+
+        let model = InboxViewModel(
+            threads: Fixtures.threads,
+            imessage: nil,
+            rules: store
+        )
+        model.selectThread("t1")  // Slack thread — rule should NOT fire
+        XCTAssertEqual(model.activeTone, .warm, "tone should stay at default when no rule matches")
+    }
+
     @MainActor
     func testStoreTogglePersists() throws {
         let tmp = FileManager.default.temporaryDirectory

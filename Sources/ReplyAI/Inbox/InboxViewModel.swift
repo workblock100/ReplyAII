@@ -46,17 +46,20 @@ final class InboxViewModel {
     private var imessage: ChannelService
     let contacts = ContactsResolver()
     private var watcher: ChatDBWatcher?
+    let rules: RulesStore
 
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
         channels: [Channel] = Fixtures.sidebarChannels,
-        imessage: ChannelService? = nil
+        imessage: ChannelService? = nil,
+        rules: RulesStore? = nil
     ) {
         self.threads = threads
         self.folders = folders
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
+        self.rules = rules ?? RulesStore()
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
         // needing MainActor.assumeIsolated (which would crash on the
@@ -73,6 +76,52 @@ final class InboxViewModel {
 
     func selectThread(_ id: String) {
         selectedThreadID = id
+        applyRules(for: selectedThread)
+    }
+
+    /// Evaluate every active rule against the selected thread and apply
+    /// the side effects that make sense on focus:
+    ///   - setDefaultTone → switch the composer's active tone
+    ///   - pin            → mark the thread pinned (best-effort; v1 has no
+    ///                      pinned-first sort yet)
+    ///
+    /// archive / markDone / silentlyIgnore are list-mutation actions that
+    /// only make sense on incoming messages, not on focus; the live
+    /// FSEvents pipeline will invoke those separately when it lands.
+    func applyRules(for thread: MessageThread) {
+        let ctx = RuleContext.from(thread: thread)
+        let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+
+        for rule in matched {
+            switch rule.then {
+            case .setDefaultTone(let tone):
+                if activeTone != tone { activeTone = tone }
+            case .pin:
+                markPinned(thread.id)
+            case .archive, .markDone, .silentlyIgnore:
+                // Deferred: these mutate the thread list; need the
+                // incoming-message pipeline to fire them at the right
+                // moment.
+                continue
+            }
+        }
+    }
+
+    private func markPinned(_ threadID: String) {
+        guard let i = threads.firstIndex(where: { $0.id == threadID }),
+              !threads[i].pinned else { return }
+        threads[i] = MessageThread(
+            id: threads[i].id,
+            channel: threads[i].channel,
+            name: threads[i].name,
+            avatar: threads[i].avatar,
+            preview: threads[i].preview,
+            time: threads[i].time,
+            unread: threads[i].unread,
+            pinned: true,
+            contextCount: threads[i].contextCount,
+            contextSummary: threads[i].contextSummary
+        )
     }
 
     func messages(for thread: MessageThread) -> [Message] {
@@ -134,6 +183,7 @@ final class InboxViewModel {
             if live.contains(where: { $0.id == currentSelection }) == false {
                 selectedThreadID = live.first?.id ?? selectedThreadID
             }
+            applyRules(for: selectedThread)
 
             // Drop cached messages for threads that no longer exist.
             liveMessages = liveMessages.filter { key, _ in live.contains(where: { $0.id == key }) }
