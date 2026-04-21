@@ -59,8 +59,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-181957
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift` (new), `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/StatsTests.swift` (new)
 - scope: Add a lightweight `Stats` observable (in-memory, written to `~/Library/Application Support/ReplyAI/stats.json` on change). Counts: `rulesFiredByAction: [String: Int]`, `draftsGenerated: Int`, `draftsSent: Int`, `messagesIndexed: Int`. Hook counter increments at the points they happen (InboxViewModel for rules/archive/send, DraftEngine for drafts). No UI yet — just persist. Surfacing in set-privacy comes in a follow-up.
 - success_criteria:
