@@ -26,8 +26,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-172426
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: `lastSeenRowID: [String: Int64]` currently lives in memory. Every relaunch zeros it, which causes every rule action to re-fire against the entire chat.db the next time the watcher triggers sync. Persist via `UserDefaults` under `pref.inbox.lastSeenRowID` as a JSON-encoded `[String: Int64]`, same pattern as `archivedThreadIDs`.
 - success_criteria:
@@ -41,8 +41,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-172426
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`, AGENTS.md
 - scope: When multiple rules match the same thread+tone, today the first-added wins. AGENTS.md flags this as a TODO. Add an `Int` `priority` field to `SmartRule` (default 0, higher wins), teach `RuleEvaluator.matching` to sort matches by priority DESC before returning, and update `defaultTone(for:in:)` to obey. Keep JSON round-trip compatible — missing `priority` decodes as 0.
 - success_criteria:
