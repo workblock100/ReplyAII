@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                55 tests
+Tests/ReplyAITests/                60 tests
 ```
 
 ## Architecture patterns
@@ -110,7 +110,7 @@ Tests/ReplyAITests/                55 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `753d880` persist lastSeenRowID across launches; SmartRule priority field + conflict resolution (worker-2026-04-21-172426)
+- `753d8803` persist lastSeenRowID across launches; SmartRule priority field + conflict resolution (worker-2026-04-21-172426)
 - `33424cc` Automation scaffolding (planner/worker/reviewer cron agents + BACKLOG.md seed)
 - `10fce3d` Group chat sending (chat.guid projected + used verbatim by IMessageSender)
 - `2d9110d` Incoming-message rule actions (archive / markDone / silentlyIgnore) fire on watcher refire
@@ -187,7 +187,7 @@ Pick in order. Each has a concrete starting point.
 
 ## Testing expectations
 
-- **Every new feature ships with XCTest coverage.** 55 tests today. `swift test` from repo root.
+- **Every new feature ships with XCTest coverage.** 60 tests today. `swift test` from repo root.
 - **Pure Swift (models, evaluators, parsers) gets unit tests.** View code gets ad-hoc visual checking.
 - **Async tests**: use the `waitUntil(timeout:_:)` helper pattern in `DraftEngineTests` rather than arbitrary sleeps.
 - **Never add `#Preview` blocks** — they break the SwiftPM path.
