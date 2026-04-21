@@ -45,8 +45,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-181128
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Today `.archive` and `.silentlyIgnore` both add the thread to `archivedThreadIDs`. Semantically they should differ: `silentlyIgnore` should additionally suppress the menu-bar popover and any future notification. Add `silentlyIgnoredThreadIDs: Set<String>` persisted to UserDefaults, filter those out of `MenuBarContent.waitingThreads`, and make archive the visible-in-menu-bar case.
 - success_criteria:
@@ -74,8 +74,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-181128
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: Current escape pair is `\\` and `\"`. Real messages can contain backticks, `$(...)`, newlines, null bytes, zero-width chars, Emoji ZWJ sequences. Add a `chatGUID` + text-escape helper that's explicitly tested against a fixture of adversarial inputs. No behavior change for normal strings — pure hardening.
 - success_criteria:
@@ -185,8 +185,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-181128
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore` has `remove`, `update`, and `resetToSeeds` methods called directly from the rules UI but none are tested. Extend `RulesTests.swift` (same temp-file pattern as `testStoreRoundTripsAddedRule`) with: rule removal persists (second instance doesn't find the removed rule), update mutates an existing rule and round-trips, resetToSeeds restores the canonical defaults, removing a non-existent UUID is a safe no-op.
 - success_criteria:
