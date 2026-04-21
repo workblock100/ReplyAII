@@ -1,6 +1,25 @@
 import Foundation
 import Contacts
 
+/// Narrow surface the resolver needs from whatever contact-lookup
+/// backend it's wired against. Lets tests drop in a deterministic
+/// fake without pulling in a real `CNContactStore` (which asks the
+/// user for Contacts permission and returns nondeterministic data).
+protocol ContactsStoring: Sendable {
+    /// Current authorization state — synchronous snapshot. Mirrors
+    /// `CNContactStore.authorizationStatus(for:)`.
+    func currentAccess() -> ContactsResolver.Access
+
+    /// Prompt (if needed) and return the resulting state. Called once
+    /// from `ContactsResolver.ensureAccess`.
+    func requestAccess() async -> ContactsResolver.Access
+
+    /// Uncached name lookup for a phone/email handle. Returns nil on
+    /// miss or on any error — the resolver can't distinguish those
+    /// cases and doesn't need to.
+    func lookup(handle: String) -> String?
+}
+
 /// Resolves raw handles (`+15551234567`, `user@example.com`) to contact
 /// names via the user's address book. Gated on Contacts access (a
 /// separate TCC permission from Full Disk Access).
@@ -16,10 +35,14 @@ final class ContactsResolver: @unchecked Sendable {
         case denied
     }
 
-    private let store = CNContactStore()
+    private let store: ContactsStoring
     private let lock = NSLock()
     private var cache: [String: String] = [:]
     private var _access: Access = .unknown
+
+    init(store: ContactsStoring? = nil) {
+        self.store = store ?? CNContactStoreBackedStoring()
+    }
 
     var access: Access {
         synced { _access }
@@ -28,25 +51,12 @@ final class ContactsResolver: @unchecked Sendable {
     /// Kick off the permission prompt if we haven't asked yet. Safe to
     /// call repeatedly — already-authorized is a no-op.
     func ensureAccess() async {
-        let status = CNContactStore.authorizationStatus(for: .contacts)
-        let resolved: Access
-        switch status {
-        case .authorized:
-            resolved = .granted
-        case .denied, .restricted:
-            resolved = .denied
-        case .notDetermined:
-            do {
-                let ok = try await store.requestAccess(for: .contacts)
-                resolved = ok ? .granted : .denied
-            } catch {
-                resolved = .denied
-            }
-        case .limited:
-            resolved = .granted  // partial access is usable
-        @unknown default:
-            resolved = .denied
+        let current = store.currentAccess()
+        if current != .unknown {
+            setAccess(current)
+            return
         }
+        let resolved = await store.requestAccess()
         setAccess(resolved)
     }
 
@@ -60,7 +70,7 @@ final class ContactsResolver: @unchecked Sendable {
         if let hit { return hit.isEmpty ? nil : hit }
         if gate != .granted { return nil }
 
-        let resolved = lookup(handle: handle) ?? ""
+        let resolved = store.lookup(handle: handle) ?? ""
         synced { cache[handle] = resolved }
         return resolved.isEmpty ? nil : resolved
     }
@@ -79,9 +89,38 @@ final class ContactsResolver: @unchecked Sendable {
         synced { _access = a }
     }
 
-    /// Uncached lookup. CNContactStore + CNContactFormatter are both
-    /// documented thread-safe for read access.
-    private func lookup(handle: String) -> String? {
+    #if DEBUG
+    /// Test-only: force the resolver into a given access state without
+    /// going through `ensureAccess`. Kept separate from `setAccess`
+    /// (which is called from the async ensureAccess path) so it's
+    /// obvious at the call site that a test is overriding production
+    /// behavior.
+    func overrideAccessForTesting(_ a: Access) {
+        setAccess(a)
+    }
+    #endif
+}
+
+/// Production `ContactsStoring` — hits the real `CNContactStore`.
+/// Keeps all Contacts framework specifics out of the resolver proper
+/// so the unit-test path never touches the framework.
+struct CNContactStoreBackedStoring: ContactsStoring {
+    private let store = CNContactStore()
+
+    func currentAccess() -> ContactsResolver.Access {
+        Self.translate(CNContactStore.authorizationStatus(for: .contacts))
+    }
+
+    func requestAccess() async -> ContactsResolver.Access {
+        do {
+            let ok = try await store.requestAccess(for: .contacts)
+            return ok ? .granted : .denied
+        } catch {
+            return .denied
+        }
+    }
+
+    func lookup(handle: String) -> String? {
         let keys: [CNKeyDescriptor] = [CNContactFormatter.descriptorForRequiredKeys(for: .fullName)]
         do {
             let predicate: NSPredicate
@@ -105,5 +144,14 @@ final class ContactsResolver: @unchecked Sendable {
     /// Collapse "+1 (415) 555-0134" and "4155550134" to the same form.
     private func normalize(_ handle: String) -> String {
         handle.filter { "+0123456789".contains($0) }
+    }
+
+    private static func translate(_ status: CNAuthorizationStatus) -> ContactsResolver.Access {
+        switch status {
+        case .authorized, .limited: return .granted
+        case .denied, .restricted:  return .denied
+        case .notDetermined:        return .unknown
+        @unknown default:           return .denied
+        }
     }
 }

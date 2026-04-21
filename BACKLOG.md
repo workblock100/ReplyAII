@@ -171,7 +171,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-183251
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift` (new), `Sources/ReplyAI/Channels/ContactsResolver.swift` (inject mock)
 - scope: `ContactsResolver` has NSLock-guarded cache logic and an access-state machine (unknown/granted/denied) with no tests at all. Extract `CNContactStore` behind a narrow injectable protocol (`ContactsStoring`) so tests can provide deterministic responses. Test: cache hit skips store call; cache miss queries store + populates cache; two concurrent calls for the same handle both resolve without deadlock; access state transitions correctly from `.unknown` to `.granted` and `.denied`.
@@ -249,6 +249,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-21-182949
+
+### REP-011 — ContactsResolver: cache + access-state unit tests
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-183251
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0
