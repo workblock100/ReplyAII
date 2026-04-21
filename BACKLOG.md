@@ -27,8 +27,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: L
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-173600
 - files_to_touch: `Sources/ReplyAI/Channels/AttributedBodyDecoder.swift`, `Tests/ReplyAITests/AttributedBodyDecoderTests.swift` (new)
 - scope: Current implementation is a naive byte-scan that misses common patterns (nested `NSMutableAttributedString`, multi-attribute-run strings, longer length prefixes). Replace with a proper typedstream reader covering enough of the format to extract all `NSString` and `NSMutableString` payloads from typical iMessage rich-text blobs. Reference spec: https://github.com/dgelessus/python-typedstream — port the relevant bits.
 - success_criteria:
