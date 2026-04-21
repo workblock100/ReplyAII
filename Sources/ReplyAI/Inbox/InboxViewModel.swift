@@ -81,14 +81,17 @@ final class InboxViewModel {
     private var watcher: ChatDBWatcher?
     let rules: RulesStore
     let searchIndex = SearchIndex()
+    let stats: Stats
 
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
         channels: [Channel] = Fixtures.sidebarChannels,
         imessage: ChannelService? = nil,
-        rules: RulesStore? = nil
+        rules: RulesStore? = nil,
+        stats: Stats? = nil
     ) {
+        self.stats = stats ?? Stats()
         self.threads = threads
         self.folders = folders
         self.channels = channels
@@ -133,8 +136,10 @@ final class InboxViewModel {
             switch rule.then {
             case .setDefaultTone(let tone):
                 if activeTone != tone { activeTone = tone }
+                stats.recordRuleFired(action: "setDefaultTone")
             case .pin:
                 markPinned(thread.id)
+                stats.recordRuleFired(action: "pin")
             case .archive, .markDone, .silentlyIgnore:
                 // Deferred: these mutate the thread list; need the
                 // incoming-message pipeline to fire them at the right
@@ -240,6 +245,7 @@ final class InboxViewModel {
             let snapshot = liveMessages
             let threadsSnapshot = live
             await searchIndex.rebuild(from: snapshot, threads: threadsSnapshot)
+            stats.recordMessagesIndexed(snapshot.values.reduce(0) { $0 + $1.count })
 
             // Process any incoming messages we haven't evaluated yet.
             // This covers first-run (every existing message is "new" to
@@ -293,10 +299,13 @@ final class InboxViewModel {
                 switch rule.then {
                 case .archive:
                     archivedThreadIDs.insert(thread.id)
+                    stats.recordRuleFired(action: "archive")
                 case .silentlyIgnore:
                     silentlyIgnoredThreadIDs.insert(thread.id)
+                    stats.recordRuleFired(action: "silentlyIgnore")
                 case .markDone:
                     markUnreadZero(thread.id)
+                    stats.recordRuleFired(action: "markDone")
                 case .setDefaultTone, .pin:
                     // Focus-time actions — handled in applyRules(for:).
                     continue
@@ -446,6 +455,7 @@ final class InboxViewModel {
             try await Task.detached(priority: .userInitiated) {
                 try IMessageSender.send(pending.text, to: threadForSend)
             }.value
+            stats.recordDraftSent()
             sendToast = "Sent to \(pending.recipient)"
             advanceToNextThread()
         } catch let err as IMessageSender.SendError {

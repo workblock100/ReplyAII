@@ -32,9 +32,11 @@ final class DraftEngine {
 
     private let service: LLMService
     private var tasks: [Key: Task<Void, Never>] = [:]
+    private let stats: Stats?
 
-    init(service: LLMService = StubLLMService()) {
+    init(service: LLMService = StubLLMService(), stats: Stats? = nil) {
         self.service = service
+        self.stats = stats
     }
 
     func state(threadID: String, tone: Tone) -> DraftState {
@@ -67,6 +69,7 @@ final class DraftEngine {
 
         tasks[key]?.cancel()
         drafts[key] = DraftState(text: "", confidence: 1.0, isStreaming: true, isDone: false, error: nil)
+        stats?.recordDraftGenerated()
 
         let stream = service.draft(thread: thread, tone: tone, history: history)
         tasks[key] = Task { [weak self] in
