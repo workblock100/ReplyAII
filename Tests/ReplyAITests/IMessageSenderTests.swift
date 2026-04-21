@@ -56,4 +56,117 @@ final class IMessageSenderTests: XCTestCase {
         )
         XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;-;handle")
     }
+
+    // MARK: - AppleScript literal escaping (REP-006)
+
+    // Count unescaped double-quotes: a `"` not immediately preceded by `\`.
+    private func unescapedQuoteCount(_ s: String) -> Int {
+        var count = 0
+        var prevWasBackslash = false
+        for ch in s {
+            if ch == "\"" && !prevWasBackslash { count += 1 }
+            prevWasBackslash = (ch == "\\") && !prevWasBackslash
+        }
+        return count
+    }
+
+    private func assertSafe(_ input: String, file: StaticString = #file, line: UInt = #line) {
+        let output = IMessageSender.escapeForAppleScriptLiteral(input)
+        XCTAssertEqual(
+            unescapedQuoteCount(output), 0,
+            "unescaped \" in output for input \(input.debugDescription)",
+            file: file, line: line
+        )
+        // A trailing odd backslash would escape the closing `"` in the script.
+        var backslashCount = 0
+        for ch in output.reversed() {
+            guard ch == "\\" else { break }
+            backslashCount += 1
+        }
+        XCTAssertEqual(
+            backslashCount % 2, 0,
+            "output ends with odd backslash for input \(input.debugDescription)",
+            file: file, line: line
+        )
+    }
+
+    func testEscapePlainTextUnchanged() {
+        XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral("hello"), "hello")
+    }
+
+    func testEscapeEmptyString() {
+        XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral(""), "")
+    }
+
+    func testEscapeDoubleQuote() {
+        let result = IMessageSender.escapeForAppleScriptLiteral("say \"hi\"")
+        XCTAssertEqual(result, #"say \"hi\""#)
+        assertSafe("say \"hi\"")
+    }
+
+    func testEscapeBackslash() {
+        let result = IMessageSender.escapeForAppleScriptLiteral("path\\file")
+        XCTAssertEqual(result, "path\\\\file")
+        assertSafe("path\\file")
+    }
+
+    func testEscapeBackslashBeforeQuote() {
+        // Input \" must become \\\" (escaped backslash then escaped quote).
+        let input = "\\\""
+        assertSafe(input)
+        let result = IMessageSender.escapeForAppleScriptLiteral(input)
+        XCTAssertEqual(result, "\\\\\\\"")
+    }
+
+    func testEscapeBackticksUnchanged() {
+        // Backticks are not special in AppleScript string literals.
+        let input = "run `cmd`"
+        XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral(input), input)
+        assertSafe(input)
+    }
+
+    func testEscapeShellInterpolationAttempt() {
+        let input = "$(rm -rf ~)"
+        assertSafe(input)
+        XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral(input), input)
+    }
+
+    func testEscapeNewlineInMessage() {
+        assertSafe("line one\nline two")
+    }
+
+    func testEscapeNullByte() {
+        assertSafe("before\0after")
+    }
+
+    func testEscapeZeroWidthChars() {
+        assertSafe("hello\u{200B}\u{FEFF}world")
+    }
+
+    func testEscapeEmojiZWJSequence() {
+        assertSafe("👨‍👩‍👧‍👦 check this")
+    }
+
+    func testEscapeMixedScripts() {
+        assertSafe("مرحباً — こんにちは — héllo — \"quoted\"")
+    }
+
+    func testEscapeVeryLongString() {
+        // 10 000 chars of alternating quotes and backslashes — worst-case expansion.
+        let input = String(repeating: "\"\\", count: 5_000)
+        assertSafe(input)
+    }
+
+    func testEscapeMultipleConsecutiveQuotes() {
+        let input = "\"\"\"triple\"\"\""
+        assertSafe(input)
+        XCTAssertEqual(
+            IMessageSender.escapeForAppleScriptLiteral(input),
+            "\\\"\\\"\\\"triple\\\"\\\"\\\""
+        )
+    }
+
+    func testEscapeControlCharacters() {
+        assertSafe("tab:\there\r\n\u{07}bell")
+    }
 }

@@ -91,9 +91,15 @@ enum IMessageSender {
     }
 
     /// Escape a string for embedding inside AppleScript double-quoted
-    /// literals: backslash and quote need escaping.
-    private static func escape(_ s: String) -> String {
+    /// literals: backslash and quote need escaping. Exposed as `internal`
+    /// so the test suite can exercise adversarial inputs without running
+    /// a live AppleScript interpreter.
+    static func escapeForAppleScriptLiteral(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "\\\\")
          .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    private static func escape(_ s: String) -> String {
+        escapeForAppleScriptLiteral(s)
     }
 }

@@ -283,8 +283,9 @@ final class RulesTests: XCTestCase {
         for r in store.rules { store.remove(r.id) }
         for r in rules { store.add(r) }
 
-        // Clear any archived state left behind by a previous test run.
+        // Clear any archived/silenced state left behind by a previous test run.
         UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
 
         return InboxViewModel(
             threads: threads,
@@ -382,6 +383,88 @@ final class RulesTests: XCTestCase {
         )
     }
 
+    // MARK: - REP-004: silentlyIgnore vs archive parity
+
+    @MainActor
+    func testSilentlyIgnoreAndArchiveAreDistinct() async throws {
+        let threadA = MessageThread(
+            id: "thread-archive", channel: .sms, name: "Archive Bot",
+            avatar: "A", preview: "", time: "", unread: 1
+        )
+        let threadB = MessageThread(
+            id: "thread-silent", channel: .sms, name: "Silent Bot",
+            avatar: "S", preview: "", time: "", unread: 1
+        )
+        let archiveRule = SmartRule(name: "archive-a", when: .senderContains("Archive"), then: .archive)
+        let silentRule  = SmartRule(name: "silent-b",  when: .senderContains("Silent"),  then: .silentlyIgnore)
+
+        let model = makeModelWithRules(
+            [archiveRule, silentRule],
+            threads: [threadA, threadB],
+            incoming: [
+                "thread-archive": [Message(from: .them, text: "sale!", time: "", rowID: 1)],
+                "thread-silent":  [Message(from: .them, text: "newsletter", time: "", rowID: 2)],
+            ]
+        )
+
+        await model.processIncomingForRules(model.threads)
+
+        // archive lands only in archivedThreadIDs
+        XCTAssertTrue(model.archivedThreadIDs.contains("thread-archive"), "archive rule → archivedThreadIDs")
+        XCTAssertFalse(model.silentlyIgnoredThreadIDs.contains("thread-archive"), "archive must not leak into silentlyIgnoredThreadIDs")
+
+        // silentlyIgnore lands only in silentlyIgnoredThreadIDs
+        XCTAssertTrue(model.silentlyIgnoredThreadIDs.contains("thread-silent"), "silentlyIgnore → silentlyIgnoredThreadIDs")
+        XCTAssertFalse(model.archivedThreadIDs.contains("thread-silent"), "silentlyIgnore must not leak into archivedThreadIDs")
+
+        // Clean up
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+    }
+
+    @MainActor
+    func testMenuBarHidesSilentlyIgnored() async throws {
+        let visible = MessageThread(
+            id: "visible", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hey", time: "", unread: 2
+        )
+        let silenced = MessageThread(
+            id: "silenced", channel: .sms, name: "Newsletter Co",
+            avatar: "N", preview: "weekly deals", time: "", unread: 1
+        )
+        let silentRule = SmartRule(name: "hush newsletter", when: .senderContains("Newsletter"), then: .silentlyIgnore)
+
+        let model = makeModelWithRules(
+            [silentRule],
+            threads: [visible, silenced],
+            incoming: [
+                "silenced": [Message(from: .them, text: "deals", time: "", rowID: 1)]
+            ]
+        )
+
+        // Before rules fire both threads are unread → both would be waiting.
+        XCTAssertEqual(model.menuBarWaitingThreads.count, 2, "precondition: both unread before rule fires")
+
+        await model.processIncomingForRules(model.threads)
+
+        // After the rule fires, silenced thread must vanish from the menu-bar list.
+        let ids = model.menuBarWaitingThreads.map(\.id)
+        XCTAssertTrue(ids.contains("visible"),   "visible thread must remain in menu-bar list")
+        XCTAssertFalse(ids.contains("silenced"), "silently-ignored thread must not appear in menu-bar list")
+
+        // Archived threads (not silenced) must still appear in the menu-bar list.
+        // Add an archived thread to confirm the distinction.
+        model.archivedThreadIDs.insert("visible")   // simulate archive action on `visible`
+        XCTAssertTrue(
+            model.menuBarWaitingThreads.map(\.id).contains("visible"),
+            "archived thread is still unread → must remain in menu-bar count"
+        )
+
+        // Clean up
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+    }
+
     @MainActor
     func testArchivedIDsPersistAcrossInstances() async throws {
         let thread = MessageThread(
@@ -405,6 +488,7 @@ final class RulesTests: XCTestCase {
 
         // Clean up for subsequent tests.
         UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
     }
 
     // MARK: - REP-001: lastSeenRowID persistence
@@ -451,6 +535,7 @@ final class RulesTests: XCTestCase {
         // Clean up.
         UserDefaults.standard.removeObject(forKey: "pref.inbox.lastSeenRowID")
         UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
     }
 
     // MARK: - REP-002: SmartRule priority + conflict resolution
@@ -545,5 +630,97 @@ final class RulesTests: XCTestCase {
 
         let reopened = RulesStore(fileURL: tmp)
         XCTAssertEqual(reopened.rules.first(where: { $0.id == id })?.active, !wasActive)
+    }
+
+    // MARK: - REP-012: remove / update / resetToSeeds coverage
+
+    @MainActor
+    func testRemoveRulePersistsToDisk() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+
+        let store = RulesStore(fileURL: tmp)
+        let rule = SmartRule(name: "to remove", when: .channelIs(.slack), then: .archive)
+        store.add(rule)
+        XCTAssertTrue(store.rules.contains(rule), "precondition: rule present before remove")
+
+        store.remove(rule.id)
+
+        let reopened = RulesStore(fileURL: tmp)
+        XCTAssertFalse(
+            reopened.rules.contains(where: { $0.id == rule.id }),
+            "removed rule must not appear in a freshly loaded store"
+        )
+    }
+
+    @MainActor
+    func testUpdateRulePersists() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+
+        let store = RulesStore(fileURL: tmp)
+        var rule = SmartRule(name: "original", when: .channelIs(.sms), then: .markDone)
+        store.add(rule)
+
+        rule = SmartRule(id: rule.id, name: "updated", when: .channelIs(.teams), then: .pin, active: rule.active, priority: rule.priority)
+        store.update(rule)
+
+        let reopened = RulesStore(fileURL: tmp)
+        let found = reopened.rules.first(where: { $0.id == rule.id })
+        XCTAssertEqual(found?.name, "updated", "updated name should persist")
+        XCTAssertEqual(found?.then, .pin, "updated action should persist")
+        XCTAssertEqual(found?.when, .channelIs(.teams), "updated predicate should persist")
+    }
+
+    @MainActor
+    func testResetToSeedsRestoresDefaults() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+
+        let store = RulesStore(fileURL: tmp)
+        // Remove all seeds and add a custom rule so the state differs from seed.
+        for r in store.rules { store.remove(r.id) }
+        store.add(SmartRule(name: "custom", when: .channelIs(.whatsapp), then: .archive))
+
+        store.resetToSeeds()
+
+        let reopened = RulesStore(fileURL: tmp)
+        XCTAssertEqual(
+            reopened.rules.map(\.id).sorted(),
+            SmartRule.seedRules.map(\.id).sorted(),
+            "resetToSeeds should restore exactly the seed rule IDs"
+        )
+        XCTAssertFalse(
+            reopened.rules.contains(where: { $0.name == "custom" }),
+            "custom rule must be gone after reset"
+        )
+    }
+
+    @MainActor
+    func testRemoveNonExistentUUIDIsNoOp() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+
+        let store = RulesStore(fileURL: tmp)
+        let countBefore = store.rules.count
+
+        // Remove a UUID that was never added.
+        store.remove(UUID())
+
+        XCTAssertEqual(store.rules.count, countBefore, "rule count must not change on phantom remove")
+        let reopened = RulesStore(fileURL: tmp)
+        XCTAssertEqual(reopened.rules.count, countBefore, "persisted count must not change either")
     }
 }

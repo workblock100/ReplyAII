@@ -44,7 +44,7 @@ struct MenuBarContent: View {
     }
 
     private var waitingThreads: [MessageThread] {
-        model.threads.filter { $0.unread > 0 }
+        model.menuBarWaitingThreads
     }
 
     @ViewBuilder

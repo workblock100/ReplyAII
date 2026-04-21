@@ -37,6 +37,22 @@ final class InboxViewModel {
         didSet { InboxViewModel.saveArchivedIDs(archivedThreadIDs) }
     }
 
+    /// Threads silently suppressed by a `silentlyIgnore` rule action.
+    /// These are hidden from the menu-bar popover AND from future popover
+    /// notifications. Semantically distinct from `archivedThreadIDs`:
+    /// archived threads still appear in the menu-bar count; silently-ignored
+    /// ones do not. Persisted to UserDefaults.
+    var silentlyIgnoredThreadIDs: Set<String> = [] {
+        didSet { InboxViewModel.saveSilentlyIgnoredIDs(silentlyIgnoredThreadIDs) }
+    }
+
+    /// Threads eligible for the menu-bar waiting list: unread and not
+    /// silently ignored. Archived threads are still counted (archive is a
+    /// user-visible action); silentlyIgnore suppresses the notification.
+    var menuBarWaitingThreads: [MessageThread] {
+        threads.filter { $0.unread > 0 && !silentlyIgnoredThreadIDs.contains($0.id) }
+    }
+
     /// User edits to the composer, keyed by "{threadID}|{tone}". When a
     /// key has a non-nil value, it overrides whatever the DraftEngine
     /// stream last emitted. Regenerate (⌘J) clears its own key so the
@@ -79,6 +95,7 @@ final class InboxViewModel {
         self.selectedThreadID = threads.first?.id ?? "t1"
         self.rules = rules ?? RulesStore()
         self.archivedThreadIDs = InboxViewModel.loadArchivedIDs()
+        self.silentlyIgnoredThreadIDs = InboxViewModel.loadSilentlyIgnoredIDs()
         self.lastSeenRowID = InboxViewModel.loadLastSeenRowID()
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
@@ -274,8 +291,10 @@ final class InboxViewModel {
             let matched = RuleEvaluator.matching(rules.rules, in: ctx)
             for rule in matched {
                 switch rule.then {
-                case .archive, .silentlyIgnore:
+                case .archive:
                     archivedThreadIDs.insert(thread.id)
+                case .silentlyIgnore:
+                    silentlyIgnoredThreadIDs.insert(thread.id)
                 case .markDone:
                     markUnreadZero(thread.id)
                 case .setDefaultTone, .pin:
@@ -322,6 +341,23 @@ final class InboxViewModel {
     private static func saveArchivedIDs(_ ids: Set<String>) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
         UserDefaults.standard.set(data, forKey: archivedKey)
+    }
+
+    // MARK: - silentlyIgnored persistence
+
+    private static let silentlyIgnoredKey = "pref.inbox.silentlyIgnoredThreadIDs"
+
+    private static func loadSilentlyIgnoredIDs() -> Set<String> {
+        guard let data = UserDefaults.standard.data(forKey: silentlyIgnoredKey),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(decoded)
+    }
+
+    private static func saveSilentlyIgnoredIDs(_ ids: Set<String>) {
+        let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
+        UserDefaults.standard.set(data, forKey: silentlyIgnoredKey)
     }
 
     // MARK: - lastSeenRowID persistence
