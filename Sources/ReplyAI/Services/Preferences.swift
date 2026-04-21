@@ -22,8 +22,13 @@ enum PreferenceDefaults {
 }
 
 extension UserDefaults {
-    static func registerReplyAIDefaults() {
-        UserDefaults.standard.register(defaults: [
+    /// Seed every ReplyAI preference to its shipping default. Idempotent
+    /// — `register(defaults:)` never overwrites a user-set value.
+    ///
+    /// - Parameter defaults: UserDefaults instance to seed. Defaults to
+    ///   `.standard` in production; tests pass an isolated suite.
+    static func registerReplyAIDefaults(in defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [
             PreferenceKey.crashReports:   PreferenceDefaults.crashReports,
             PreferenceKey.licenseUpdates: PreferenceDefaults.licenseUpdates,
             PreferenceKey.iCloudSync:     PreferenceDefaults.iCloudSync,
@@ -34,10 +39,12 @@ extension UserDefaults {
 
     /// Erase every preference ReplyAI owns. Used by "Factory reset" in
     /// set-privacy.
-    static func wipeReplyAIDefaults() {
-        let ud = UserDefaults.standard
-        for key in ud.dictionaryRepresentation().keys where key.hasPrefix("pref.") {
-            ud.removeObject(forKey: key)
+    ///
+    /// - Parameter defaults: UserDefaults instance to scrub. Defaults
+    ///   to `.standard` in production; tests pass an isolated suite.
+    static func wipeReplyAIDefaults(in defaults: UserDefaults = .standard) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("pref.") {
+            defaults.removeObject(forKey: key)
         }
     }
 }

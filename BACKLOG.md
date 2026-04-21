@@ -199,7 +199,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-183849
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift` (new)
 - scope: `registerReplyAIDefaults` and `wipeReplyAIDefaults` in `Preferences.swift` have no tests. Write a test suite using a suiteName-isolated `UserDefaults` (never `.standard`) so tests don't pollute the running app's preferences. Verify: `registerReplyAIDefaults` seeds all expected keys to their `PreferenceDefaults` values; `wipeReplyAIDefaults` removes every `pref.*` key; wipe does NOT remove non-`pref.*` keys; default values match the `PreferenceDefaults` enum constants.
@@ -263,6 +263,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-21-183617
+
+### REP-013 — Preferences: factory-reset + defaults round-trip tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-183849
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0
