@@ -112,6 +112,92 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(hits.count, 1)
     }
 
+    // MARK: - Incremental upsert
+
+    func testUpsertMakesThreadSearchable() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "u1", channel: .imessage, name: "Maya",
+                                   avatar: "M", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "ship the launch post", time: "now")
+        ])
+        let hits = await index.search("launch")
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(hits.first?.threadID, "u1")
+    }
+
+    func testUpsertReplacesStaleEntry() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "u2", channel: .imessage, name: "Ravi",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "first draft", time: "t0")
+        ])
+        var hits = await index.search("first")
+        XCTAssertEqual(hits.count, 1)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "second draft", time: "t1")
+        ])
+        hits = await index.search("first")
+        XCTAssertEqual(hits.count, 0, "upsert should wipe prior rows for the thread")
+        hits = await index.search("second")
+        XCTAssertEqual(hits.count, 1)
+    }
+
+    func testUpsertLeavesOtherThreadsAlone() async {
+        let index = SearchIndex()
+        let a = MessageThread(id: "a", channel: .imessage, name: "Alice",
+                              avatar: "A", preview: "", time: "", unread: 0)
+        let b = MessageThread(id: "b", channel: .imessage, name: "Bob",
+                              avatar: "B", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: a, messages: [
+            Message(from: .them, text: "alpha token", time: "t0")
+        ])
+        await index.upsert(thread: b, messages: [
+            Message(from: .them, text: "bravo token", time: "t0")
+        ])
+
+        // Replacing Alice's content must not remove Bob's.
+        await index.upsert(thread: a, messages: [
+            Message(from: .them, text: "gamma token", time: "t1")
+        ])
+
+        let alphaHits = await index.search("alpha")
+        XCTAssertEqual(alphaHits.count, 0)
+        let bravoHits = await index.search("bravo")
+        XCTAssertEqual(bravoHits.count, 1, "upsert must be scoped to the target thread")
+        let gammaHits = await index.search("gamma")
+        XCTAssertEqual(gammaHits.count, 1)
+    }
+
+    func testRebuildStillWorksAfterUpsert() async {
+        let index = SearchIndex()
+        let a = MessageThread(id: "a", channel: .imessage, name: "Alice",
+                              avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: a, messages: [
+            Message(from: .them, text: "alpha token", time: "t0")
+        ])
+        let preRebuildHits = await index.search("alpha")
+        XCTAssertEqual(preRebuildHits.count, 1)
+
+        // A full rebuild should wipe prior upserts — rebuild is the
+        // authoritative reset path.
+        let b = MessageThread(id: "b", channel: .imessage, name: "Bob",
+                              avatar: "B", preview: "", time: "", unread: 0)
+        await index.rebuild(from: ["b": [
+            Message(from: .them, text: "bravo token", time: "t1")
+        ]], threads: [b])
+
+        let postRebuildAlpha = await index.search("alpha")
+        XCTAssertEqual(postRebuildAlpha.count, 0,
+                       "rebuild after upsert should clear stale rows")
+        let postRebuildBravo = await index.search("bravo")
+        XCTAssertEqual(postRebuildBravo.count, 1)
+    }
+
     func testIndexMatchesDiacriticsFolded() async {
         // unicode61 tokenizer with remove_diacritics=2 should match
         // "cafe" against "café".

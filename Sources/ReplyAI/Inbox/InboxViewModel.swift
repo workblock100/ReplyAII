@@ -83,6 +83,11 @@ final class InboxViewModel {
     let searchIndex = SearchIndex()
     let stats: Stats
 
+    /// `true` once we've done the initial full rebuild of the FTS index.
+    /// Subsequent syncs only upsert the threads that actually have
+    /// updated message payloads, which is O(k) instead of O(n).
+    private var didSeedSearchIndex = false
+
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
@@ -240,11 +245,21 @@ final class InboxViewModel {
                 liveMessages[focus.id] = msgs
             }
 
-            // Rebuild the FTS5 search index so ⌘K searches the live
-            // thread contents, not the fixture data.
+            // Seed the FTS5 index once, then incrementally upsert per
+            // thread on watcher refires. Full rebuilds do O(total
+            // messages) work for each incoming iMessage; upserts do
+            // O(messages-in-the-updated-thread).
             let snapshot = liveMessages
             let threadsSnapshot = live
-            await searchIndex.rebuild(from: snapshot, threads: threadsSnapshot)
+            if !didSeedSearchIndex {
+                await searchIndex.rebuild(from: snapshot, threads: threadsSnapshot)
+                didSeedSearchIndex = true
+            } else {
+                for thread in threadsSnapshot {
+                    guard let msgs = snapshot[thread.id] else { continue }
+                    await searchIndex.upsert(thread: thread, messages: msgs)
+                }
+            }
             stats.recordMessagesIndexed(snapshot.values.reduce(0) { $0 + $1.count })
 
             // Process any incoming messages we haven't evaluated yet.

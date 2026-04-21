@@ -68,6 +68,47 @@ actor SearchIndex {
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
 
+    /// Replace the index rows for a single thread. Used on the hot
+    /// path — a watcher fire brings in one updated thread at a time,
+    /// and re-running a full `rebuild` per fire is O(n) in the whole
+    /// inbox. FTS5 has no `INSERT OR REPLACE` semantics keyed by an
+    /// application column, so we delete + insert under one transaction.
+    func upsert(thread: MessageThread, messages: [Message]) {
+        guard let db else { return }
+        sqlite3_exec(db, "BEGIN", nil, nil, nil)
+
+        var del: OpaquePointer?
+        if sqlite3_prepare_v2(db, "DELETE FROM messages_fts WHERE thread_id = ?1;", -1, &del, nil) == SQLITE_OK {
+            sqlite3_bind_text(del, 1, thread.id, -1, Self.SQLITE_TRANSIENT)
+            sqlite3_step(del)
+        }
+        sqlite3_finalize(del)
+
+        let insertSQL = """
+        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time)
+        VALUES (?1, ?2, ?3, ?4, ?5);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        for m in messages {
+            sqlite3_reset(stmt)
+            sqlite3_bind_text(stmt, 1, thread.id,   -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 2, thread.name, -1, Self.SQLITE_TRANSIENT)
+            let sender = m.from == .me ? "me" : thread.name
+            sqlite3_bind_text(stmt, 3, sender,      -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 4, m.text,      -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 5, m.time,      -1, Self.SQLITE_TRANSIENT)
+            sqlite3_step(stmt)
+        }
+
+        sqlite3_exec(db, "COMMIT", nil, nil, nil)
+    }
+
     /// FTS5 match query. Empty input returns an empty array. The caller
     /// is expected to debounce UI input.
     func search(_ query: String, limit: Int = 20) -> [Result] {

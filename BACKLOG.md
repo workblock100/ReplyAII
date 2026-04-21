@@ -131,7 +131,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-182615
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Sources/ReplyAI/Channels/ChatDBWatcher.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex.rebuild()` re-inserts every thread on every watcher fire. For large inboxes this becomes O(n) work for each incoming message. Add `upsert(thread: MessageThread)` that does a single FTS5 `INSERT OR REPLACE` keyed by `thread_id`. Wire it in `InboxViewModel`'s watcher callback for new/updated threads so the index gets incrementally updated. `rebuild()` stays for initial load. Tests verify upserted threads are searchable and that a second upsert with updated text replaces the prior entry.
@@ -235,6 +235,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-21-182346
+
+### REP-015 — SearchIndex: incremental upsert path for watcher events
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-182615
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0
