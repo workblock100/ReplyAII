@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                60 tests
+Tests/ReplyAITests/                145 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,15 @@ Tests/ReplyAITests/                60 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `eca3692` Preferences: injectable `UserDefaults` + register/wipe test coverage (REP-013, worker-2026-04-21-183849)
+- `b7c8f8b` Sidebar preview: link + attachment collapsing in `IMessagePreview` (REP-008, worker-2026-04-21-183617)
+- `d0b72e1` `ContactsStoring` protocol extraction + full ContactsResolver test coverage (REP-011, worker-2026-04-21-183251)
+- `1e8c57e` `IMessageChannel.recentThreads` injectable `dbPathOverride` + in-memory SQLite test coverage (REP-014, worker-2026-04-21-182949)
+- `687c5a3` SearchIndex: incremental FTS upsert path for watcher-driven syncs (REP-015, worker-2026-04-21-182615)
+- `525870e` ChatDBWatcher: debounce + stop coverage (REP-007, worker-2026-04-21-182346)
+- `5097de5` Observability: persistent counters for rules/drafts/indexed messages (REP-005, worker-2026-04-21-181957)
+- `1a0f7ba` `silentlyIgnore` parity + AppleScript escape hardening + RulesStore coverage (REP-004/006/012, worker-2026-04-21-181128)
+- `e760a12` Real typedstream parser (0x2B tag scan) in AttributedBodyDecoder (REP-003, worker-2026-04-21-173600)
 - `753d8803` persist lastSeenRowID across launches; SmartRule priority field + conflict resolution (worker-2026-04-21-172426)
 - `33424cc` Automation scaffolding (planner/worker/reviewer cron agents + BACKLOG.md seed)
 - `10fce3d` Group chat sending (chat.guid projected + used verbatim by IMessageSender)
@@ -132,15 +141,15 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-60 XCTest cases, all green.
+145 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
 - **UNNotification inline reply**. Gallery mock exists (`sfc-notification`); real `UNNotificationAction` with `UNTextInputNotificationAction` pending.
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
-- **Rich message decoding limits**. `AttributedBodyDecoder` is a byte-scan, not a real typedstream parser. Some messages render as `[non-text message]`. Upgrade path: port https://github.com/dgelessus/python-typedstream to Swift.
-- **FTS5 watcher updates**. `SearchIndex.rebuild` fires on `syncFromIMessage` success, which the watcher already triggers — so new messages *do* become searchable within ~1s of arrival. If the rebuild ever gets expensive (thousands of threads), switch to incremental upserts keyed by (thread_id, message_rowid).
+- ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.
+- ~~**FTS5 watcher updates.**~~ Resolved: `SearchIndex` now has an incremental upsert path keyed by `(thread_id, message_rowid)` for watcher-driven syncs (REP-015, commit `687c5a3`). Full rebuild is still the fallback for first-boot / settings changes.
 - ~~**Global vs per-rule tone priority.**~~ Resolved: `SmartRule.priority: Int` (default 0, higher wins). `RuleEvaluator.matching` sorts by priority DESC before returning; `defaultTone` gets highest-priority tone automatically.
 
 ## Gotchas (read once, save hours)
