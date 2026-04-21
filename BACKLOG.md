@@ -27,7 +27,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: L
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-173600
 - files_to_touch: `Sources/ReplyAI/Channels/AttributedBodyDecoder.swift`, `Tests/ReplyAITests/AttributedBodyDecoderTests.swift` (new)
 - scope: Current implementation is a naive byte-scan that misses common patterns (nested `NSMutableAttributedString`, multi-attribute-run strings, longer length prefixes). Replace with a proper typedstream reader covering enough of the format to extract all `NSString` and `NSMutableString` payloads from typical iMessage rich-text blobs. Reference spec: https://github.com/dgelessus/python-typedstream — port the relevant bits.
@@ -214,6 +214,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 ## Done / archived
 
 (Planner moves finished items here each day. Worker never modifies this section.)
+
+### REP-003 — better AttributedBodyDecoder (real typedstream parser)
+- priority: P0
+- effort: L
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-173600
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0
