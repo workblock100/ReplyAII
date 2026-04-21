@@ -101,7 +101,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-183617
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelPreviewTests.swift` (new)
 - scope: Current thread preview is the last message's raw text or `[non-text message]`. When the body is a URL, show "🔗 <host>". When the body is empty but the decoder found an attachment marker, show "📎 Attachment" instead of `[non-text message]`. Pure display logic — no data changes. Add a small extractor + tests.
@@ -256,6 +256,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-21-183251
+
+### REP-008 — contextual preview: link + attachment detection
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-183617
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0

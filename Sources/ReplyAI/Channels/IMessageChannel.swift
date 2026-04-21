@@ -144,7 +144,8 @@ struct IMessageChannel: ChannelService {
         // a best-effort decode of `attributedBody`, else a neutral hint.
         var out: [MessageThread] = []
         for p in pending {
-            let preview = previewText(db: db, messageRowID: p.lastMsgRowID) ?? "[non-text message]"
+            let decoded = previewText(db: db, messageRowID: p.lastMsgRowID)
+            let preview = IMessagePreview.displayString(from: decoded)
             out.append(MessageThread(
                 id: p.chatID,
                 channel: p.channel,
