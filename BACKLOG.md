@@ -171,8 +171,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-183251
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift` (new), `Sources/ReplyAI/Channels/ContactsResolver.swift` (inject mock)
 - scope: `ContactsResolver` has NSLock-guarded cache logic and an access-state machine (unknown/granted/denied) with no tests at all. Extract `CNContactStore` behind a narrow injectable protocol (`ContactsStoring`) so tests can provide deterministic responses. Test: cache hit skips store call; cache miss queries store + populates cache; two concurrent calls for the same handle both resolve without deadlock; access state transitions correctly from `.unknown` to `.granted` and `.denied`.
 - success_criteria:
