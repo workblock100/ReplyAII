@@ -6,9 +6,9 @@ Autonomous work loop for ReplyAI. Three Claude agents run on cron in Anthropic s
 
 | Agent | Cadence | Max runtime | Touches |
 | --- | --- | --- | --- |
-| `replyai-planner` | every 4 hours | 90 min | `BACKLOG.md`, `.automation/logs/planner-*` |
+| `replyai-planner` | every 2 hours | 13 min (platform cap) | `BACKLOG.md`, `.automation/logs/planner-*` |
 | `replyai-worker` | every 15 min | 13 min (platform cap) | code under `Sources/`, `Tests/`, `BACKLOG.md`, `wip/*` branches |
-| `replyai-reviewer` | Sun 20:00 UTC | 45 min | `REVIEW.md`, `AGENTS.md`, `.automation/logs/review-*` |
+| `replyai-reviewer` | every 6 hours | 13 min (platform cap) | `REVIEW.md`, `AGENTS.md`, `.automation/logs/review-*` |
 
 All three use the prompts in `.automation/*.prompt`. The prompts are the source of truth — the schedule definitions just point at them.
 
