@@ -110,6 +110,7 @@ Tests/ReplyAITests/                55 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `753d880` persist lastSeenRowID across launches; SmartRule priority field + conflict resolution (worker-2026-04-21-172426)
 - `33424cc` Automation scaffolding (planner/worker/reviewer cron agents + BACKLOG.md seed)
 - `10fce3d` Group chat sending (chat.guid projected + used verbatim by IMessageSender)
 - `2d9110d` Incoming-message rule actions (archive / markDone / silentlyIgnore) fire on watcher refire
@@ -131,7 +132,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-55 XCTest cases, all green.
+60 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.

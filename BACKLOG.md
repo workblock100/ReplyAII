@@ -112,6 +112,37 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Tests for each case
 - test_plan: call the new extractor directly from a test; no SQLite needed.
 
+### REP-014 — IMessageChannel: SQL query + date-autodetect unit tests
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift` (expose `secondsSinceReferenceDate` as internal)
+- scope: `IMessageChannel.recentThreads` builds an SQL query against chat.db and contains `secondsSinceReferenceDate(appleDate:)` magnitude autodetect — both are untested. Use an in-memory SQLite database (via the existing `sqlite3` C API) populated with hand-crafted rows to test: the query returns threads sorted by recency, the magnitude cutoff correctly identifies nanosecond vs. seconds timestamps, NULL `text` rows fall back to attributedBody decode, the `chat_identifier` projection is correct for 1:1 vs. group chats.
+- success_criteria:
+  - In-memory SQLite fixtures — no dependency on real `~/Library/Messages/chat.db`
+  - `secondsSinceReferenceDate(appleDate:)` made `internal` (not `private`) so tests can call it directly
+  - 5 tests: sort order, magnitude-detection-nanosecond, magnitude-detection-seconds, null-text-fallback, group-chat-guid-projection
+  - All 60 existing tests remain green
+- test_plan: `testThreadsSortedByRecency`, `testDateAutodetectNanoseconds`, `testDateAutodetectSeconds`, `testNullTextFallsBackToAttributedBody`, `testGroupChatGUIDProjection`.
+
+### REP-015 — SearchIndex: incremental upsert path for watcher events
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Sources/ReplyAI/Channels/ChatDBWatcher.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: `SearchIndex.rebuild()` re-inserts every thread on every watcher fire. For large inboxes this becomes O(n) work for each incoming message. Add `upsert(thread: MessageThread)` that does a single FTS5 `INSERT OR REPLACE` keyed by `thread_id`. Wire it in `InboxViewModel`'s watcher callback for new/updated threads so the index gets incrementally updated. `rebuild()` stays for initial load. Tests verify upserted threads are searchable and that a second upsert with updated text replaces the prior entry.
+- success_criteria:
+  - `SearchIndex.upsert(thread:)` method added
+  - `InboxViewModel.handleIncomingMessages(_:)` calls `upsert` for each new/updated thread instead of `rebuild`
+  - `rebuild()` still called on initial sync only
+  - 3 new tests: `testUpsertMakesThreadSearchable`, `testUpsertReplacesStaleEntry`, `testRebuildStillWorksAfterUpsert`
+  - All existing SearchIndex tests remain green
+- test_plan: extend existing `SearchIndexTests.swift` with the 3 new cases.
+
 ## P2 — stretch / backlog depth
 
 ### REP-009 — Global `⌘⇧R` hotkey (needs Accessibility)
