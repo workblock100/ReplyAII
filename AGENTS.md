@@ -110,8 +110,9 @@ Tests/ReplyAITests/                34 tests
 
 Commits (newest first; run `git log` for detail):
 
-- Group chat sending (chat.guid projected + used verbatim by IMessageSender)
-- Incoming-message rule actions (archive / markDone / silentlyIgnore) fire on watcher refire
+- `33424cc` Automation scaffolding (planner/worker/reviewer cron agents + BACKLOG.md seed)
+- `10fce3d` Group chat sending (chat.guid projected + used verbatim by IMessageSender)
+- `2d9110d` Incoming-message rule actions (archive / markDone / silentlyIgnore) fire on watcher refire
 - `82f544e` Thread list: pinned threads float top + inline pin indicator
 - `5f2a746` ⌘K palette: real FTS5 search over live threads
 - `151217c` Rules fire on thread select + initial sync (setDefaultTone + pin)
@@ -130,7 +131,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-46 XCTest cases, all green.
+55 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.

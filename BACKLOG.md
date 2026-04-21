@@ -165,6 +165,48 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - success_criteria: `wip/` branch — human reviews scope creep, merges when ready.
 - test_plan: mock Slack API responses in tests; no real HTTP in CI.
 
+### REP-011 — ContactsResolver: cache + access-state unit tests
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift` (new), `Sources/ReplyAI/Channels/ContactsResolver.swift` (inject mock)
+- scope: `ContactsResolver` has NSLock-guarded cache logic and an access-state machine (unknown/granted/denied) with no tests at all. Extract `CNContactStore` behind a narrow injectable protocol (`ContactsStoring`) so tests can provide deterministic responses. Test: cache hit skips store call; cache miss queries store + populates cache; two concurrent calls for the same handle both resolve without deadlock; access state transitions correctly from `.unknown` to `.granted` and `.denied`.
+- success_criteria:
+  - `ContactsResolver` accepts a `ContactsStoring` dependency (default: the real `CNContactStore`) without changing the public `name(for:)` API
+  - 4 new tests: cache hit, cache miss + population, concurrent access (XCTestExpectation-based), access state transitions
+  - All 55 existing tests remain green
+- test_plan: `testCacheHitReturnsCachedName`, `testCacheMissQueriesStore`, `testConcurrentResolutionIsSafe`, `testAccessStateMachineTransitions`.
+
+### REP-012 — RulesStore: remove / update / resetToSeeds test coverage
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore` has `remove`, `update`, and `resetToSeeds` methods called directly from the rules UI but none are tested. Extend `RulesTests.swift` (same temp-file pattern as `testStoreRoundTripsAddedRule`) with: rule removal persists (second instance doesn't find the removed rule), update mutates an existing rule and round-trips, resetToSeeds restores the canonical defaults, removing a non-existent UUID is a safe no-op.
+- success_criteria:
+  - 4 new test functions, all using temp-file injection to avoid touching production storage
+  - `testRemoveRulePersistsToDisk`, `testUpdateRulePersists`, `testResetToSeedsRestoresDefaults`, `testRemoveNonExistentUUIDIsNoOp`
+  - All existing tests stay green
+- test_plan: mirror `testStoreRoundTripsAddedRule` setup (temp directory URL injected into `RulesStore(fileURL:)`).
+
+### REP-013 — Preferences: factory-reset + defaults round-trip tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift` (new)
+- scope: `registerReplyAIDefaults` and `wipeReplyAIDefaults` in `Preferences.swift` have no tests. Write a test suite using a suiteName-isolated `UserDefaults` (never `.standard`) so tests don't pollute the running app's preferences. Verify: `registerReplyAIDefaults` seeds all expected keys to their `PreferenceDefaults` values; `wipeReplyAIDefaults` removes every `pref.*` key; wipe does NOT remove non-`pref.*` keys; default values match the `PreferenceDefaults` enum constants.
+- success_criteria:
+  - 4 tests using `UserDefaults(suiteName: "test.ReplyAI.prefs")` — isolated, torn down in `tearDownWithError`
+  - `testRegisterDefaultsSeedsCorrectValues`, `testWipeRemovesPrefKeys`, `testWipePreservesNonPrefKeys`, `testDefaultValueMatchesEnum`
+  - All existing tests stay green
+- test_plan: suite tearDown calls `UserDefaults.standard.removePersistentDomain(forName:)` on the test suite name.
+
 ---
 
 ## Done / archived
