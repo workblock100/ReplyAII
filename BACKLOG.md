@@ -116,7 +116,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-21-182949
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift` (expose `secondsSinceReferenceDate` as internal)
 - scope: `IMessageChannel.recentThreads` builds an SQL query against chat.db and contains `secondsSinceReferenceDate(appleDate:)` magnitude autodetect — both are untested. Use an in-memory SQLite database (via the existing `sqlite3` C API) populated with hand-crafted rows to test: the query returns threads sorted by recency, the magnitude cutoff correctly identifies nanosecond vs. seconds timestamps, NULL `text` rows fall back to attributedBody decode, the `chat_identifier` projection is correct for 1:1 vs. group chats.
@@ -242,6 +242,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-21-182615
+
+### REP-014 — IMessageChannel: SQL query + date-autodetect unit tests
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-182949
 
 ### REP-001 — persist `lastSeenRowID` across app launches
 - priority: P0

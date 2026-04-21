@@ -26,8 +26,17 @@ struct IMessageChannel: ChannelService {
     /// channel code to Contacts framework directly.
     let nameFor: @Sendable (String) -> String?
 
-    init(nameFor: @escaping @Sendable (String) -> String? = { _ in nil }) {
+    /// Override path for the Messages database. Nil means the real
+    /// `~/Library/Messages/chat.db`. Tests point this at a temp file
+    /// so the query layer can be exercised without Full Disk Access.
+    let dbPathOverride: String?
+
+    init(
+        nameFor: @escaping @Sendable (String) -> String? = { _ in nil },
+        dbPathOverride: String? = nil
+    ) {
         self.nameFor = nameFor
+        self.dbPathOverride = dbPathOverride
     }
 
     // SQLite wants transient text to live long enough for bind+step; use
@@ -286,7 +295,7 @@ struct IMessageChannel: ChannelService {
     // MARK: - SQLite plumbing
 
     private func openReadOnly() throws -> OpaquePointer {
-        let path = Self.chatDBPath
+        let path = dbPathOverride ?? Self.chatDBPath
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else {
             throw ChannelError.unavailable("No Messages database found at \(path).")
