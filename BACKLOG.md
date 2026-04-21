@@ -22,35 +22,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 ## P0 — ship-blocking or bug-fix
 
-### REP-001 — persist `lastSeenRowID` across app launches
-- priority: P0
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-21-172426
-- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/RulesTests.swift`
-- scope: `lastSeenRowID: [String: Int64]` currently lives in memory. Every relaunch zeros it, which causes every rule action to re-fire against the entire chat.db the next time the watcher triggers sync. Persist via `UserDefaults` under `pref.inbox.lastSeenRowID` as a JSON-encoded `[String: Int64]`, same pattern as `archivedThreadIDs`.
-- success_criteria:
-  - `InboxViewModel.init` hydrates `lastSeenRowID` from UserDefaults
-  - `didSet` on the field writes through
-  - New test: mutate watermarks → create a second `InboxViewModel` → watermarks survive
-  - All existing tests stay green
-- test_plan: add `testLastSeenRowIDPersistsAcrossInstances` mirroring `testArchivedIDsPersistAcrossInstances` exactly.
-
-### REP-002 — SmartRule priority + conflict resolution
-- priority: P0
-- effort: M
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-21-172426
-- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`, AGENTS.md
-- scope: When multiple rules match the same thread+tone, today the first-added wins. AGENTS.md flags this as a TODO. Add an `Int` `priority` field to `SmartRule` (default 0, higher wins), teach `RuleEvaluator.matching` to sort matches by priority DESC before returning, and update `defaultTone(for:in:)` to obey. Keep JSON round-trip compatible — missing `priority` decodes as 0.
-- success_criteria:
-  - `SmartRule` gains `priority: Int` with default 0 and Codable-compatible handling for existing `rules.json`
-  - `RuleEvaluator.matching` returns results sorted by priority DESC, then original order as tiebreaker
-  - `defaultTone(for:in:)` picks the highest-priority match's tone
-  - New tests: two-rule conflict, explicit priority wins; tiebreaker preserves insertion order; existing rules.json without priority still loads
-- test_plan: add `testHigherPrioritySetDefaultToneWins`, `testPriorityFieldMissingDefaultsToZero`, `testPriorityRoundTripsThroughJSON`.
 
 ### REP-003 — better AttributedBodyDecoder (real typedstream parser)
 - priority: P0
@@ -212,3 +183,17 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 ## Done / archived
 
 (Planner moves finished items here each day. Worker never modifies this section.)
+
+### REP-001 — persist `lastSeenRowID` across app launches
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-172426
+
+### REP-002 — SmartRule priority + conflict resolution
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-21-172426

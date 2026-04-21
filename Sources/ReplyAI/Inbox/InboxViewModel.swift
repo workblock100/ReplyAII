@@ -25,7 +25,10 @@ final class InboxViewModel {
 
     /// Per-thread watermark. Incoming messages with `rowID > lastSeenRowID[tid]`
     /// are new since the last rule evaluation pass. Advances strictly upward.
-    private var lastSeenRowID: [String: Int64] = [:]
+    /// Persisted to UserDefaults so rule actions don't re-fire on relaunch.
+    private var lastSeenRowID: [String: Int64] = [:] {
+        didSet { InboxViewModel.saveLastSeenRowID(lastSeenRowID) }
+    }
 
     /// Threads the user or a rule has hidden from the main list. Persisted
     /// to UserDefaults so the effect survives relaunches. Filtering lives
@@ -76,6 +79,7 @@ final class InboxViewModel {
         self.selectedThreadID = threads.first?.id ?? "t1"
         self.rules = rules ?? RulesStore()
         self.archivedThreadIDs = InboxViewModel.loadArchivedIDs()
+        self.lastSeenRowID = InboxViewModel.loadLastSeenRowID()
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
         // needing MainActor.assumeIsolated (which would crash on the
@@ -318,6 +322,23 @@ final class InboxViewModel {
     private static func saveArchivedIDs(_ ids: Set<String>) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
         UserDefaults.standard.set(data, forKey: archivedKey)
+    }
+
+    // MARK: - lastSeenRowID persistence
+
+    private static let lastSeenRowIDKey = "pref.inbox.lastSeenRowID"
+
+    private static func loadLastSeenRowID() -> [String: Int64] {
+        guard let data = UserDefaults.standard.data(forKey: lastSeenRowIDKey),
+              let decoded = try? JSONDecoder().decode([String: Int64].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private static func saveLastSeenRowID(_ watermarks: [String: Int64]) {
+        let data = (try? JSONEncoder().encode(watermarks)) ?? Data()
+        UserDefaults.standard.set(data, forKey: lastSeenRowIDKey)
     }
 
     /// Undoes an archive — used for the future "Undo" UX in set-privacy /

@@ -140,7 +140,7 @@ Commits (newest first; run `git log` for detail):
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - **Rich message decoding limits**. `AttributedBodyDecoder` is a byte-scan, not a real typedstream parser. Some messages render as `[non-text message]`. Upgrade path: port https://github.com/dgelessus/python-typedstream to Swift.
 - **FTS5 watcher updates**. `SearchIndex.rebuild` fires on `syncFromIMessage` success, which the watcher already triggers — so new messages *do* become searchable within ~1s of arrival. If the rebuild ever gets expensive (thousands of threads), switch to incremental upserts keyed by (thread_id, message_rowid).
-- **Global vs per-rule tone priority.** When multiple rules match and both set tone, the first match wins. If that's wrong, add explicit rule priority or a conflict resolution spec.
+- ~~**Global vs per-rule tone priority.**~~ Resolved: `SmartRule.priority: Int` (default 0, higher wins). `RuleEvaluator.matching` sorts by priority DESC before returning; `defaultTone` gets highest-priority tone automatically.
 
 ## Gotchas (read once, save hours)
 

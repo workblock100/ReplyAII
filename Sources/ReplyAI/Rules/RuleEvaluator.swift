@@ -69,9 +69,19 @@ enum RuleEvaluator {
     }
 
     /// Returns the subset of `rules` that are active AND whose predicate
-    /// matches the context, preserving input order.
+    /// matches the context, sorted by priority DESC. Original insertion
+    /// order is the tiebreaker for equal-priority rules (stable sort).
     static func matching(_ rules: [SmartRule], in ctx: RuleContext) -> [SmartRule] {
-        rules.filter { $0.active && matches($0.when, in: ctx) }
+        // Enumerate first so we can use offset as a stable tiebreaker.
+        rules
+            .enumerated()
+            .filter { _, rule in rule.active && matches(rule.when, in: ctx) }
+            .sorted { lhs, rhs in
+                lhs.element.priority != rhs.element.priority
+                    ? lhs.element.priority > rhs.element.priority
+                    : lhs.offset < rhs.offset
+            }
+            .map(\.element)
     }
 
     /// Convenience: does any active rule with a `setDefaultTone` action

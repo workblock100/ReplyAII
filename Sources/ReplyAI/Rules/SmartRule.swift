@@ -2,25 +2,58 @@ import Foundation
 
 /// One if-this-then-that automation. Stored on disk at
 /// `~/Library/Application Support/ReplyAI/rules.json`.
-struct SmartRule: Identifiable, Hashable, Codable, Sendable {
+struct SmartRule: Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String        // human-readable label shown in sfc-rules
     var when: RulePredicate
     var then: RuleAction
     var active: Bool
+    /// Higher value wins when multiple rules conflict on the same action.
+    /// Defaults to 0. Missing from older rules.json files decodes as 0.
+    var priority: Int
 
     init(
         id: UUID = UUID(),
         name: String,
         when: RulePredicate,
         then: RuleAction,
-        active: Bool = true
+        active: Bool = true,
+        priority: Int = 0
     ) {
         self.id = id
         self.name = name
         self.when = when
         self.then = then
         self.active = active
+        self.priority = priority
+    }
+}
+
+// MARK: - Codable (hand-written to keep priority backward-compatible)
+
+extension SmartRule: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, when, then, active, priority
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id       = try c.decode(UUID.self,          forKey: .id)
+        name     = try c.decode(String.self,        forKey: .name)
+        when     = try c.decode(RulePredicate.self, forKey: .when)
+        then     = try c.decode(RuleAction.self,    forKey: .then)
+        active   = try c.decode(Bool.self,          forKey: .active)
+        priority = try c.decodeIfPresent(Int.self,  forKey: .priority) ?? 0
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id,       forKey: .id)
+        try c.encode(name,     forKey: .name)
+        try c.encode(when,     forKey: .when)
+        try c.encode(then,     forKey: .then)
+        try c.encode(active,   forKey: .active)
+        try c.encode(priority, forKey: .priority)
     }
 }
 

@@ -407,6 +407,129 @@ final class RulesTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
     }
 
+    // MARK: - REP-001: lastSeenRowID persistence
+
+    @MainActor
+    func testLastSeenRowIDPersistsAcrossInstances() async throws {
+        // Start with a clean slate.
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.lastSeenRowID")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+
+        let thread = MessageThread(
+            id: "watermark-thread", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hey", time: "now", unread: 1
+        )
+        let rule = SmartRule(name: "no-op", when: .channelIs(.imessage), then: .markDone)
+        let model = makeModelWithRules(
+            [rule],
+            threads: [thread],
+            incoming: ["watermark-thread": [
+                Message(from: .them, text: "hey", time: "now", rowID: 42)
+            ]]
+        )
+
+        // Process once so the watermark for "watermark-thread" advances to 42.
+        await model.processIncomingForRules(model.threads)
+
+        // A new InboxViewModel instance should hydrate the watermark from UserDefaults
+        // and NOT re-fire the rule against the same rowID.
+        let second = makeModelWithRules(
+            [SmartRule(name: "archive-check", when: .channelIs(.imessage), then: .archive)],
+            threads: [thread],
+            incoming: ["watermark-thread": [
+                Message(from: .them, text: "hey", time: "now", rowID: 42)
+            ]]
+        )
+        // The archive rule would normally fire against rowID 42, but the watermark
+        // persisted from the first instance already marks it as seen.
+        await second.processIncomingForRules(second.threads)
+        XCTAssertFalse(
+            second.archivedThreadIDs.contains("watermark-thread"),
+            "persisted watermark should prevent re-firing on already-seen rowID"
+        )
+
+        // Clean up.
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.lastSeenRowID")
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+    }
+
+    // MARK: - REP-002: SmartRule priority + conflict resolution
+
+    func testHigherPrioritySetDefaultToneWins() {
+        // Two rules both match, both set tone. Higher priority should win.
+        let lowPriority = SmartRule(
+            name: "low",
+            when: .channelIs(.imessage),
+            then: .setDefaultTone(.warm),
+            priority: 0
+        )
+        let highPriority = SmartRule(
+            name: "high",
+            when: .channelIs(.imessage),
+            then: .setDefaultTone(.direct),
+            priority: 10
+        )
+        let ctx = RuleContext(
+            senderName: "x", senderHandle: "x", channel: .imessage,
+            lastMessageText: "", isUnread: false, senderKnown: true
+        )
+        // Low-priority rule is first in the array; high-priority must still win.
+        let tone = RuleEvaluator.defaultTone(for: [lowPriority, highPriority], in: ctx)
+        XCTAssertEqual(tone, .direct, "higher priority rule should override lower")
+    }
+
+    func testPriorityFieldMissingDefaultsToZero() throws {
+        // JSON without a "priority" key should decode with priority == 0.
+        let json = """
+        {
+          "id": "12345678-1234-1234-1234-123456789012",
+          "name": "legacy",
+          "when": {"kind": "is_unread"},
+          "then": {"kind": "archive"},
+          "active": true
+        }
+        """.data(using: .utf8)!
+        let rule = try JSONDecoder().decode(SmartRule.self, from: json)
+        XCTAssertEqual(rule.priority, 0, "missing priority field should decode as 0")
+    }
+
+    func testPriorityRoundTripsThroughJSON() throws {
+        let rule = SmartRule(
+            name: "urgent",
+            when: .channelIs(.slack),
+            then: .setDefaultTone(.direct),
+            priority: 5
+        )
+        let data = try JSONEncoder().encode(rule)
+        let decoded = try JSONDecoder().decode(SmartRule.self, from: data)
+        XCTAssertEqual(decoded.priority, 5)
+        XCTAssertEqual(decoded, rule)
+    }
+
+    func testPriorityTiebreakerPreservesInsertionOrder() {
+        // When priorities are equal, the first rule in the input array wins.
+        let first = SmartRule(
+            name: "first",
+            when: .channelIs(.imessage),
+            then: .setDefaultTone(.warm),
+            priority: 0
+        )
+        let second = SmartRule(
+            name: "second",
+            when: .channelIs(.imessage),
+            then: .setDefaultTone(.direct),
+            priority: 0
+        )
+        let ctx = RuleContext(
+            senderName: "x", senderHandle: "x", channel: .imessage,
+            lastMessageText: "", isUnread: false, senderKnown: true
+        )
+        let matched = RuleEvaluator.matching([first, second], in: ctx)
+        XCTAssertEqual(matched.first?.name, "first", "equal priority: insertion order is tiebreaker")
+        let tone = RuleEvaluator.defaultTone(for: [first, second], in: ctx)
+        XCTAssertEqual(tone, .warm)
+    }
+
     @MainActor
     func testStoreTogglePersists() throws {
         let tmp = FileManager.default.temporaryDirectory
