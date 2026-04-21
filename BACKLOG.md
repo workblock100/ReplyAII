@@ -88,8 +88,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-182346
 - files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift` (new), possibly `Sources/ReplyAI/Channels/ChatDBWatcher.swift` (inject DispatchQueue for testability)
 - scope: `ChatDBWatcher` has no tests. The debounce behavior (coalesce burst writes into one fire) is subtle and easy to regress. Add a test suite that: triggers N simulated writes within the debounce window and asserts exactly one `onChange` callback fires; triggers writes across the window and asserts two fires; calls `stop()` and asserts no further fires. Mechanism: inject an NSRunLoop-driven expectation or use a subclass that exposes `scheduleFire()` directly.
 - success_criteria:
