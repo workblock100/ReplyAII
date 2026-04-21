@@ -1,0 +1,27 @@
+{
+  "comment": "Soft caps read by the worker/planner prompts. Violations abort the run with a log entry, they don't fail loudly. Tune these as the team's pain threshold reveals itself.",
+
+  "worker": {
+    "max_main_commits_per_24h": 8,
+    "max_loc_changed_per_run": 1500,
+    "max_runtime_minutes": 60,
+    "max_wip_branches_open": 3
+  },
+
+  "planner": {
+    "max_runtime_minutes": 90,
+    "max_backlog_items": 20,
+    "max_loc_in_planning_commit": 500
+  },
+
+  "reviewer": {
+    "max_runtime_minutes": 45,
+    "star_threshold_for_stop_auto_merge": 2,
+    "consecutive_weeks_for_stop": 2
+  },
+
+  "repo_safety": {
+    "max_repo_size_growth_per_week_percent": 50,
+    "max_single_file_size_bytes": 100000
+  }
+}
