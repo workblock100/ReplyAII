@@ -75,7 +75,10 @@ final class ChatDBWatcher: @unchecked Sendable {
         return src
     }
 
-    private func scheduleFire() {
+    /// Coalesce the current burst of events into a single fire after
+    /// the debounce window elapses. Exposed at package level so tests
+    /// can exercise the debounce logic without racing real fsevents.
+    func scheduleFire() {
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.onChange()
