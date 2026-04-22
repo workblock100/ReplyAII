@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                254 tests
+Tests/ReplyAITests/                290 tests
 ```
 
 ## Architecture patterns
@@ -110,7 +110,8 @@ Tests/ReplyAITests/                254 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-145500)
+- `a5bd7a4` RulesStore: export/import rules via JSON file URL; AGENTS.md sync (REP-035, REP-042, worker-2026-04-22-142600)
+- `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-130300)
 - `fa4d009` DraftEngine: invalidate stale draft on watcher refire; ContactsResolver: batch resolve (REP-054, REP-037, worker-2026-04-22-141222)
 - `038826e` per-tone draft counters + acceptance rate on Stats (REP-032, worker-2026-04-22-120935)
 - `6a629a2` SearchIndex: channel column filter, FTS5 sanitizer, prefix-match tests (REP-080, REP-085, REP-092, worker-2026-04-22-122448)
@@ -219,7 +220,7 @@ Pick in order. Each has a concrete starting point.
 
 ## Testing expectations
 
-- **Every new feature ships with XCTest coverage.** 60 tests today. `swift test` from repo root.
+- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (290 as of planner-2026-04-22-run8; kept current in the repo layout header above). `swift test` from repo root.
 - **Pure Swift (models, evaluators, parsers) gets unit tests.** View code gets ad-hoc visual checking.
 - **Async tests**: use the `waitUntil(timeout:_:)` helper pattern in `DraftEngineTests` rather than arbitrary sleeps.
 - **Never add `#Preview` blocks** — they break the SwiftPM path.
