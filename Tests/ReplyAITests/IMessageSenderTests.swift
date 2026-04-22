@@ -169,4 +169,53 @@ final class IMessageSenderTests: XCTestCase {
     func testEscapeControlCharacters() {
         assertSafe("tab:\there\r\n\u{07}bell")
     }
+
+    // MARK: - Send timeout (REP-025)
+
+    func testSendTimeoutReturnsError() {
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 0.1
+        // Executor that outlasts the timeout window — simulates a hung Messages.app.
+        IMessageSender.executeHook = { _ in Thread.sleep(forTimeInterval: 1.0) }
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        let start = Date()
+        XCTAssertThrowsError(try IMessageSender.send("hello", to: thread)) { error in
+            guard let sendError = error as? IMessageSender.SendError,
+                  case .timedOut = sendError else {
+                XCTFail("Expected timedOut, got \(error)")
+                return
+            }
+        }
+        // Must resolve near the injected timeout, not block for the full 1 s.
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+    }
+
+    func testNormalSendCompletesBeforeTimeout() {
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 1.0
+        // Instant no-op executor — simulates a fast successful AppleScript send.
+        IMessageSender.executeHook = { _ in /* success */ }
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("hello", to: thread))
+    }
 }

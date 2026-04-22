@@ -15,18 +15,29 @@ enum IMessageSender {
         case scriptFailure(String)
         case notAuthorized
         case unsupported
+        case timedOut
 
         var errorDescription: String? {
             switch self {
             case .scriptFailure(let s): s
             case .notAuthorized:        "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation."
             case .unsupported:          "This thread can't be sent to (unsupported channel)."
+            case .timedOut:             "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
             }
         }
     }
 
+    /// Maximum wall-clock seconds to wait for NSAppleScript.executeAndReturnError.
+    /// Defaults to 10 s in production; inject a shorter value in tests.
+    nonisolated(unsafe) static var sendTimeout: TimeInterval = 10
+
+    /// Test-only hook: when non-nil, replaces the real NSAppleScript execution.
+    /// Receives the compiled AppleScript source string; runs synchronously on a
+    /// background thread; may throw a SendError to simulate script failures.
+    nonisolated(unsafe) static var executeHook: ((String) throws -> Void)? = nil
+
     /// Send `text` to the given thread. Blocks the calling thread until
-    /// AppleScript returns; call from a background task.
+    /// AppleScript returns (or the timeout fires); call from a background task.
     static func send(_ text: String, to thread: MessageThread) throws {
         guard thread.channel == .imessage || thread.channel == .sms else {
             throw SendError.unsupported
@@ -72,22 +83,40 @@ enum IMessageSender {
         end tell
         """
 
-        guard let script = NSAppleScript(source: source) else {
-            throw SendError.scriptFailure("NSAppleScript failed to parse")
-        }
-
-        var errorDict: NSDictionary?
-        let _ = script.executeAndReturnError(&errorDict)
-
-        if let error = errorDict {
-            // `errOSAScriptError = -1743` is the TCC denial code.
-            let code = error[NSAppleScript.errorNumber] as? Int ?? 0
-            if code == -1743 {
-                throw SendError.notAuthorized
+        // Capture executor once so test hooks can't be swapped mid-flight.
+        let executor: (String) throws -> Void = executeHook ?? { src in
+            guard let script = NSAppleScript(source: src) else {
+                throw SendError.scriptFailure("NSAppleScript failed to parse")
             }
-            let msg = error[NSAppleScript.errorMessage] as? String ?? "\(error)"
-            throw SendError.scriptFailure("AppleScript error \(code): \(msg)")
+            var errorDict: NSDictionary?
+            script.executeAndReturnError(&errorDict)
+            if let error = errorDict {
+                // `errOSAScriptError = -1743` is the TCC denial code.
+                let code = error[NSAppleScript.errorNumber] as? Int ?? 0
+                if code == -1743 {
+                    throw SendError.notAuthorized
+                }
+                let msg = error[NSAppleScript.errorMessage] as? String ?? "\(error)"
+                throw SendError.scriptFailure("AppleScript error \(code): \(msg)")
+            }
         }
+
+        // NSAppleScript.executeAndReturnError is synchronous and blocks the
+        // calling thread. If Messages.app hangs (e.g. during iCloud sync) the
+        // call never returns. Run it on a background thread and time it out
+        // with a DispatchSemaphore so the caller is never stranded indefinitely.
+        let semaphore = DispatchSemaphore(value: 0)
+        var capturedError: Error? = nil
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do { try executor(source) } catch { capturedError = error }
+            semaphore.signal()
+        }
+
+        guard semaphore.wait(timeout: .now() + sendTimeout) == .success else {
+            throw SendError.timedOut
+        }
+        if let err = capturedError { throw err }
     }
 
     /// Escape a string for embedding inside AppleScript double-quoted

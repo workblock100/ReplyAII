@@ -106,7 +106,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-013926
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `NSAppleScript.executeAndReturnError` is a synchronous blocking call. If Messages.app hangs (happens during iCloud sync), the call blocks the caller's thread indefinitely. Wrap in a `DispatchQueue.global().async` + `DispatchSemaphore` pattern with a 10-second timeout. If the semaphore wait times out, return a `ChannelError.sendFailed("AppleScript timed out")` error. Add an `IMessageSender.sendTimeout: TimeInterval` injectable property (default 10s) to make the timeout testable. Test with a mock that never signals the semaphore; verify timeout error within 1s (use a 0.1s injected timeout for speed).
