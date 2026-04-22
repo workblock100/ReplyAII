@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                158 tests
+Tests/ReplyAITests/                189 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,13 @@ Tests/ReplyAITests/                158 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `9810196` NotificationCoordinator: UNNotification inline reply + category registration (REP-028, worker-2026-04-22-032627)
+- `881d8f0` SearchIndex: explicit AND semantics for multi-word queries (REP-027, worker-2026-04-22-020653)
+- `9717756` extract PromptBuilder + test coverage (REP-026, worker-2026-04-22-055650)
+- `5fedafc` rule re-evaluation on RulesStore change (REP-023, worker-2026-04-22-043231)
+- `aa34006` AppleScript send timeout + injectable executor (REP-025, worker-2026-04-22-013926)
+- `1df1fce` concurrent prime guard + databaseError result code (REP-049, REP-051, worker-2026-04-22-011918)
+- `76850a9` concurrent sync guard + malformed-rule skipping (REP-022, REP-024, worker-2026-04-21-025439)
 - `8e9d0d2` IMessageChannel thread-list pagination tests + ChannelService default overload (REP-021, worker-2026-04-21-223700)
 - `04e4e1e` isGroupChat/hasAttachment predicates, E.164 normalization, tapback + delivery-receipt filtering (REP-018/019/020, worker-2026-04-21-222600)
 - `eca3692` Preferences: injectable `UserDefaults` + register/wipe test coverage (REP-013, worker-2026-04-21-183849)
@@ -143,11 +150,11 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-145 XCTest cases, all green.
+189 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
-- **UNNotification inline reply**. Gallery mock exists (`sfc-notification`); real `UNNotificationAction` with `UNTextInputNotificationAction` pending.
+- **UNNotification inline reply**. `NotificationCoordinator` registered (`UNTextInputNotificationAction`, "REPLY" category) and wired to `InboxViewModel.pendingNotificationReply` (REP-028, commit `9810196`). Reply consumption in `InboxViewModel` pending (REP-063).
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.
