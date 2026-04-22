@@ -181,8 +181,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-011918
 - files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.prime(for thread:tone:)` starts an async stream task. If called twice for the same `(threadID, tone)` before the first completes (e.g., rapid thread re-selection), two concurrent streams run and both try to update the same `DraftState`. Add a `private var primingTasks: [String: Task<Void, Never>]` (keyed by `"\(threadID):\(tone.rawValue)"`). Before starting a new prime, cancel any existing task for that key and replace it. This ensures at most one in-flight stream per (thread, tone) — the prior behavior silently accumulated dangling tasks. Tests: rapid double-prime cancels the first task before starting the second; state reflects the second prime's output.
 - success_criteria:
@@ -211,8 +211,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-011918
 - files_to_touch: `Sources/ReplyAI/Channels/ChannelService.swift`, `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `ChannelError.databaseError(String)` discards the numeric sqlite3 result code (e.g., `SQLITE_BUSY = 5`, `SQLITE_LOCKED = 6`, `SQLITE_AUTH = 23`). Change to `ChannelError.databaseError(code: Int32, message: String)`. Update all `IMessageChannel` callsites that throw `databaseError` to pass `sqlite3_errmsg` plus the raw result code. This makes REP-029's SQLITE_BUSY retry cleaner — the caller checks `code == SQLITE_BUSY` rather than string-matching. Update the existing tests that pattern-match on `databaseError` to also assert the `code` field.
 - success_criteria:
