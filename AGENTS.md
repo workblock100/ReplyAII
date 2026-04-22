@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                145 tests
+Tests/ReplyAITests/                158 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,8 @@ Tests/ReplyAITests/                145 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `8e9d0d2` IMessageChannel thread-list pagination tests + ChannelService default overload (REP-021, worker-2026-04-21-223700)
+- `04e4e1e` isGroupChat/hasAttachment predicates, E.164 normalization, tapback + delivery-receipt filtering (REP-018/019/020, worker-2026-04-21-222600)
 - `eca3692` Preferences: injectable `UserDefaults` + register/wipe test coverage (REP-013, worker-2026-04-21-183849)
 - `b7c8f8b` Sidebar preview: link + attachment collapsing in `IMessagePreview` (REP-008, worker-2026-04-21-183617)
 - `d0b72e1` `ContactsStoring` protocol extraction + full ContactsResolver test coverage (REP-011, worker-2026-04-21-183251)

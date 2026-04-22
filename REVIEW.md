@@ -6,6 +6,42 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-21 22:03 – 2026-04-22 04:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Overlaps the prior 17:43–23:43 window by ~4h, so this rating scopes only the *new* worker activity since `review-2026-04-21-2343.md` landed. In that ~4-hour slice the worker shipped **4 substantive backlog items** (REP-018, REP-019, REP-020, REP-021) across two commits, added **+13 tests (145 → 158)** with ratios well above 1:1, and filed commit messages that actually explain the *why* (chat<N>-vs-E.164 group identifiers, triple-cache-miss from non-normalized phone handles, tapback rows polluting thread previews). Zero banned actions in the 6h cumulative diff: no `#Preview`, no sandbox flip, no shrunk test files, no history rewrites. REP-022 and REP-024 were claimed ~68 min ago and remain `in_progress` — within normal worker cadence, not yet a stall.
+
+### Shipped this window (net-new since prior review)
+
+- **REP-018 (P1, S)** — `RulePredicate.isGroupChat` + `hasAttachment`. isGroupChat detects the `chat<N>` identifier convention for group threads; hasAttachment matches the `📎 Attachment` sidebar sentinel. Covered in `RulesTests` with +87 new lines.
+- **REP-019 (P1, S)** — `ContactsResolver.normalizedHandle()` collapses `+14155551234` / `14155551234` / `4155551234` to a single canonical 10-digit key before cache reads/writes. Prior behavior caused three cache misses on the same contact. +42 test lines in `ContactsResolverTests`.
+- **REP-020 (P1, S)** — Thread-preview query now filters `associated_message_type 2000–2005` (tapback reactions) and NULL-text delivery receipts on both `last_msg_rowid` and `last_date` subqueries. Fixes previews like `"❤ to '…'"` shadowing the last real message.
+- **REP-021 (P1, M)** — `IMessageChannel.recentThreads(limit:)` test coverage (60-row fixtures → limit-50 cap + recency ordering) plus a `ChannelService` protocol extension defaulting to limit=50 so callers can omit the page size.
+
+### Test coverage delta
+
+- **+13 tests** (145 → 158). No new test *files* this window — all growth is expansion of `RulesTests`, `ContactsResolverTests`, `IMessageChannelTests`.
+- Test/LOC ratio: ~87 test lines for ~25 source lines on REP-018/19/20; ~45 test lines for ~30 source lines on REP-021. Both well above the proportional bar.
+- No test files shrunk.
+- `swift test` not runnable in the reviewer sandbox — audit count is from `grep -r "func test" Tests/ReplyAITests/`.
+
+### Concerns
+
+- **REP-022 / REP-024 claimed 68 min ago, still `in_progress`.** Worker fires every 15 min, so 4–5 cycles without a substantive commit. Not a stall yet (both are S and the substantiveness gate may be bundling them), but re-check next window — if still in_progress at the next 6h review, re-queue with the prior worker run marked failed.
+- **7 open `wip/quality-*` branches** from yesterday's quality-pass session remain unmerged. The planner correctly filed REP-016 (senderKnown operator-precedence *bug fix* — real correctness issue on `.senderUnknown`) and REP-017 (consolidate overlaps) as human-owned. These should not sit for another 24h — the bug fix in particular.
+- **Claim-commit ratio** still ~1:1 with substantive commits. Protocol-compliant, not rating-affecting, but if the planner can pre-batch claims per window the main history reads cleaner for the human.
+- **Human-review flag from REP-008** (sidebar glyphs `🔗` / `📎`) was queued in the prior review and hasn't been scoped into a task yet — still drifting.
+
+### Suggestions for next planner cycle
+
+1. **Stop adding. Drain.** Planner added 32 tasks in today's run2 (REP-016 → REP-047); the queue is well-stocked. Next planner run should focus on archival (REP-018/19/20/21 all need to move to Done) and hold task additions until the worker draws the queue down below ~25 open.
+2. **Escalate REP-016.** The senderKnown operator-precedence fix is a real bug, not style. It should jump the human-review queue above REP-017 (consolidation) and REP-009/010 (ui-sensitive feature work).
+3. **Guardrail — stall detection for REP-022/024.** If still `in_progress` at the next 6h review, flip `claimed_by` to `worker-FAILED` and re-open. Add this rule to the planner's archive-verification pass so it catches stalls without reviewer intervention.
+4. **Queue REP-008 glyph product-copy task.** One-line S-task: "product-copy pass on `🔗`/`📎` sidebar preview sentinels in `IMessagePreview`". Blocks on nothing; clears the pending human-review flag.
+
+---
+
 ## Window 2026-04-21 17:43–23:43 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
