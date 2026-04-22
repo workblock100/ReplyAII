@@ -245,8 +245,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-130300
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Once REP-022 landed and `InboxViewModelTests.swift` exists, extend it with archive/unarchive round-trip coverage. `InboxViewModel` stores `archivedThreadIDs` in `Preferences`. Test: archive a thread → `threads` list no longer contains it; unarchive → it reappears; persisted across a simulated relaunch (wipe + re-init of Preferences with suiteName-isolated UserDefaults). Requires the mock channel from REP-022.
 - success_criteria:
@@ -288,8 +288,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-130300
 - files_to_touch: `Tests/ReplyAITests/AttributedBodyDecoderTests.swift`
 - scope: REP-003 added hand-crafted hex fixtures. Add a property-based fuzz test: generate 10,000 random `Data` blobs of varying length (0 to 4096 bytes, uniform random content) and pass each to `AttributedBodyDecoder.decode`. Assertions: (a) `decode` never throws or traps — it must return nil or a String; (b) any returned String is valid UTF-8. This verifies malformed-input resilience against inputs not covered by hand-crafted fixtures. Use Swift's `SystemRandomNumberGenerator` for seeding.
 - success_criteria:
@@ -447,8 +447,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-130300
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `IMessageChannel.recentThreads` queries both `message.text` and `message.attributedBody`. When `text` is NULL, the channel passes `attributedBody` data to `AttributedBodyDecoder.decode`. This path has no integration test: existing `IMessageChannelTests` use fixtures where all messages have non-NULL text. Add a test fixture with a row where `text` is NULL but `attributedBody` contains a valid typedstream blob (re-use a known-good hex fixture from `AttributedBodyDecoderTests`). Verify the decoded message text is non-empty. Also verify that a row with both NULL `text` and NULL `attributedBody` produces an empty-text message without crashing.
 - success_criteria:
@@ -463,8 +463,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-130300
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-025 (commit aa34006) added an injectable `executeHook: (String) -> Result<Void, Error>` to `IMessageSender` for testing AppleScript execution. REP-040 (commit 3169995) added `isDryRun: Bool` as a separate instance property that bypasses the hook entirely, creating two interception points with partially overlapping coverage. Consolidate: remove `isDryRun`, add `static func dryRunHook() -> (String) -> Result<Void, Error>` that returns `.success(())` without executing. Update all tests that use `isDryRun: true` to use `IMessageSender(executeHook: .dryRunHook())`. One interception point, simpler mental model, identical test guarantees.
 - success_criteria:
@@ -479,8 +479,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-130300
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.rulesEvaluated` counts every evaluation call regardless of outcome. Add `rulesMatchedCount: Int` that increments only when at least one rule matched (i.e. `RuleEvaluator.matching` returned non-empty). `RulesStore` already calls `Stats.shared.incrementRulesFired()` — add a parallel `Stats.shared.incrementRulesMatched()` conditional on the matched-rules array being non-empty. JSON-persisted. Enables computing match rate (`rulesMatchedCount / rulesEvaluated`) in automation logs. Tests: counter increments on a match; does not increment on no-match; JSON round-trip.
 - success_criteria:
