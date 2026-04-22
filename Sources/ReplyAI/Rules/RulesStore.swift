@@ -15,9 +15,11 @@ final class RulesStore {
 
     private let fileURL: URL
 
-    init(fileURL: URL = RulesStore.defaultFileURL()) {
+    init(fileURL: URL = RulesStore.defaultFileURL(), stats: Stats = Stats.shared) {
         self.fileURL = fileURL
-        self.rules = Self.loadOrSeed(from: fileURL)
+        let (loaded, skips) = Self.loadOrSeed(from: fileURL)
+        if skips > 0 { stats.recordRuleLoadSkips(skips) }
+        self.rules = loaded
     }
 
     // MARK: - Mutations
@@ -69,24 +71,43 @@ final class RulesStore {
         return root.appendingPathComponent("rules.json")
     }
 
-    nonisolated private static func loadOrSeed(from url: URL) -> [SmartRule] {
+    /// Returns loaded rules and a count of entries that failed to decode.
+    /// Single malformed entries are skipped; the file must be valid JSON
+    /// for any rules to load (invalid JSON falls back to seeds with 0
+    /// skips because the file is treated as fully corrupt, not partial).
+    nonisolated private static func loadOrSeed(from url: URL) -> ([SmartRule], skips: Int) {
         guard FileManager.default.fileExists(atPath: url.path) else {
             let seeds = SmartRule.seedRules
             writeSync(seeds, to: url)
-            return seeds
+            return (seeds, skips: 0)
         }
-        do {
-            let data = try Data(contentsOf: url)
-            return try decoder().decode([SmartRule].self, from: data)
-        } catch {
-            // Corrupt file — fall back to seeds. Preserve the old file
-            // with a ".broken" suffix so the user can recover it.
+        guard let data = try? Data(contentsOf: url) else {
+            let seeds = SmartRule.seedRules
+            writeSync(seeds, to: url)
+            return (seeds, skips: 0)
+        }
+        // Decode element-by-element so one malformed entry doesn't
+        // wipe the entire rules list.
+        guard let rawArray = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+            // File is not even valid JSON — treat as fully corrupt.
             let broken = url.appendingPathExtension("broken")
             try? FileManager.default.moveItem(at: url, to: broken)
             let seeds = SmartRule.seedRules
             writeSync(seeds, to: url)
-            return seeds
+            return (seeds, skips: 0)
         }
+        var rules: [SmartRule] = []
+        var skips = 0
+        let dec = decoder()
+        for element in rawArray {
+            guard let elementData = try? JSONSerialization.data(withJSONObject: element),
+                  let rule = try? dec.decode(SmartRule.self, from: elementData) else {
+                skips += 1
+                continue
+            }
+            rules.append(rule)
+        }
+        return (rules, skips: skips)
     }
 
     nonisolated private static func writeSync(_ rules: [SmartRule], to url: URL) {

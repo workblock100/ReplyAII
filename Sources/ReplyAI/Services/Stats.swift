@@ -11,6 +11,11 @@ import Foundation
 /// main actor without bridging. The JSON write happens under the lock
 /// with atomic replace so a crash mid-write can't corrupt the file.
 final class Stats: @unchecked Sendable {
+    /// Process-wide shared instance used by production code paths that
+    /// don't have an injected Stats (e.g. RulesStore on load). Tests
+    /// construct their own instances to avoid cross-test interference.
+    static let shared = Stats()
+
     /// Codable snapshot of every counter. Used as both the on-disk
     /// shape and the value callers see through `snapshot()`.
     struct Snapshot: Codable, Equatable, Sendable {
@@ -18,6 +23,10 @@ final class Stats: @unchecked Sendable {
         var draftsGenerated: Int = 0
         var draftsSent: Int = 0
         var messagesIndexed: Int = 0
+        /// Cumulative count of SmartRule entries skipped during rules.json
+        /// load because they failed to decode. Non-zero means the file was
+        /// partially corrupt; the app kept the valid portion.
+        var ruleLoadSkips: Int = 0
     }
 
     private let lock = NSLock()
@@ -73,6 +82,14 @@ final class Stats: @unchecked Sendable {
     func recordMessagesIndexed(_ count: Int) {
         guard count > 0 else { return }
         synced { state.messagesIndexed += count }
+        persist()
+    }
+
+    /// Record that `count` SmartRule entries were skipped during
+    /// rules.json load due to decode failures.
+    func recordRuleLoadSkips(_ count: Int) {
+        guard count > 0 else { return }
+        synced { state.ruleLoadSkips += count }
         persist()
     }
 

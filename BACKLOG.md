@@ -61,7 +61,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status:   done
 - claimed_by: worker-2026-04-21-025439
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift` (new)
 - scope: `InboxViewModel.syncFromIMessage()` is called from two sites: the `ChatDBWatcher` callback and a manual refresh. If both fire simultaneously (watcher fires while a slow initial sync is in progress), two concurrent sync tasks race and can produce duplicate threads or torn state. Add a `private var isSyncing = false` guard on `@MainActor`. If `isSyncing` is true when `syncFromIMessage()` is called, return early without launching a second task. Test with a mock `IMessageChannel` that blocks on the first call: verify a concurrent second call is a no-op.
@@ -91,7 +91,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status:   done
 - claimed_by: worker-2026-04-21-025439
 - files_to_touch: `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore.load()` currently does a single `JSONDecoder().decode([SmartRule].self, from: data)`. A single malformed rule entry in `rules.json` crashes the entire decode and leaves the user with no rules. Wrap each rule's decode in a try-catch using a `[DecodableSmartRule]` intermediate: decode the array as `[[String: AnyCodable]]`, then attempt `JSONDecoder().decode(SmartRule.self, ...)` per element, skip failures. Log the skip count to `Stats.shared.ruleLoadSkips` (add a new counter). Test: a rules.json with one valid + one malformed entry loads correctly with one rule and increments the skip counter.

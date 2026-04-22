@@ -77,7 +77,7 @@ final class InboxViewModel {
     }
 
     private var imessage: ChannelService
-    let contacts = ContactsResolver()
+    let contacts: ContactsResolver
     private var watcher: ChatDBWatcher?
     let rules: RulesStore
     let searchIndex = SearchIndex()
@@ -88,11 +88,17 @@ final class InboxViewModel {
     /// updated message payloads, which is O(k) instead of O(n).
     private var didSeedSearchIndex = false
 
+    /// Guards against overlapping `syncFromIMessage` calls. The watcher
+    /// and manual refresh can both fire; the second arrival while a sync
+    /// is in flight is silently dropped.
+    private var isSyncing = false
+
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
         channels: [Channel] = Fixtures.sidebarChannels,
         imessage: ChannelService? = nil,
+        contacts: ContactsResolver? = nil,
         rules: RulesStore? = nil,
         stats: Stats? = nil
     ) {
@@ -109,6 +115,7 @@ final class InboxViewModel {
         // can hand a plain Sendable closure to the SQLite worker without
         // needing MainActor.assumeIsolated (which would crash on the
         // cooperative executor).
+        self.contacts = contacts ?? ContactsResolver()
         let resolver = self.contacts
         self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
             resolver.name(for: handle)
@@ -214,6 +221,9 @@ final class InboxViewModel {
     /// we also arm the file watcher so subsequent chat.db writes
     /// auto-resync without the user pressing ⌘R.
     func syncFromIMessage() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
         syncStatus = .syncing
         await contacts.ensureAccess()   // prompts once, if .notDetermined
         do {

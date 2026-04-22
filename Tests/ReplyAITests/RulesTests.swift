@@ -796,4 +796,88 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(decoded[0].when, .isGroupChat)
         XCTAssertEqual(decoded[1].when, .hasAttachment)
     }
+
+    // MARK: - RulesStore: malformed-rule skipping (REP-024)
+
+    private func tempRulesURL() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAIRulesTests-\(UUID().uuidString).json")
+    }
+
+    private func validRuleJSON() throws -> String {
+        let rule = SmartRule(name: "valid", when: .isUnread, then: .archive)
+        let data = try JSONEncoder().encode(rule)
+        return String(data: data, encoding: .utf8)!
+    }
+
+    @MainActor
+    func testMalformedRuleIsSkipped() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let valid = try validRuleJSON()
+        // Embed one valid rule and one clearly malformed object.
+        let json = "[\(valid), {\"broken\": true}]"
+        try json.data(using: .utf8)!.write(to: url)
+
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        XCTAssertEqual(store.rules.count, 1, "malformed entry must be skipped")
+        XCTAssertEqual(store.rules.first?.name, "valid")
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 1)
+    }
+
+    @MainActor
+    func testPartiallyCorruptRulesFileLoadsValidRules() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let valid = try validRuleJSON()
+        // Three valid, two malformed interleaved.
+        let json = """
+        [
+          \(valid),
+          {"kind": "unknown_kind"},
+          \(valid),
+          {},
+          \(valid)
+        ]
+        """
+        try json.data(using: .utf8)!.write(to: url)
+
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        XCTAssertEqual(store.rules.count, 3, "three valid rules must load")
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 2)
+    }
+
+    @MainActor
+    func testFullyCorruptJSONFallsBackToSeeds() throws {
+        let url = tempRulesURL()
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("broken"))
+        }
+
+        try "not json at all %%%".data(using: .utf8)!.write(to: url)
+
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        // Invalid JSON → seeds, no skips recorded (treated as fully corrupt).
+        XCTAssertFalse(store.rules.isEmpty, "seeds must be loaded when file is invalid JSON")
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 0)
+    }
+
+    @MainActor
+    func testEmptyArrayLoadsZeroRules() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try "[]".data(using: .utf8)!.write(to: url)
+
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        XCTAssertEqual(store.rules.count, 0)
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 0)
+    }
 }
