@@ -642,4 +642,25 @@ final class InboxViewModelOrderingTests: XCTestCase {
         XCTAssertEqual(vm.threads.map(\.id), ["t-newest", "t-middle", "t-oldest"],
                        "ViewModel must preserve the channel's newest-first ordering")
     }
+
+    func testPinnedThreadSortsAboveNewerUnpinnedThread() async throws {
+        // Channel returns unpinned (newer) first then pinned (older),
+        // matching what IMessageChannel's date DESC query would produce.
+        // InboxViewModel must lift the pinned thread to position 0.
+        let unpinned = MessageThread(id: "t-unpinned", channel: .imessage, name: "Unpinned",
+                                     avatar: "U", preview: "newer msg", time: "12:00",
+                                     pinned: false)
+        let pinned = MessageThread(id: "t-pinned", channel: .imessage, name: "Pinned",
+                                   avatar: "P", preview: "older msg", time: "10:00",
+                                   pinned: true)
+
+        let channel = StaticMockChannel(threads: [unpinned, pinned])
+        let vm = InboxViewModel(imessage: channel,
+                                contacts: ContactsResolver(store: DeniedContactStore()))
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(vm.threads.first?.id, "t-pinned",
+                       "pinned thread must sort above unpinned thread regardless of recency")
+        XCTAssertEqual(vm.threads.last?.id, "t-unpinned")
+    }
 }

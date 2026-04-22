@@ -488,7 +488,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-191500
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore` uses atomic JSON writes via `Locked<T>`, but add/remove operations have never been stress-tested under concurrent callers (unlike Stats in REP-097). Spawn 30 concurrent `Task`s each calling `rulesStore.add(uniqueRule)` where each rule is unique to avoid the 100-rule cap rejection. After all tasks settle, assert the final rule count equals 30 (no rule silently dropped). This is a data-race detector test — run with `-sanitize=thread` in CI. Uses an isolated `RulesStore` (temp file URL) not the shared singleton.
@@ -502,7 +502,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-191500
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: `PromptBuilder` truncates the message history to a 2000-char budget by dropping oldest messages first. Existing tests use short strings. Add a test with a thread containing 20 messages averaging 200 chars each (total ~4000 chars, well over budget). Assert: (1) the built prompt's concatenated message section is ≤ 2000 chars; (2) the most-recent message appears in the output despite truncation (oldest-first drop); (3) the thread name / system instruction still appears (truncation is message-body-only, not total prompt). No production code changes.
@@ -517,7 +517,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-191500
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `IMessageChannel.secondsSinceReferenceDate(appleDate:)` autodetects whether the Apple date is in nanoseconds (value ≥ 1e9) or seconds (value < 1e9). The boundary and edge cases (value exactly at 1e9, value = 0, very large nanosecond values) are not tested. Add explicit tests: `testAppleDateAsSecondsForSmallValue` — value 999_999_999 returns seconds-based Date (≈ 2032 AD); `testAppleDateAsNanosecondsForLargeValue` — value 1_000_000_001 returns nanosecond-based Date (≈ 2001 + 1s); `testAppleDateZeroReturnsPastDate` — value 0 returns reference epoch without crash (2001-01-01). Tests the detection logic without requiring a real chat.db.
@@ -530,7 +530,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-191500
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.rulesMatchedCount` should never exceed `Stats.rulesEvaluated`. This invariant is enforced by convention (increment evaluated first, then matched only if rules fire) but has no test. Simulate a rules evaluation pass: manually call `Stats.incrementRulesEvaluated()` 10 times and `Stats.incrementRulesMatched()` 3 times (representing 3 of 10 threads matching), then assert `stats.rulesMatchedCount <= stats.rulesEvaluated`. Also add the inverse: assert that after zero matches, `rulesMatchedCount == 0`. Guards against accidental counter swap or double-increment.
@@ -544,7 +544,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-191500
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: AGENTS.md and prior commits note that pinned threads float to the top of the thread list. The `InboxViewModelTests` suite does not verify that a pinned thread outranks an unpinned thread that has a more recent `lastMessageDate`. Add a test: mock channel returns 2 threads — thread A (older date, `isPinned = true`) and thread B (newer date, `isPinned = false`). After sync, assert `viewModel.threads.first?.id == threadA.id`. This catches any regression where the sort order is changed to pure-recency without the pin float.

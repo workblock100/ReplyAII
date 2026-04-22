@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                331 tests
+Tests/ReplyAITests/                340 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,7 @@ Tests/ReplyAITests/                331 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `TBD` concurrent-add stress test, PromptBuilder large-payload, date-boundary, stats-invariant, pinned-sort fix + test (REP-120, REP-121, REP-122, REP-123, REP-124, worker-2026-04-22-191500)
 - `05e7035` cache isolation, delete-reinsert, channel-filter, error-path, ordering, pref-unrecognized, AGENTS.md count (REP-098, REP-099, REP-101, REP-103, REP-104, REP-109, REP-114, worker-2026-04-22-174500)
 - `80035e18d6f16e8197320222262df7771182e31b` messageAgeOlderThan predicate, not/or/dismiss/concurrent/tone-distinctness tests (REP-097, REP-100, REP-106, REP-107, REP-112, REP-113, worker-2026-04-22-163000)
 - `9879312` ContactsResolver TTL, IMessageChannel message cap, send-state tests, SearchIndex empty-query test (REP-074, REP-095, REP-096, REP-102, worker-2026-04-22-150000)
@@ -169,7 +170,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-331 XCTest cases, all green.
+340 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
@@ -224,7 +225,7 @@ Pick in order. Each has a concrete starting point.
 
 ## Testing expectations
 
-- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (331 as of worker-2026-04-22-174500; kept current in the repo layout header above). `swift test` from repo root.
+- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (340 as of worker-2026-04-22-191500; kept current in the repo layout header above). `swift test` from repo root.
 - **Pure Swift (models, evaluators, parsers) gets unit tests.** View code gets ad-hoc visual checking.
 - **Async tests**: use the `waitUntil(timeout:_:)` helper pattern in `DraftEngineTests` rather than arbitrary sleeps.
 - **Never add `#Preview` blocks** — they break the SwiftPM path.

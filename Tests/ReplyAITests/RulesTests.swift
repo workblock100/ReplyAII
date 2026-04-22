@@ -1334,3 +1334,42 @@ final class RulesTests: XCTestCase {
         }
     }
 }
+
+// MARK: - RulesStore concurrent add stress test (REP-120)
+
+@MainActor
+final class RulesStoreConcurrencyTests: XCTestCase {
+
+    private func tempRulesURL() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RulesStoreConcurrency-\(UUID())")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("rules.json")
+    }
+
+    func testConcurrentAddNeverLosesRules() async throws {
+        // Spawn 30 concurrent tasks each adding a unique rule to an isolated store.
+        // RulesStore is @MainActor so all tasks serialize through the main actor —
+        // this guards against any future regression that introduces a data race
+        // (e.g. making add() actor-free) and verifies no add is silently dropped.
+        let store = RulesStore(fileURL: tempRulesURL())
+        // Clear seed rules so we start from 0.
+        for rule in store.rules { store.remove(rule.id) }
+
+        let taskCount = 30
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<taskCount {
+                group.addTask { @MainActor in
+                    let rule = SmartRule(
+                        name: "concurrent-rule-\(i)",
+                        when: .senderIs("bot\(i)"),
+                        then: .archive
+                    )
+                    try? store.add(rule)
+                }
+            }
+        }
+        XCTAssertEqual(store.rules.count, taskCount,
+                       "All \(taskCount) concurrent adds must land — no rule silently dropped")
+    }
+}

@@ -342,12 +342,14 @@ final class InboxViewModel {
             // A changed preview means a new incoming message arrived and any
             // cached draft is now out of context.
             let previousPreview = threads.first(where: { $0.id == currentSelection })?.preview
-            threads = live
+            // Pinned threads float above unpinned; otherwise preserve the
+            // channel's ordering (newest-first from IMessageChannel's SQL).
+            threads = live.sorted { $0.pinned && !$1.pinned }
 
             // Preserve the user's current selection if still present;
             // otherwise fall back to the top thread.
             if live.contains(where: { $0.id == currentSelection }) == false {
-                selectedThreadID = live.first?.id ?? selectedThreadID
+                selectedThreadID = threads.first?.id ?? selectedThreadID
             }
 
             // Invalidate the draft for the selected thread when the watcher

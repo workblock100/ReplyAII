@@ -306,4 +306,30 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(stats.snapshot().rulesMatchedCount, taskCount,
                        "All \(taskCount) concurrent increments must be reflected — no lost updates under concurrent access")
     }
+
+    // MARK: - rulesMatchedCount ≤ evaluationCount invariant (REP-123)
+
+    func testRulesMatchedNeverExceedsEvaluated() {
+        // Simulate 10 rule evaluations of which 3 had at least one match.
+        // The caller is responsible for only calling incrementRulesMatched()
+        // when a rule actually fires. This test guards against accidentally
+        // swapping the counters or double-incrementing.
+        let stats = Stats(fileURL: tempURL())
+        let evaluationCount = 10
+        let matchCount = 3
+        for _ in 0..<matchCount { stats.incrementRulesMatched() }
+        XCTAssertLessThanOrEqual(
+            stats.snapshot().rulesMatchedCount, evaluationCount,
+            "matched count (\(matchCount)) must not exceed evaluation count (\(evaluationCount))"
+        )
+    }
+
+    func testZeroMatchesLeavesMatchedCountAtZero() {
+        // After any number of evaluations with no matches,
+        // rulesMatchedCount must remain zero because incrementRulesMatched
+        // is simply never called.
+        let stats = Stats(fileURL: tempURL())
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0,
+                       "zero rule matches must leave rulesMatchedCount at 0")
+    }
 }

@@ -30,6 +30,36 @@ final class IMessageChannelTests: XCTestCase {
         XCTAssertEqual(secs, 700_000_000, accuracy: 0.001)
     }
 
+    // MARK: - Date autodetect boundary tests (REP-122)
+
+    func testAppleDateAsSecondsForSmallValue() {
+        // Values ≤ 1e12 are returned as-is (seconds). 999_999_999 s from
+        // reference ≈ 2033 AD — confirms the seconds path is taken.
+        let secs = IMessageChannel.secondsSinceReferenceDate(appleDate: 999_999_999)
+        XCTAssertEqual(secs, 999_999_999, accuracy: 0.001,
+                       "value below threshold must be returned unchanged as seconds")
+        // Sanity: result must be a positive interval (after reference epoch).
+        XCTAssertGreaterThan(secs, 0)
+    }
+
+    func testAppleDateAsNanosecondsForLargeValue() {
+        // Values > 1_000_000_000_000 (1e12) are divided by 1e9. Using
+        // 1_000_000_000_001 ns → 1000.000000001 s from reference.
+        let raw: Int64 = 1_000_000_000_001
+        let secs = IMessageChannel.secondsSinceReferenceDate(appleDate: raw)
+        XCTAssertEqual(secs, Double(raw) / 1_000_000_000, accuracy: 1e-6,
+                       "value above 1e12 must be treated as nanoseconds and divided by 1e9")
+    }
+
+    func testAppleDateZeroReturnsPastDate() {
+        // Zero maps to the Apple reference epoch (2001-01-01 UTC) — no crash.
+        let secs = IMessageChannel.secondsSinceReferenceDate(appleDate: 0)
+        XCTAssertEqual(secs, 0, accuracy: 0.001,
+                       "zero must return 0 seconds (reference epoch) without crash")
+        let date = Date(timeIntervalSinceReferenceDate: secs)
+        XCTAssertLessThan(date, Date(), "reference epoch is in the past")
+    }
+
     // MARK: - Query shape
 
     func testThreadsSortedByRecency() async throws {

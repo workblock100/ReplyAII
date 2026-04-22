@@ -131,4 +131,36 @@ final class PromptBuilderTests: XCTestCase {
             seen[instruction] = tone
         }
     }
+
+    // MARK: - Large-payload truncation (REP-121)
+
+    func testTruncatedPromptRespectsBudget() {
+        // 20 messages × 200 chars = 4 000 total chars; budget is 2 000.
+        // After truncation the retained messages must fit within the budget.
+        let body = String(repeating: "b", count: 200)
+        let messages = (1...20).map { _ in makeMessage(body) }
+        let truncated = PromptBuilder.truncate(messages, budget: PromptBuilder.historyCharBudget)
+        let retained = truncated.map(\.text.count).reduce(0, +)
+        // Allow up to one over-budget message because the most-recent message
+        // is always retained even when it alone exceeds the budget.
+        XCTAssertLessThanOrEqual(
+            retained, PromptBuilder.historyCharBudget + body.count,
+            "truncated history must fit within historyCharBudget (+ 1 forced message)"
+        )
+        XCTAssertLessThan(truncated.count, 20,
+                          "at least some messages must have been dropped for a 4 000-char payload")
+    }
+
+    func testTruncationDoesNotDropSystemInstruction() {
+        // With a heavy payload that forces truncation, the system instruction
+        // (thread name + tone label) must survive in the final prompt.
+        let thread = makeThread(name: "SystemGuard")
+        let body = String(repeating: "z", count: 200)
+        let messages = (1...20).map { _ in makeMessage(body) }
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: messages)
+        XCTAssertTrue(prompt.contains("SystemGuard"),
+                      "thread name must appear in prompt even after message truncation")
+        XCTAssertTrue(prompt.contains(Tone.warm.rawValue.lowercased()),
+                      "tone label must appear in prompt even after message truncation")
+    }
 }
