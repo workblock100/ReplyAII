@@ -260,4 +260,99 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertNoThrow(try IMessageSender.send("hello live", to: thread))
         XCTAssertTrue(scriptExecuted, "isDryRun=false must reach the AppleScript executor")
     }
+
+    // MARK: - Message length guard (REP-064)
+
+    func testTooLongMessageReturnsError() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        var scriptExecuted = false
+        IMessageSender.executeHook = { _ in scriptExecuted = true }
+
+        let overLimit = String(repeating: "x", count: IMessageSender.maxMessageLength + 1)
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertThrowsError(try IMessageSender.send(overLimit, to: thread)) { error in
+            guard let sendError = error as? IMessageSender.SendError,
+                  case .messageTooLong = sendError else {
+                XCTFail("Expected messageTooLong, got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(scriptExecuted, "AppleScript must not execute when message exceeds limit")
+    }
+
+    func testExactLimitMessageProceeds() {
+        let prevDryRun = IMessageSender.isDryRun
+        defer { IMessageSender.isDryRun = prevDryRun }
+        IMessageSender.isDryRun = true
+
+        let atLimit = String(repeating: "a", count: IMessageSender.maxMessageLength)
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        // Exactly at the limit must succeed (dry-run so no real AppleScript).
+        XCTAssertNoThrow(try IMessageSender.send(atLimit, to: thread))
+    }
+
+    // MARK: - -1708 retry (REP-059)
+
+    func testRetriableErrorSucceedsOnSecondAttempt() {
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 3.0
+        var callCount = 0
+        // First call throws -1708; second call succeeds.
+        IMessageSender.executeHook = { _ in
+            callCount += 1
+            if callCount == 1 {
+                throw IMessageSender.SendError.scriptFailure("AppleScript error -1708: Event not handled")
+            }
+        }
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("retry me", to: thread))
+        XCTAssertEqual(callCount, 2, "executor must be invoked exactly twice on a -1708 retry")
+    }
+
+    func testNonRetriableErrorFailsImmediately() {
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 3.0
+        var callCount = 0
+        // A non-retriable error (-1743 NotAuthorized) must not trigger a retry.
+        IMessageSender.executeHook = { _ in
+            callCount += 1
+            throw IMessageSender.SendError.notAuthorized
+        }
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertThrowsError(try IMessageSender.send("no retry", to: thread)) { error in
+            guard let sendError = error as? IMessageSender.SendError,
+                  case .notAuthorized = sendError else {
+                XCTFail("Expected notAuthorized, got \(error)")
+                return
+            }
+        }
+        XCTAssertEqual(callCount, 1, "non-retriable error must not trigger a second attempt")
+    }
 }

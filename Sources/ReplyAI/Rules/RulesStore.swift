@@ -11,6 +11,9 @@ import Observation
 @Observable
 @MainActor
 final class RulesStore {
+    /// Hard cap preventing unbounded O(n) rule evaluation on every thread select.
+    static let maxRules = 100
+
     private(set) var rules: [SmartRule] = []
 
     private let fileURL: URL
@@ -24,7 +27,12 @@ final class RulesStore {
 
     // MARK: - Mutations
 
-    func add(_ rule: SmartRule) {
+    /// Appends `rule` to the store. Throws `RuleValidationError.tooManyRules`
+    /// when `maxRules` has been reached.
+    func add(_ rule: SmartRule) throws {
+        guard rules.count < Self.maxRules else {
+            throw RuleValidationError.tooManyRules(limit: Self.maxRules)
+        }
         rules.append(rule)
         save()
     }
@@ -34,7 +42,7 @@ final class RulesStore {
     /// programmatic/seed callers where patterns are known-good.
     func addValidating(_ rule: SmartRule) throws {
         try SmartRule.validatePredicateRegexes(rule.when)
-        add(rule)
+        try add(rule)
     }
 
     func update(_ rule: SmartRule) {

@@ -29,7 +29,7 @@ struct SfcRulesView: View {
                         )
                     Spacer()
                     PrimaryButton(title: "+ New rule") {
-                        store.add(SmartRule(
+                        try? store.add(SmartRule(
                             name: "New rule — edit me",
                             when: .textContains("TODO"),
                             then: .pin,

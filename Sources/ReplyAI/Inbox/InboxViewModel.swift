@@ -134,6 +134,7 @@ final class InboxViewModel {
 
     func selectThread(_ id: String) {
         selectedThreadID = id
+        markUnreadZero(id)
         applyRules(for: selectedThread)
     }
 
@@ -428,17 +429,20 @@ final class InboxViewModel {
     private func markUnreadZero(_ threadID: String) {
         guard let i = threads.firstIndex(where: { $0.id == threadID }),
               threads[i].unread > 0 else { return }
+        let t = threads[i]
         threads[i] = MessageThread(
-            id: threads[i].id,
-            channel: threads[i].channel,
-            name: threads[i].name,
-            avatar: threads[i].avatar,
-            preview: threads[i].preview,
-            time: threads[i].time,
+            id: t.id,
+            channel: t.channel,
+            name: t.name,
+            avatar: t.avatar,
+            preview: t.preview,
+            time: t.time,
             unread: 0,
-            pinned: threads[i].pinned,
-            contextCount: threads[i].contextCount,
-            contextSummary: threads[i].contextSummary
+            pinned: t.pinned,
+            contextCount: t.contextCount,
+            contextSummary: t.contextSummary,
+            chatGUID: t.chatGUID,
+            hasAttachment: t.hasAttachment
         )
     }
 

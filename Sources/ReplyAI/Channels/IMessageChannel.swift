@@ -354,6 +354,12 @@ struct IMessageChannel: ChannelService {
         guard rc == SQLITE_OK else {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown SQLite error \(rc)"
             sqlite3_close(db)
+            // SQLITE_NOTADB (26): file exists but isn't a valid SQLite database —
+            // can happen after a macOS crash during iCloud sync. Surface a distinct
+            // error so callers can show a "re-sync from iCloud" recovery path.
+            if rc == SQLITE_NOTADB {
+                throw ChannelError.databaseCorrupted
+            }
             if msg.lowercased().contains("authorization") || msg.lowercased().contains("unable to open") {
                 throw ChannelError.permissionDenied(hint: """
                     ReplyAI can't read your Messages database yet. Grant Full Disk Access in \

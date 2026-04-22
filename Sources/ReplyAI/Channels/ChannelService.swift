@@ -40,6 +40,10 @@ enum ChannelError: LocalizedError, Sendable {
     /// code lets callers distinguish SQLITE_BUSY (5) from auth failures without
     /// string-matching on the message.
     case databaseError(code: Int32, message: String)
+    /// sqlite3_open_v2 returned SQLITE_NOTADB (26): the file exists but is not
+    /// a valid SQLite database. Can happen after a macOS crash during iCloud sync.
+    /// Callers should surface a "re-sync from iCloud" recovery path.
+    case databaseCorrupted
 
     var errorDescription: String? {
         switch self {
@@ -47,6 +51,8 @@ enum ChannelError: LocalizedError, Sendable {
         case .unavailable(let s):                   s
         case .query(let s):                         s
         case .databaseError(_, let message):        message
+        case .databaseCorrupted:
+            "The Messages database appears corrupted. Try signing out of iCloud Messages and back in to rebuild it."
         }
     }
 }

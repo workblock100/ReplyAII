@@ -144,7 +144,7 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
         XCTAssertFalse(vm.threads.first!.pinned, "pre-condition: thread starts unpinned")
 
         let pinRule = SmartRule(name: "pin alice", when: .senderIs("Alice Smith"), then: .pin)
-        rules.add(pinRule)
+        try rules.add(pinRule)
 
         // onChange fires on the next run-loop iteration; two yields are
         // sufficient for the Task to dispatch and complete on @MainActor.
@@ -178,7 +178,7 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
         // Add the rule in a disabled state — should NOT pin yet.
         let disabledRule = SmartRule(
             name: "pin bob", when: .senderIs("Bob Jones"), then: .pin, active: false)
-        rules.add(disabledRule)
+        try rules.add(disabledRule)
         await Task.yield()
         await Task.yield()
         XCTAssertFalse(vm.threads.first!.pinned, "disabled rule must not pin")
@@ -263,5 +263,42 @@ final class InboxViewModelNotificationReplyTests: XCTestCase {
 
         XCTAssertNil(vm.pendingNotificationReply, "pending reply must be cleared even for unknown thread")
         XCTAssertFalse(hookFired, "execute hook must NOT fire for an unknown threadID")
+    }
+
+    // MARK: - Mark thread read on selection (REP-076)
+
+    @MainActor
+    func testSelectMarkThreadRead() {
+        let thread = MessageThread(
+            id: "t-unread", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hello", time: "now", unread: 3)
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-unread")
+        XCTAssertEqual(
+            vm.threads.first(where: { $0.id == "t-unread" })?.unread, 0,
+            "selecting a thread must clear its local unread count"
+        )
+    }
+
+    @MainActor
+    func testSelectDoesNotAffectOtherThreads() {
+        let t1 = MessageThread(
+            id: "t1-76", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "now", unread: 5)
+        let t2 = MessageThread(
+            id: "t2-76", channel: .imessage, name: "Bob",
+            avatar: "B", preview: "hey", time: "now", unread: 2)
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t1-76")
+        XCTAssertEqual(vm.threads.first(where: { $0.id == "t1-76" })?.unread, 0,
+            "selected thread unread must be 0")
+        XCTAssertEqual(vm.threads.first(where: { $0.id == "t2-76" })?.unread, 2,
+            "other thread unread must be unaffected")
     }
 }

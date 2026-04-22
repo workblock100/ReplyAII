@@ -737,4 +737,47 @@ final class IMessageChannelDeliveredAtTests: XCTestCase {
         XCTAssertEqual(messages.count, 1)
         XCTAssertNil(messages[0].deliveredAt, "date_delivered=0 must produce nil deliveredAt")
     }
+
+    // MARK: - SQLITE_NOTADB graceful error (REP-077)
+
+    func testNotADBProducesDatabaseCorrupted() async throws {
+        // Inject an opener that returns SQLITE_NOTADB (26) without a real handle.
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: { _, _ in (SQLITE_NOTADB, nil) }
+        )
+        // The file path must exist so we pass the FileManager.fileExists guard.
+        FileManager.default.createFile(atPath: dbURL.path, contents: Data("not a db".utf8))
+        do {
+            _ = try await channel.recentThreads(limit: 1)
+            XCTFail("Expected databaseCorrupted error")
+        } catch let error as ChannelError {
+            guard case .databaseCorrupted = error else {
+                XCTFail("Expected .databaseCorrupted, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testOtherErrorProducesDatabaseError() async throws {
+        // SQLITE_CANTOPEN (14) is a generic open failure that is NOT NOTADB.
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: { _, _ in (SQLITE_CANTOPEN, nil) }
+        )
+        FileManager.default.createFile(atPath: dbURL.path, contents: Data("junk".utf8))
+        do {
+            _ = try await channel.recentThreads(limit: 1)
+            XCTFail("Expected databaseError")
+        } catch let error as ChannelError {
+            switch error {
+            case .databaseError:
+                break // expected
+            case .permissionDenied:
+                break // also acceptable for cantopen
+            default:
+                XCTFail("Expected databaseError or permissionDenied, got \(error)")
+            }
+        }
+    }
 }

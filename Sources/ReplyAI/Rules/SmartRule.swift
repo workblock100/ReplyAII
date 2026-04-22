@@ -175,11 +175,14 @@ extension RuleAction: Codable {
 /// Errors thrown when a rule cannot be stored.
 enum RuleValidationError: LocalizedError {
     case invalidRegex(pattern: String, reason: String)
+    case tooManyRules(limit: Int)
 
     var errorDescription: String? {
         switch self {
         case .invalidRegex(let p, let r):
             return "Invalid regex pattern \"\(p)\": \(r)"
+        case .tooManyRules(let limit):
+            return "Rule limit reached (\(limit) rules maximum). Remove an existing rule before adding a new one."
         }
     }
 }

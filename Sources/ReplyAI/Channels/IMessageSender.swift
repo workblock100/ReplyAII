@@ -16,6 +16,7 @@ enum IMessageSender {
         case notAuthorized
         case unsupported
         case timedOut
+        case messageTooLong(Int)
 
         var errorDescription: String? {
             switch self {
@@ -23,9 +24,15 @@ enum IMessageSender {
             case .notAuthorized:        "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation."
             case .unsupported:          "This thread can't be sent to (unsupported channel)."
             case .timedOut:             "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
+            case .messageTooLong(let n): "Message too long (\(n) chars, max \(IMessageSender.maxMessageLength))."
             }
         }
     }
+
+    /// Maximum message length accepted by the AppleScript send path.
+    /// Strings beyond this limit fail silently or get truncated by Messages.app;
+    /// we surface an error so the user sees a clear failure instead.
+    static let maxMessageLength = 4096
 
     /// Maximum wall-clock seconds to wait for NSAppleScript.executeAndReturnError.
     /// Defaults to 10 s in production; inject a shorter value in tests.
@@ -76,6 +83,9 @@ enum IMessageSender {
     }
 
     private static func sendRaw(_ text: String, chatGUID: String) throws {
+        guard text.count <= maxMessageLength else {
+            throw SendError.messageTooLong(text.count)
+        }
         if isDryRun { return }
         let escapedText = escape(text)
         let escapedGUID = escape(chatGUID)
@@ -98,6 +108,9 @@ enum IMessageSender {
             script.executeAndReturnError(&errorDict)
             if let error = errorDict {
                 // `errOSAScriptError = -1743` is the TCC denial code.
+                // `errAEEventNotHandled = -1708` means Messages accepted the
+                // send but couldn't dispatch — typically transient during
+                // startup or iCloud sync. Signal it for the retry path.
                 let code = error[NSAppleScript.errorNumber] as? Int ?? 0
                 if code == -1743 {
                     throw SendError.notAuthorized
@@ -115,7 +128,24 @@ enum IMessageSender {
         var capturedError: Error? = nil
 
         DispatchQueue.global(qos: .userInitiated).async {
-            do { try executor(source) } catch { capturedError = error }
+            do {
+                try executor(source)
+            } catch let err as SendError {
+                // -1708 (errAEEventNotHandled) is transient — retry once after
+                // a short wait. All other errors propagate immediately.
+                if case .scriptFailure(let msg) = err, msg.contains("AppleScript error -1708") {
+                    Thread.sleep(forTimeInterval: 0.5)
+                    do {
+                        try executor(source)
+                    } catch {
+                        capturedError = error
+                    }
+                } else {
+                    capturedError = err
+                }
+            } catch {
+                capturedError = error
+            }
             semaphore.signal()
         }
 

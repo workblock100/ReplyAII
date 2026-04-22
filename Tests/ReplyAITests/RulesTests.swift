@@ -195,7 +195,7 @@ final class RulesTests: XCTestCase {
         let custom = SmartRule(
             name: "my custom", when: .channelIs(.teams), then: .pin
         )
-        store.add(custom)
+        try store.add(custom)
 
         let reopened = RulesStore(fileURL: tmp)
         XCTAssertTrue(reopened.rules.contains(custom))
@@ -216,7 +216,7 @@ final class RulesTests: XCTestCase {
         let store = RulesStore(fileURL: tmp)
         // Reset to a known single rule.
         for r in store.rules { store.remove(r.id) }
-        store.add(SmartRule(
+        try store.add(SmartRule(
             name: "test · Maya → direct",
             when: .and([.channelIs(.slack), .senderContains("Maya")]),
             then: .setDefaultTone(.direct)
@@ -242,7 +242,7 @@ final class RulesTests: XCTestCase {
         )
         let store = RulesStore(fileURL: tmp)
         for r in store.rules { store.remove(r.id) }
-        store.add(SmartRule(
+        try store.add(SmartRule(
             name: "pin anything Slack",
             when: .channelIs(.slack),
             then: .pin
@@ -275,7 +275,7 @@ final class RulesTests: XCTestCase {
         )
         let store = RulesStore(fileURL: tmp)
         for r in store.rules { store.remove(r.id) }
-        store.add(SmartRule(
+        try store.add(SmartRule(
             name: "only whatsapp",
             when: .channelIs(.whatsapp),
             then: .setDefaultTone(.playful)
@@ -322,7 +322,7 @@ final class RulesTests: XCTestCase {
         )
         let store = RulesStore(fileURL: tmp)
         for r in store.rules { store.remove(r.id) }
-        for r in rules { store.add(r) }
+        for r in rules { try? store.add(r) }
 
         // Clear any archived/silenced state left behind by a previous test run.
         UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
@@ -687,7 +687,7 @@ final class RulesTests: XCTestCase {
 
         let store = RulesStore(fileURL: tmp)
         let rule = SmartRule(name: "to remove", when: .channelIs(.slack), then: .archive)
-        store.add(rule)
+        try store.add(rule)
         XCTAssertTrue(store.rules.contains(rule), "precondition: rule present before remove")
 
         store.remove(rule.id)
@@ -709,7 +709,7 @@ final class RulesTests: XCTestCase {
 
         let store = RulesStore(fileURL: tmp)
         var rule = SmartRule(name: "original", when: .channelIs(.sms), then: .markDone)
-        store.add(rule)
+        try store.add(rule)
 
         rule = SmartRule(id: rule.id, name: "updated", when: .channelIs(.teams), then: .pin, active: rule.active, priority: rule.priority)
         store.update(rule)
@@ -732,7 +732,7 @@ final class RulesTests: XCTestCase {
         let store = RulesStore(fileURL: tmp)
         // Remove all seeds and add a custom rule so the state differs from seed.
         for r in store.rules { store.remove(r.id) }
-        store.add(SmartRule(name: "custom", when: .channelIs(.whatsapp), then: .archive))
+        try store.add(SmartRule(name: "custom", when: .channelIs(.whatsapp), then: .archive))
 
         store.resetToSeeds()
 
@@ -998,5 +998,47 @@ final class RulesTests: XCTestCase {
         )
         XCTAssertThrowsError(try store.addValidating(nestedBad),
                              "validation must walk nested predicates")
+    }
+
+    // MARK: - 100-rule cap (REP-069)
+
+    @MainActor
+    func testAddUpToCapSucceeds() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = RulesStore(fileURL: url)
+        // Start from zero rules.
+        store.rules.forEach { store.remove($0.id) }
+        XCTAssertEqual(RulesStore.maxRules, 100)
+        for i in 0..<RulesStore.maxRules {
+            let rule = SmartRule(name: "rule-\(i)", when: .isUnread, then: .archive)
+            XCTAssertNoThrow(try store.add(rule), "add at \(i) must not throw before cap")
+        }
+        XCTAssertEqual(store.rules.count, RulesStore.maxRules)
+    }
+
+    @MainActor
+    func testAddBeyondCapThrows() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+        for i in 0..<RulesStore.maxRules {
+            try? store.add(SmartRule(name: "r\(i)", when: .isUnread, then: .archive))
+        }
+        XCTAssertEqual(store.rules.count, RulesStore.maxRules,
+            "precondition: store is exactly at cap")
+        XCTAssertThrowsError(
+            try store.add(SmartRule(name: "overflow", when: .isUnread, then: .pin))
+        ) { error in
+            guard let ve = error as? RuleValidationError,
+                  case .tooManyRules(let limit) = ve else {
+                XCTFail("Expected tooManyRules, got \(error)")
+                return
+            }
+            XCTAssertEqual(limit, RulesStore.maxRules)
+        }
+        XCTAssertEqual(store.rules.count, RulesStore.maxRules,
+            "count must not change after a rejected add")
     }
 }
