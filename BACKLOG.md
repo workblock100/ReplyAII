@@ -198,21 +198,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing SearchIndex callers updated (PalettePopover)
 - test_plan: Extend `SearchIndexTests.swift` with 3 new cases using in-memory FTS5.
 
-### REP-074 — ContactsResolver: per-handle cache TTL (30 min) for post-launch contact changes
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-150000
-- files_to_touch: `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/ContactsResolverTests.swift`
-- scope: The in-memory cache in `ContactsResolver` is never invalidated during an app session. If the user adds a new contact after launch, that handle remains unresolved (displayed as the raw phone number) until the next relaunch. Add a `cachedAt: Date` field alongside each cached resolved name (stored in the existing `Locked<T>` dict). On a cache hit, check if the entry is older than `ttl` (default 30 minutes); if so, treat as a miss and re-query `ContactsStoring`. Expose `ttl: TimeInterval` as an injectable parameter (default `1800`). Tests: a fresh entry is returned from cache without re-query; an entry older than TTL triggers a re-query; TTL=0 always re-queries.
-- success_criteria:
-  - `ContactsResolver(store:ttl:)` initializer accepting injectable TTL
-  - Fresh cache entry skips store; stale entry triggers re-query
-  - `testFreshCacheHitSkipsStore`, `testStaleEntryTriggersFetch`, `testZeroTTLAlwaysFetches`
-  - Existing ContactsResolverTests remain green
-- test_plan: Extend `ContactsResolverTests.swift` with 3 new cases using a mock clock or `Date` injection.
-
 ### REP-075 — AttributedBodyDecoder: nested NSMutableAttributedString payload handling
 - priority: P2
 - effort: M
@@ -236,14 +221,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
-- scope: The current predicate DSL has 7 primitive kinds (senderIs, senderUnknown, hasAttachment, isGroupChat, textMatchesRegex, and/or/not). Add `case timeOfDay(startHour: Int, endHour: Int)` (0–23, inclusive range, wrap-around for overnight e.g. 22–06). `RuleEvaluator` evaluates against `Calendar.current.component(.hour, from: Date())`. Inject a `DateProvider: () -> Date` for testability. Tests: current hour within range matches; current hour outside range doesn't; wrap-around overnight range (22–06) works correctly; Codable round-trip preserves startHour/endHour.
+- scope: The current predicate DSL has 7 primitive kinds (senderIs, senderUnknown, hasAttachment, isGroupChat, textMatchesRegex, messageAgeOlderThan, and/or/not). Add `case timeOfDay(startHour: Int, endHour: Int)` (0–23, inclusive range, wrap-around for overnight e.g. 22–06). `RuleEvaluator` evaluates against `Calendar.current.component(.hour, from: Date())`. Inject a `DateProvider: () -> Date` for testability (same pattern as `messageAgeOlderThan`). Tests: current hour within range matches; current hour outside range doesn't; wrap-around overnight range (22–06) works correctly; Codable round-trip preserves startHour/endHour.
 - success_criteria:
   - `RulePredicate.timeOfDay(startHour:endHour:)` case added and Codable
   - `RuleEvaluator` evaluates with injectable `DateProvider`
   - `testTimeOfDayWithinRangeMatches`, `testTimeOfDayOutsideRangeMismatches`, `testOvernightWrapAround`, `testTimeOfDayCodableRoundTrip`
   - Existing RulesTests remain green
 - test_plan: Extend `RulesTests.swift` with 4 new cases using an injectable date closure.
-
 
 ### REP-082 — ThreadRow: selection highlight bar animation with matchedGeometryEffect
 - priority: P2
@@ -266,48 +250,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - scope: From AGENTS.md priority queue #2: read `@Environment(\.accessibilityReduceMotion)` in `ComposerView` and skip the `withAnimation` crossfade on `editableDraft` appear/disappear when true. Read the same in `PillToggle` (used for tone pills) and skip the spring animation on selection change when true. No logic changes — only the animation modifier is conditionalised. UI-sensitive → worker pushes to `wip/`. Human verifies under System Preferences > Accessibility > Reduce Motion.
 - success_criteria: `wip/` branch; human verifies animations skip cleanly under Reduce Motion.
 - test_plan: N/A (view-only environment flag); no unit test needed.
-
-### REP-095 — IMessageChannel: per-thread message-history cap
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-150000
-- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
-- scope: `IMessageChannel.recentThreads` fetches all messages for each thread with no upper limit. For threads with hundreds of messages, this burns unnecessary memory and slows the initial sync. Add a `messageLimit: Int = 20` parameter (injectable for tests) to the inner SQL query (`ORDER BY message.date DESC LIMIT :limit`). Return the most recent N messages per thread. Tests: a thread with >20 messages in the fixture returns exactly 20; a thread with <20 messages returns all of them; the returned messages are the most recent (sorted DESC, then reversed to chronological order for display).
-- success_criteria:
-  - `messageLimit` parameter on the relevant SQL query defaulting to 20
-  - `testMessageLimitCapsResults`, `testMessageLimitDoesNotDropShortThreads`, `testMessageLimitPreservesMostRecent`
-  - Existing IMessageChannelTests remain green
-- test_plan: Extend `IMessageChannelTests.swift` using in-memory SQLite with >20-row fixtures.
-
-### REP-096 — InboxViewModel: send() success/failure state transition tests
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-150000
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: `InboxViewModel.send(thread:)` calls `IMessageSender.send(text:toChatGUID:)` and on success clears the draft via `DraftEngine`. Two critical state transitions are untested: (1) on success, the composer draft is cleared (DraftState → .idle); (2) on failure, the draft text is preserved so the user can retry. Use the injectable `executeHook` on `IMessageSender` (REP-093 pattern) and the mock DraftEngine from existing tests. Tests: `testSendSuccessClearsDraft`, `testSendFailurePreservesDraft`.
-- success_criteria:
-  - `testSendSuccessClearsDraft` — DraftState is .idle after successful send
-  - `testSendFailurePreservesDraft` — draft text unchanged after failed send
-  - No production code touched
-- test_plan: Extend `InboxViewModelTests.swift` with 2 new cases; use mock channel + dryRunHook pattern.
-
-### REP-097 — Stats: concurrent increment stress test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
-- scope: `Stats` uses `NSLock` (via `Locked<T>`) to protect all counter mutations. The lock has been correct in review but was never stressed with concurrent callers. Add a test that spawns 200 concurrent Swift `Task`s, each calling `Stats.incrementRulesFired()` once. After all tasks complete (via `TaskGroup`), assert `stats.rulesEvaluated == 200`. If any increment is lost, the count will be under 200. This is a data-race detector test — run with `-sanitize=thread` in CI.
-- success_criteria:
-  - `testConcurrentIncrementNeverLosesUpdates` asserts final count == 200
-  - Test passes with Thread Sanitizer enabled
-  - No production code touched
-- test_plan: Single test function using `withTaskGroup` in `StatsTests.swift`.
 
 ### REP-098 — DraftEngine: per-(threadID,tone) cache isolation test
 - priority: P2
@@ -337,21 +279,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No production code touched
 - test_plan: Extend `SearchIndexTests.swift` with 2 new cases using in-memory FTS5.
 
-### REP-100 — SmartRule: `not` predicate evaluation + double-negation tests
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RulePredicate.not(inner:)` was added in the DSL but its evaluation path in `RuleEvaluator` is only implicitly tested via the wip branch tests (not yet on main). Add explicit `RuleEvaluator` unit tests: (1) `not(senderIs("Alice"))` returns false when sender is Alice, true otherwise; (2) `not(not(senderIs("Alice")))` double-negation returns the same result as `senderIs("Alice")` — verifying the evaluator doesn't short-circuit; (3) `not` combined with `or` via De Morgan's law equivalence. Tests live in `RulesTests.swift` alongside existing predicate tests.
-- success_criteria:
-  - `testNotPredicateNegatesMatch`
-  - `testDoubleNegationEquivalentToOriginal`
-  - `testNotOrDeMorganEquivalence`
-  - Existing RulesTests remain green
-- test_plan: Extend `RulesTests.swift` with 3 new cases; no production code changes.
-
 ### REP-101 — AGENTS.md: fix stale test-count line in Testing expectations
 - priority: P2
 - effort: S
@@ -365,20 +292,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Repo-layout header count matches current `grep` output
   - No source files touched
 - test_plan: N/A (docs-only).
-
-### REP-102 — SearchIndex: empty-query returns empty list
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-150000
-- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: `SearchIndex.search(query:)` behavior for empty string is unspecified and untested. An empty FTS5 query either returns all rows or raises a SQLite error depending on dialect. Add a test: insert 3 threads, call `search(query: "")`, assert result is empty (not all-rows, not a crash). If the current implementation returns all rows on empty query, update `SearchIndex.search` to guard against it with an early return. The test drives the correct contract.
-- success_criteria:
-  - `testEmptyQueryReturnsEmptyList` — `search("")` returns `[]`
-  - If implementation change required, guard added before the SQLite query
-  - Existing search tests remain green
-- test_plan: Single test function in `SearchIndexTests.swift`; may require a 1-line guard in `SearchIndex.swift`.
 
 ### REP-103 — InboxViewModel: thread list sorted by recency after sync
 - priority: P2
@@ -422,35 +335,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testLifetimeCountersSeedFromDisk`, `testLifetimeCountersAccumulateAcrossInits`, `testNilURLSkipsPersistence`
   - Existing StatsTests remain green (use `nil` URL)
 - test_plan: New test cases in `StatsTests.swift` using temp-file URL injection; tear down in `tearDownWithError`.
-
-### REP-106 — SmartRule: `messageAgeOlderThan(hours:)` predicate
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
-- scope: Add `case messageAgeOlderThan(hours: Int)` to `RulePredicate`. `RuleEvaluator` computes `Date() - thread.lastMessageDate` and returns true if the difference exceeds `hours * 3600`. Inject a `DateProvider: () -> Date` (same pattern as REP-079's `timeOfDay`). Tests: a thread last-messaged 25h ago matches `messageAgeOlderThan(hours: 24)`; a thread 1h ago does not; a thread exactly at the threshold (±1s) is checked for boundary behavior; Codable round-trip preserves `hours`.
-- success_criteria:
-  - `RulePredicate.messageAgeOlderThan(hours:)` added, Codable, evaluatable
-  - `testMessageOlderThanHoursMatches`, `testMessageYoungerThanHoursDoesNotMatch`, `testMessageAgeOlderThanCodableRoundTrip`
-  - Existing RulesTests remain green
-- test_plan: Extend `RulesTests.swift` with 3 new cases using injectable `DateProvider`.
-
-### REP-107 — DraftEngine: explicit dismiss() state-transition tests
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: `DraftEngine.dismiss(threadID:tone:)` transitions a cached draft to `.idle` without triggering a new LLM call — used when the user presses ⌘. The path is only covered implicitly via eviction tests. Add explicit coverage: `testDismissAfterReadyTransitionsToIdle` — prime, wait for `.ready`, call `dismiss`, assert state is `.idle`; `testDismissOfUnknownEntryIsNoop` — call `dismiss` on an entry that was never primed, assert no crash and state is `.idle`; `testDismissDoesNotInvalidateOtherEntries` — prime two distinct `(threadID, tone)` pairs, dismiss one, assert the other is still `.ready`. Uses existing `StubLLMService`. No production code changes.
-- success_criteria:
-  - `testDismissAfterReadyTransitionsToIdle`
-  - `testDismissOfUnknownEntryIsNoop`
-  - `testDismissDoesNotInvalidateOtherEntries`
-  - Existing DraftEngineTests remain green
-- test_plan: Extend `DraftEngineTests.swift` with 3 new cases.
 
 ### REP-108 — ContactsResolver: flush cache on CNContactStoreDidChange notification
 - priority: P2
@@ -513,36 +397,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testSnoozedThreadHiddenFromList`, `testSnoozedThreadResurfacesAfterExpiry`, `testSnoozeSetPersistedAcrossInit`
 - test_plan: Extend `InboxViewModelTests.swift` with 3 new cases; use injected `Date` for deterministic timer tests.
 
-### REP-112 — PromptBuilder: tone system instruction distinctness test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
-- scope: `PromptBuilder.build(thread:tone:)` incorporates a tone-specific system instruction, but no test verifies that each `Tone` case produces a distinct, non-empty instruction. Add a test that iterates over all `Tone` enum cases, calls `build`, extracts the system instruction string, and asserts: (1) it is non-empty for every tone; (2) no two tones produce the same system instruction text (distinctness). This guards against accidental copy-paste in the tone→instruction mapping. No production code changes.
-- success_criteria:
-  - `testEachToneProducesNonEmptySystemInstruction` — all tones non-empty
-  - `testToneInstructionsAreDistinct` — no duplicate instruction strings across tones
-  - Existing PromptBuilderTests remain green
-- test_plan: Extend `PromptBuilderTests.swift` with 2 new cases; use the full `Tone` enum.
-
-### REP-113 — SmartRule: `or` predicate with 3+ branches evaluation
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-163000
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RulePredicate.or([...])` accepts an array of predicates. Existing tests only exercise 2-branch `or`. Add tests for 3-branch cases: `testOr3BranchesMiddleMatchReturnsTrue` — `or([nomatch, match, nomatch])` returns true; `testOr3BranchesNoneMatchReturnsFalse` — `or([nm, nm, nm])` returns false; `testOr3BranchesAllMatchReturnsTrue` — `or([m, m, m])` returns true; `testOrEmptyArrayReturnsFalse` — `or([])` returns false (document the defined behavior). Uses `senderIs` with controlled thread contexts. No production changes.
-- success_criteria:
-  - `testOr3BranchesMiddleMatchReturnsTrue`
-  - `testOr3BranchesNoneMatchReturnsFalse`
-  - `testOr3BranchesAllMatchReturnsTrue`
-  - `testOrEmptyArrayReturnsFalse`
-  - Existing RulesTests remain green
-- test_plan: Extend `RulesTests.swift` with 4 new cases; no production code changes.
-
 ### REP-114 — DraftEngine: LLM error path surfaces in DraftState
 - priority: P2
 - effort: S
@@ -573,11 +427,221 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing PreferencesTests remain green
 - test_plan: Extend `PreferencesTests.swift` with 3 new cases using suiteName-isolated UserDefaults.
 
+### REP-116 — SmartRule: `hasUnread` predicate for unread-thread matching
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: The predicate DSL currently has no way to match threads based on read state. Add `case hasUnread` to `RulePredicate`. `RuleContext` gains `unreadCount: Int` (from `MessageThread.unread`). `RuleEvaluator` returns true when `unreadCount > 0`. Codable round-trip must preserve the new case (discriminator `"hasUnread"`). Tests: a thread with `unreadCount = 3` matches; a thread with `unreadCount = 0` does not match; Codable round-trip produces the same predicate; `not(hasUnread)` returns true on read thread.
+- success_criteria:
+  - `RulePredicate.hasUnread` added and Codable
+  - `RuleEvaluator` evaluates `hasUnread` against `RuleContext.unreadCount`
+  - `testHasUnreadMatchesPositiveCount`, `testHasUnreadDoesNotMatchZeroCount`, `testHasUnreadCodableRoundTrip`, `testNotHasUnreadMatchesReadThread`
+  - Existing RulesTests remain green
+- test_plan: Extend `RulesTests.swift` with 4 new cases; extend `RuleContext` to include `unreadCount`.
+
+### REP-117 — IMessageChannel: graceful handling of deleted/unsupported messages (NULL text + NULL attributedBody)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: Messages with `message.text IS NULL AND message.attributedBody IS NULL` represent deleted messages, unsent drafts, or unsupported iMessage extensions (Handoff, Digital Touch). The current SQL `COALESCE(text, attributedBody)` returns NULL for these rows; `AttributedBodyDecoder` is not invoked. Confirm the decoder path returns an empty string or a placeholder (e.g. `"[deleted]"`) rather than crashing or producing nil that trips downstream displays. Add a fixture: an in-memory SQLite row with both columns NULL; assert the resulting `Message.body` is not nil (returns empty string or explicit placeholder); assert no crash on decode.
+- success_criteria:
+  - `testNullTextAndAttributedBodyYieldsNonNilBody` — both columns NULL produces empty/placeholder body without crash
+  - No regression in existing IMessageChannelTests
+- test_plan: Extend `IMessageChannelTests.swift` with 1 new in-memory SQLite case using the existing `dbPathOverride` fixture path.
+
+### REP-118 — DraftEngine: evict draft cache entry on thread archive
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: When `InboxViewModel.archive(thread:)` fires, the `DraftEngine` still holds a live draft entry for that threadID. On thread re-activation or next launch (if DraftStore lands via REP-066), a stale draft could surface. Wire a `DraftEngine.dismiss(threadID:tone:)` call (or a full `dismissAll(threadID:)` variant) from within `InboxViewModel.archive`. Test: prime a draft for thread A, archive thread A, assert `DraftEngine` state for thread A is `.idle`. No ui_sensitive — pure ViewModel logic.
+- success_criteria:
+  - `InboxViewModel.archive` calls `DraftEngine.dismiss` (or equivalent) for the archived thread
+  - `testArchiveClearsDraftCacheEntry` — draft state is `.idle` after archive
+  - Existing archive tests remain green
+- test_plan: Extend `InboxViewModelTests.swift` with 1 new case using mock `DraftEngine`.
+
+### REP-119 — SearchIndex: `search(query:limit:)` cap to prevent unbounded result sets
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: `SearchIndex.search(query:)` appends the FTS5 `ORDER BY rank` clause but has no `LIMIT`. For very common terms or short queries, this could return hundreds of thread IDs and fill the ⌘K palette with noise. Add a `limit: Int = 50` parameter passed directly into the SQL `LIMIT` clause. All existing callers use the default. Update the FTS5 query function signature. Tests: insert 100 threads all matching the same query, assert result count == 50; insert 5 matching threads, assert result count == 5 (limit doesn't over-truncate short result sets).
+- success_criteria:
+  - `search(query:channel:limit:)` signature with `limit` defaulting to 50
+  - SQL `LIMIT` clause added to the FTS5 query
+  - `testSearchResultCapAt50`, `testSearchResultBelowCapReturnsAll`
+  - Existing SearchIndex callers unaffected (use default)
+- test_plan: Extend `SearchIndexTests.swift` with 2 new cases using in-memory FTS5.
+
+### REP-120 — RulesStore: concurrent add stress test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore` uses atomic JSON writes via `Locked<T>`, but add/remove operations have never been stress-tested under concurrent callers (unlike Stats in REP-097). Spawn 30 concurrent `Task`s each calling `rulesStore.add(uniqueRule)` where each rule is unique to avoid the 100-rule cap rejection. After all tasks settle, assert the final rule count equals 30 (no rule silently dropped). This is a data-race detector test — run with `-sanitize=thread` in CI. Uses an isolated `RulesStore` (temp file URL) not the shared singleton.
+- success_criteria:
+  - `testConcurrentAddNeverLosesRules` — final count == number of add calls
+  - Test passes with Thread Sanitizer enabled
+  - No production code touched
+- test_plan: Single test function in `RulesTests.swift` using `withTaskGroup` and a temp-dir-backed `RulesStore`.
+
+### REP-121 — PromptBuilder: truncation preserves most-recent message with large payload
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder` truncates the message history to a 2000-char budget by dropping oldest messages first. Existing tests use short strings. Add a test with a thread containing 20 messages averaging 200 chars each (total ~4000 chars, well over budget). Assert: (1) the built prompt's concatenated message section is ≤ 2000 chars; (2) the most-recent message appears in the output despite truncation (oldest-first drop); (3) the thread name / system instruction still appears (truncation is message-body-only, not total prompt). No production code changes.
+- success_criteria:
+  - `testTruncationPreservesMostRecentMessage` — newest message is in output
+  - `testTruncatedPromptRespectsBudget` — message section ≤ 2000 chars
+  - `testTruncationDoesNotDropSystemInstruction` — system instruction present
+  - Existing PromptBuilderTests remain green
+- test_plan: Extend `PromptBuilderTests.swift` with 3 new cases using 20-message fixtures.
+
+### REP-122 — IMessageChannel: date autodetect boundary test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `IMessageChannel.secondsSinceReferenceDate(appleDate:)` autodetects whether the Apple date is in nanoseconds (value ≥ 1e9) or seconds (value < 1e9). The boundary and edge cases (value exactly at 1e9, value = 0, very large nanosecond values) are not tested. Add explicit tests: `testAppleDateAsSecondsForSmallValue` — value 999_999_999 returns seconds-based Date (≈ 2032 AD); `testAppleDateAsNanosecondsForLargeValue` — value 1_000_000_001 returns nanosecond-based Date (≈ 2001 + 1s); `testAppleDateZeroReturnsPastDate` — value 0 returns reference epoch without crash (2001-01-01). Tests the detection logic without requiring a real chat.db.
+- success_criteria:
+  - `testAppleDateAsSecondsForSmallValue`, `testAppleDateAsNanosecondsForLargeValue`, `testAppleDateZeroReturnsPastDate`
+  - No production code changes
+- test_plan: Extend `IMessageChannelTests.swift` calling the static `secondsSinceReferenceDate` helper directly.
+
+### REP-123 — Stats: rulesMatchedCount ≤ rulesEvaluated invariant test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.rulesMatchedCount` should never exceed `Stats.rulesEvaluated`. This invariant is enforced by convention (increment evaluated first, then matched only if rules fire) but has no test. Simulate a rules evaluation pass: manually call `Stats.incrementRulesEvaluated()` 10 times and `Stats.incrementRulesMatched()` 3 times (representing 3 of 10 threads matching), then assert `stats.rulesMatchedCount <= stats.rulesEvaluated`. Also add the inverse: assert that after zero matches, `rulesMatchedCount == 0`. Guards against accidental counter swap or double-increment.
+- success_criteria:
+  - `testRulesMatchedNeverExceedsEvaluated` — matched ≤ evaluated after mixed evaluation
+  - `testZeroMatchesLeavesMatchedCountAtZero` — zero matches, matched stays 0
+  - No production code touched
+- test_plan: Extend `StatsTests.swift` with 2 new cases using an isolated `Stats` instance (nil URL).
+
+### REP-124 — InboxViewModel: pinned threads sort above unpinned threads after sync
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: AGENTS.md and prior commits note that pinned threads float to the top of the thread list. The `InboxViewModelTests` suite does not verify that a pinned thread outranks an unpinned thread that has a more recent `lastMessageDate`. Add a test: mock channel returns 2 threads — thread A (older date, `isPinned = true`) and thread B (newer date, `isPinned = false`). After sync, assert `viewModel.threads.first?.id == threadA.id`. This catches any regression where the sort order is changed to pure-recency without the pin float.
+- success_criteria:
+  - `testPinnedThreadSortsAboveNewerUnpinnedThread` passes
+  - No production code changes expected
+- test_plan: Extend `InboxViewModelTests.swift` with 1 new case using mock channel.
+
+### REP-125 — SearchIndex: upsert replaces preview text for existing thread (no ghost terms)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: The incremental FTS5 upsert path (REP-015) updates a thread's indexed content when new messages arrive. If a thread's preview text changes, the old text must no longer be searchable and the new text should be. This round-trip is not explicitly tested. Add a test: insert thread with preview "morning coffee", upsert same threadID with preview "evening tea", search "morning" returns zero results, search "evening" returns the thread. Verifies that FTS5 DELETE + INSERT in the upsert path doesn't leave ghost terms from the old content.
+- success_criteria:
+  - `testUpsertReplacesOldPreviewTerms` — old term no longer searchable after upsert
+  - `testUpsertMakesNewPreviewTermsSearchable` — new term is searchable after upsert
+  - No production code changes
+- test_plan: Extend `SearchIndexTests.swift` with 2 new cases using in-memory FTS5.
+
 ---
 
 ## Done / archived
 
 *(Planner moves finished items here each day. Worker never modifies this section.)*
+
+### REP-074 — ContactsResolver: per-handle cache TTL (30 min) for post-launch contact changes
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-150000
+
+### REP-095 — IMessageChannel: per-thread message-history cap
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-150000
+
+### REP-096 — InboxViewModel: send() success/failure state transition tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-150000
+
+### REP-097 — Stats: concurrent increment stress test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
+
+### REP-100 — SmartRule: `not` predicate evaluation + double-negation tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
+
+### REP-102 — SearchIndex: empty-query returns empty list
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-150000
+
+### REP-106 — SmartRule: `messageAgeOlderThan(hours:)` predicate
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
+
+### REP-107 — DraftEngine: explicit dismiss() state-transition tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
+
+### REP-112 — PromptBuilder: tone system instruction distinctness test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
+
+### REP-113 — SmartRule: `or` predicate with 3+ branches evaluation
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-163000
 
 ### REP-041 — SearchIndex: persist FTS5 index to disk between launches
 - priority: P2
