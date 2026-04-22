@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                211 tests
+Tests/ReplyAITests/                218 tests
 ```
 
 ## Architecture patterns
@@ -110,10 +110,11 @@ Tests/ReplyAITests/                211 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `ec9e723` SearchIndex.delete + senderIs case-insensitive tests + cache_has_attachments projection (REP-063, REP-065, REP-068, worker-2026-04-22-054016)
-- `ea37669` DraftEngine idle-entry eviction + Stats weekly aggregate log + SearchIndex concurrency stress test (REP-034, REP-056, REP-057, worker-2026-04-22-042232)
+- `90e21f6` SQLITE_BUSY retry, isRead/deliveredAt fields, BM25 ranking tests (REP-029, REP-036, REP-055, REP-033, worker-2026-04-22-055942)
+- `ec9e723` SearchIndex.delete, senderIs case-insensitive, cache_has_attachments projection (REP-063, REP-065, REP-068, worker-2026-04-22-054016)
+- `ea37669` DraftEngine eviction, Stats weekly log, SearchIndex concurrency test (REP-034, REP-056, REP-057, worker-2026-04-22-042232)
 - `8988959` ChatDBWatcher: FSEvents error recovery with restart backoff (REP-052, worker-2026-04-22-041448)
-- `a7204d2` `Locked<T>`: extract shared thread-safe value box (REP-050, worker-2026-04-22-040356)
+- `a7204d2` Locked<T>: extract shared thread-safe value box (REP-050, worker-2026-04-22-040356)
 - `9810196` NotificationCoordinator: UNNotification inline reply + category registration (REP-028, worker-2026-04-22-032627)
 - `881d8f0` SearchIndex: explicit AND semantics for multi-word queries (REP-027, worker-2026-04-22-020653)
 - `9717756` extract PromptBuilder + test coverage (REP-026, worker-2026-04-22-055650)
@@ -154,11 +155,11 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-211 XCTest cases, all green.
+218 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
-- **UNNotification inline reply**. `NotificationCoordinator` registered (`UNTextInputNotificationAction`, "REPLY" category) and wired to `InboxViewModel.pendingNotificationReply` (REP-028, commit `9810196`). Reply consumption in `InboxViewModel` pending (REP-063).
+- **UNNotification inline reply**. `NotificationCoordinator` registered (`UNTextInputNotificationAction`, "REPLY" category) and wired to `InboxViewModel.pendingNotificationReply` (REP-028, commit `9810196`). Reply consumption in `InboxViewModel` pending (REP-072).
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.

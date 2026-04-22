@@ -1,0 +1,100 @@
+# Planner Run Log — 2026-04-22 run4
+
+**Status:** OK
+**Halt conditions:** none triggered
+**Open task count:** 43 (target: 30–50 ✓)
+**Archived this run:** 12
+
+---
+
+## Halt-condition check
+
+| Condition | Result |
+|-----------|--------|
+| `swift test` broken / can't compile | 218 tests, 0 failures — OK |
+| Last commit on main is a revert | `90e21f6` SQLITE_BUSY retry — not a revert — OK |
+| Repo size jumped >50% in 7 days | No binary check-ins detected — OK |
+| ≥3 P0 open tasks | 0 P0 tasks — OK |
+| Open count <10 (queue starvation) | 43 — OK |
+| Open count >60 (queue bloat) | 43 — OK |
+
+---
+
+## Archived this run (moved from P1/P2 sections to Done/archived)
+
+All confirmed shipped via `git log`:
+
+| REP | Commit | Worker run |
+|-----|--------|------------|
+| REP-050 (Locked<T> extraction) | a7204d2 | worker-2026-04-22-040356 |
+| REP-052 (ChatDBWatcher FSEvents recovery) | 8988959 | worker-2026-04-22-041448 |
+| REP-034 (DraftEngine eviction) | ea37669 | worker-2026-04-22-042232 |
+| REP-056 (Stats weekly log) | ea37669 | worker-2026-04-22-042232 |
+| REP-057 (SearchIndex concurrency stress) | ea37669 | worker-2026-04-22-042232 |
+| REP-063 (SearchIndex.delete) | ec9e723 | worker-2026-04-22-054016 |
+| REP-065 (senderIs case-insensitive) | ec9e723 | worker-2026-04-22-054016 |
+| REP-068 (cache_has_attachments projection) | ec9e723 | worker-2026-04-22-054016 |
+| REP-029 (SQLITE_BUSY retry) | 90e21f6 | worker-2026-04-22-055942 |
+| REP-033 (BM25 ranking tests) | 90e21f6 | worker-2026-04-22-055942 |
+| REP-036 (Message.isRead) | 90e21f6 | worker-2026-04-22-055942 |
+| REP-055 (Message.deliveredAt) | 90e21f6 | worker-2026-04-22-055942 |
+
+---
+
+## Stalls re-opened
+
+None. All previously claimed tasks shipped cleanly.
+
+---
+
+## New tasks added (REP-072–081)
+
+Worker velocity since last planner run: 12 tasks shipped across 5 worker commits. Open count was 33; after archiving (those were already marked done in-place), effectively 33 open. Added 10 tasks to bring total to 43.
+
+| ID | Priority | Effort | ui_sensitive | Title |
+|----|----------|--------|-------------|-------|
+| REP-072 | P1 | M | false | InboxViewModel: consume pending UNNotification inline reply |
+| REP-073 | P2 | M | false | PromptBuilder: token-count guard to truncate long thread contexts |
+| REP-074 | P2 | S | false | ContactsResolver: per-handle cache TTL (30 min) |
+| REP-075 | P2 | M | false | AttributedBodyDecoder: nested NSMutableAttributedString handling |
+| REP-076 | P2 | S | false | InboxViewModel: mark thread as read on selection |
+| REP-077 | P2 | S | false | IMessageChannel: SQLITE_NOTADB graceful error for corrupted chat.db |
+| REP-078 | P2 | S | false | NotificationCoordinator: test coverage for handleNotificationResponse |
+| REP-079 | P2 | M | false | SmartRule: timeOfDay(startHour:endHour:) predicate |
+| REP-080 | P2 | S | false | SearchIndex: channel TEXT column in FTS5 for filtered search |
+| REP-081 | P2 | S | false | Preferences: pref.rules.autoApplyOnSync toggle |
+
+**Rationale by category:**
+- **60% backend/logic/tests:** REP-072 (P1 notification path), REP-073 (PromptBuilder guard), REP-074 (ContactsResolver TTL), REP-075 (typedstream nested payloads), REP-077 (SQLITE error), REP-078 (notification tests), REP-079 (timeOfDay predicate), REP-080 (FTS5 channel column), REP-081 (Preferences) — 9/10 tasks
+- **10% docs/tooling:** 0 explicit this run (AGENTS.md update done inline by planner)
+- **REP-072 (P1):** AGENTS.md explicitly calls out the notification reply consumption path as pending after REP-028. This is the most impactful unaddressed stub.
+- **REP-075:** AGENTS.md priority queue item #4 ("Better AttributedBodyDecoder") specifically notes nested `NSMutableAttributedString` is missed by the current scanner. High user-impact (link previews, iOS 16+ features).
+
+---
+
+## AGENTS.md updates (direct planner write)
+
+- Test count updated: 189 → 218 in repo layout + testing expectations sections
+- Prepended 5 new commits to "What's done" list: `90e21f6`, `ec9e723`, `ea37669`, `8988959`, `a7204d2`
+- Fixed UNNotification stub reference: "(REP-063)" → "(REP-072)" — REP-063 was SearchIndex.delete (now done); the pending notification reply consumption is REP-072
+
+---
+
+## wip/ branch status
+
+8 open wip/ branches, all dated 2026-04-21 (1 day old). Budget cap is 3. These are all the same "quality review" cluster (REP-016/017/048 cover all 8). No new alerts triggered — all within 7-day window. Human-review items REP-016/017/048 remain P1. The reviewer should flag if still unmerged by 2026-04-28.
+
+---
+
+## Open task breakdown (post-run)
+
+- **P0:** 0 (none open)
+- **P1:** 4 (REP-016 human, REP-017 human, REP-048 human, REP-072 worker-eligible)
+- **P2:** 39 (mix of worker-eligible and ui_sensitive/human items)
+- **ui_sensitive (go to wip/ branches):** REP-009, REP-010, REP-043, REP-044, REP-045, REP-046, REP-047 — 7 tasks
+- **human-only:** REP-016, REP-017, REP-048, REP-062 — 4 tasks
+- **worker-auto-merge eligible:** 32 tasks
+
+---
+
+*Generated by planner agent — claude-sonnet-4-6*
