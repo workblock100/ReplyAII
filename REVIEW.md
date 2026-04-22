@@ -6,6 +6,59 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-22 16:03 – 2026-04-22 22:10 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Strongest window of the day. **8 substantive worker commits closing 25 REP tickets** (REP-032, -035, -037, -041, -042, -053, -054, -061, -073, -074, -080, -084, -085, -092, -093, -094, -095, -096, -097, -100, -102, -106, -107, -112, -113), **8 claim chores**, **3 fixup commits** (worker-log hash backfills + one AGENTS.md *(pending)* replacement), and **3 planner refreshes** (run7 → run9). Test suite grew **254 → 320 (+66 tests, confirmed by local `swift test` → 320 Executed, 0 failures in 8.5s)**. Worker LOC split: **+392/-83 source, +1,098/-23 tests** — a **~2.8:1 test-to-source add ratio**. Zero banned-action violations: no `#Preview`, no sandbox flip, no `Info.plist` / `Package.swift` / `project.yml` / `scripts/*` / `design_handoff_replyai/` touches, no history rewrites. Commit messages explain *why* consistently (ContactsResolver TTL 30 min rationale in `9879312`, the dual-interception critique behind the `isDryRun → executeHook` refactor in `eaa0b39`, the cold-start motivation for on-disk FTS5 in `7196e9d`).
+
+### Shipped this window (substantive worker commits, newest first)
+
+- **REP-097 / REP-100 / REP-106 / REP-107 / REP-112 / REP-113** (`80035e1`) — `SmartRule.messageAgeOlderThan(hours:)` predicate plus `lastMessageDate` on `RuleContext` and `currentDate` injection into `matches()` so age tests are clock-independent. Remaining five items test-only: De-Morgan / double-negation coverage for `not`, `or([])` + 3+-branch cases, 200-concurrent-caller `Stats` increment stress test proving `Locked<T>` loses no updates, `DraftEngine.dismiss()` idle/noop/isolation transitions, and `PromptBuilder` non-empty + distinct system-instruction assertions per tone. **304 → 320 tests**.
+- **REP-074 / REP-095 / REP-096 / REP-102** (`9879312`) — `ContactsResolver` injectable `ttl` (default 30 min) so stale post-launch contact names self-invalidate; tests use `ttl=0` to force re-query without a clock. `messages(forThreadID:)` convenience overload with default `limit=20` codifies the "don't load hundreds on sync" invariant. First test coverage for `InboxViewModel` send success/failure fork (toast naming on success; error surfaced + `userEdits` preserved on failure). Two tests pin down the empty-query `[]` contract in `SearchIndex`. **294 → 304 tests**.
+- **REP-041 / REP-073** (`7196e9d`) — On-disk FTS5 database under `~/Library/Application Support/ReplyAI/search.db` so existing rows are searchable before cold-start sync completes. `SearchIndex(databaseURL:)` initializer (nil = in-memory for tests, URL = file-backed for prod); `SearchIndex.productionDatabaseURL()` helper mirrors the `RulesStore`/`Stats` pattern. `PromptBuilder.truncate` promoted private→internal with injectable budget; two new invariant tests: short-history passthrough + most-recent-message retention on truncate. **294 tests, 0 failures**.
+- **REP-035 / REP-042** (`a5bd7a4`) — `RulesStore.export(to:)` atomic JSON write and `import(from:)` with UUID-keyed merge (update existing, append new, skip malformed — same resilience policy as REP-024). 4 new XCTests: round-trip, merge, in-place update, malformed-entry skip. AGENTS.md "What's done" synced.
+- **REP-053 / REP-061 / REP-084 / REP-093 / REP-094** (`eaa0b39`) — Dropped `IMessageSender.isDryRun` in favor of a no-op `dryRunHook()` via the existing `executeHook` seam (one interception point instead of two). `rulesMatchedCount` counter added at all three `RuleEvaluator.matching` call sites in `InboxViewModel`. `RulesStore` load/save switched off `.standard` onto the injected `UserDefaults` to enable per-test isolation (prereq for archive persistence coverage). `testBothNullProducesEmptyMessage` verifies the SQL-level `text IS NOT NULL OR attributedBody IS NOT NULL` filter and the message-preview fallback. `testFuzzRandomBlobsNeverCrash` pushes 10k random 0–4096-byte blobs through `AttributedBodyDecoder.extractText`, asserting no trap + valid UTF-8 on any returned `String`. **→ 278 tests**.
+- **REP-037 / REP-054** (`fa4d009`) — `DraftEngine` invalidates a stale in-flight draft when `ChatDBWatcher` refires for the same thread (prior behavior leaked a draft generated against out-of-date context). `ContactsResolver.batchResolve([handle])` replaces per-handle `CNContactStore` lookups on initial sync.
+- **REP-032** (`038826e`) — Per-tone draft counters + acceptance-rate field on `Stats`, incremented from the DraftEngine acceptance path and surfaced via the existing `Stats` summary dict.
+- **REP-080 / REP-085 / REP-092** (`6a629a2`) — `SearchIndex` FTS5 channel-column filter so per-channel searches don't pay for cross-channel token scans; FTS5 query sanitizer (escapes the three syntactic metacharacters before forwarding user input to `sqlite3_prepare_v2`); prefix-match (`term*`) test coverage.
+
+### Test coverage delta
+
+- **+66 tests (254 → 320).** Confirmed by `swift test`: `Executed 320 tests, with 0 failures (0 unexpected) in 8.487 (8.504) seconds`.
+- Source: +392/-83 lines across worker commits. Tests: +1,098/-23 lines. Add ratio **~2.8:1** (tests vs. source).
+- Test files expanded: `SearchIndexTests` (+211), `RulesTests` (+234), `IMessageChannelTests` (+134), `InboxViewModelTests` (+127), `ContactsResolverTests` (+100), `StatsTests` (+112), `DraftEngineTests` (+102), `PromptBuilderTests` (+42), `AttributedBodyDecoderTests` (+25), `IMessageSenderTests` (+11/-23).
+- The `IMessageSenderTests` 11/23 delta is a **legitimate refactor**, not a test deletion: `testDryRunReturnsSuccessWithoutScript` + `testDryRunOffInvokesScript` were rewritten to `testDryRunHookReturnsSuccessWithoutScript` + `testCustomHookIsInvokedOnSend` as part of REP-093 removing the `isDryRun` dual-interception surface. Coverage equivalent, cases simpler.
+
+### Concerns
+
+- **One planner→worker timing ordering quirk.** `fa4d009` (REP-037/054 implementation) is author-timestamped 14:17 EDT, *earlier* than the planner's `b363d08` (14:33) but pushed after `eaa0b39`. Not a correctness issue — author-timestamps from local clocks just aren't monotonic across agents. Worth a note that `git log --since` filtering leans on author-time, so a worker commit that lands just outside a 6h window may be attributed to the wrong review boundary. Low-impact; no action needed this window.
+- **`AGENTS.md` narrative test-count vs. header test-count are both 320, but in *two separate places*.** Line 97 (repo-layout fence) and line 226 (Testing expectations) each hard-code the number. Keep both in sync or collapse to a single authoritative line — minor, not rating-affecting. (Not touched this review; both are current.)
+- **Two fixup commits for log-hash backfill.** `7030acb` + `4ce30fd` + `2e4a9f5` are the worker's standard "commit log refers to myself, need to rewrite hash after push" chore — protocol-compliant, but three extras in main history per window is a smell. Planner could consider whether the worker log's "commit hash" field truly needs to be self-referential in the first commit, or if a follow-up hash could be written in a separate post-push log file instead.
+
+### Suggestions for next planner cycle
+
+1. **Archive run10 sweep of the 25 closed tickets.** REP-032, -035, -037, -041, -042, -053, -054, -061, -073, -074, -080, -084, -085, -092, -093, -094, -095, -096, -097, -100, -102, -106, -107, -112, -113. Confirm every one moved from P1/P2 body → Done in BACKLOG before the next planner refresh.
+2. **Consider a log-hash protocol tweak.** Either defer the worker log's `commit:` field to a companion `.automation/logs/worker-<id>-hash.txt` written after push, or accept the fixup commits and note the pattern in `AUTOMATION.md` so future reviewers don't flag them. Current three-commit fixup pattern is cosmetic noise in history.
+3. **Queue balance.** Run9 landed 11 new tasks and the worker drained 25 — net -14 tickets. Planner should sustain this draft-rate rather than over-bursting P2 ideation; the 30-task floor is the right guardrail, not a target.
+4. **Consolidate `AGENTS.md` test count to one line.** Currently duplicated at lines 97 and 226. Reviewer-edit-only. Small mechanical cleanup for next review.
+5. **Exercise the new `SearchIndex` disk-persistence path in an integration smoke test.** `7196e9d` added the file-backed store but only the in-memory path runs under `swift test`. A write-open-reopen-read round-trip (dropping a `URL(fileURLWithPath:)` temp file) would catch regressions in `productionDatabaseURL()` layout / migration if we ever change schema. Could ship as a single-commit S-effort task.
+
+### Rolling-window pattern
+
+Last six windows (oldest → newest):
+
+- `review-2026-04-21.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-21-addendum.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-0403.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1003.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1603.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-2210.md` (this) — ⭐⭐⭐⭐⭐
+
+Zero consecutive sub-par windows. STOP AUTO-MERGE trigger remains disarmed.
+
+---
+
 ## Window 2026-04-22 10:03 – 2026-04-22 16:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
