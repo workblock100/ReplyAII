@@ -179,8 +179,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-055942
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `sqlite3_open` on `chat.db` can return `SQLITE_BUSY` when macOS Messages holds a write lock (common during iCloud sync). Currently we surface a generic error. Add a retry: on `SQLITE_BUSY`, sleep 100ms and retry once before failing. Open with `SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX` flags to prevent write-lock escalation. Test by intercepting the `sqlite3_open` call via a `ChatDBOpener` injectable closure that returns `SQLITE_BUSY` on the first call and `SQLITE_OK` on the second. Complements REP-051 (error code preservation makes SQLITE_BUSY detection cleaner).
 - success_criteria:
@@ -238,8 +238,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-055942
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `ORDER BY rank` is already present in the FTS5 search SQL (shipped in the original FTS5 commit). The ranking tests were never written. Add them now: insert threads with varying match quality and verify the most-relevant match ranks first. No source changes needed — tests only.
 - success_criteria:
@@ -282,8 +282,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-055942
 - files_to_touch: `Sources/ReplyAI/Models/Message.swift` (or `MessageThread.swift`), `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: The SQL query already reads `message.is_read`, but it's not surfaced on the `Message` model. Add `isRead: Bool` to `Message` and project it from the query result. Use it to compute an accurate `MessageThread.unread` count rather than the heuristic currently in place. Test with in-memory SQLite fixtures containing a mix of read and unread rows; verify the thread's `unread` count matches exactly.
 - success_criteria:
@@ -467,8 +467,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-055942
 - files_to_touch: `Sources/ReplyAI/Models/Message.swift`, `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: The `message` table has a `date_delivered` column (same Apple reference-date epoch as `date`). Add `deliveredAt: Date?` to the `Message` model. Project it from the SQL query using the same `secondsSinceReferenceDate` conversion already used for `date`. `deliveredAt` is nil for messages with `date_delivered = 0`. Existing `MessageBubble` can use this field in a future UI pass for a "Delivered" tick mark. Tests: a row with `date_delivered > 0` produces a non-nil `deliveredAt`; a row with `date_delivered = 0` produces nil.
 - success_criteria:
