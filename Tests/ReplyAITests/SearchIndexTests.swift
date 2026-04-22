@@ -557,4 +557,34 @@ final class SearchIndexTests: XCTestCase {
         let hits = await index.search("memory")
         XCTAssertEqual(hits.count, 1, "in-memory index must still work after REP-041 refactor")
     }
+
+    // MARK: - REP-102: empty query returns empty list
+
+    func testEmptyQueryReturnsEmptyList() async {
+        let index = SearchIndex(databaseURL: nil)
+        let t1 = MessageThread(id: "eq1", channel: .imessage, name: "Alpha",
+                               avatar: "A", preview: "", time: "", unread: 0)
+        let t2 = MessageThread(id: "eq2", channel: .imessage, name: "Beta",
+                               avatar: "B", preview: "", time: "", unread: 0)
+        let t3 = MessageThread(id: "eq3", channel: .imessage, name: "Gamma",
+                               avatar: "G", preview: "", time: "", unread: 0)
+        await index.upsert(thread: t1, messages: [Message(from: .them, text: "hello world", time: "t")])
+        await index.upsert(thread: t2, messages: [Message(from: .them, text: "foo bar", time: "t")])
+        await index.upsert(thread: t3, messages: [Message(from: .them, text: "baz qux", time: "t")])
+
+        let results = await index.search("")
+        XCTAssertEqual(results.count, 0,
+                       "empty query must return [] rather than all rows or a SQLite error")
+    }
+
+    func testWhitespaceOnlyQueryReturnsEmptyList() async {
+        let index = SearchIndex(databaseURL: nil)
+        let t = MessageThread(id: "ws1", channel: .imessage, name: "WhiteSpace",
+                              avatar: "W", preview: "", time: "", unread: 0)
+        await index.upsert(thread: t, messages: [Message(from: .them, text: "some content", time: "t")])
+
+        let results = await index.search("   ")
+        XCTAssertEqual(results.count, 0,
+                       "whitespace-only query must return [] (trimmed to empty)")
+    }
 }

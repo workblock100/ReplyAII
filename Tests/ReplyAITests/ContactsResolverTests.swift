@@ -224,6 +224,50 @@ final class ContactsResolverTests: XCTestCase {
         XCTAssertEqual(fake.lookupCallCount, 1,
                        "all three variants should collapse to one store lookup")
     }
+
+    // MARK: - REP-074: per-handle cache TTL
+
+    func testFreshCacheHitSkipsStore() {
+        // With a long TTL (1 hour), a warm entry should never re-query the store.
+        let fake = FakeContactStore()
+        fake.names["4155559001"] = "Grace"
+        let resolver = ContactsResolver(store: fake, ttl: 3600)
+        resolver.overrideAccessForTesting(.granted)
+
+        _ = resolver.name(for: "+14155559001")  // populates cache
+        let countAfterWarm = fake.lookupCallCount
+
+        _ = resolver.name(for: "+14155559001")  // should hit fresh cache
+        _ = resolver.name(for: "+14155559001")
+        XCTAssertEqual(fake.lookupCallCount, countAfterWarm,
+                       "fresh cache entry must not trigger a store re-query")
+    }
+
+    func testStaleEntryTriggersFetch() {
+        // With a zero TTL, every lookup is treated as stale and re-queries the store.
+        let fake = FakeContactStore()
+        fake.names["4155559002"] = "Hank"
+        let resolver = ContactsResolver(store: fake, ttl: 0)
+        resolver.overrideAccessForTesting(.granted)
+
+        _ = resolver.name(for: "+14155559002")
+        _ = resolver.name(for: "+14155559002")
+        XCTAssertEqual(fake.lookupCallCount, 2,
+                       "ttl=0 must re-query the store on every call")
+    }
+
+    func testZeroTTLAlwaysFetches() {
+        // Variant of the above using resolveAll to exercise the batch path.
+        let fake = FakeContactStore()
+        fake.names["4155559003"] = "Iris"
+        let resolver = ContactsResolver(store: fake, ttl: 0)
+        resolver.overrideAccessForTesting(.granted)
+
+        _ = resolver.resolveAll(handles: ["+14155559003"])
+        _ = resolver.resolveAll(handles: ["+14155559003"])
+        XCTAssertEqual(fake.lookupCallCount, 2,
+                       "resolveAll with ttl=0 must bypass cache on every call")
+    }
 }
 
 // MARK: - Test double

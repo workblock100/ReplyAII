@@ -202,7 +202,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-150000
 - files_to_touch: `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: The in-memory cache in `ContactsResolver` is never invalidated during an app session. If the user adds a new contact after launch, that handle remains unresolved (displayed as the raw phone number) until the next relaunch. Add a `cachedAt: Date` field alongside each cached resolved name (stored in the existing `Locked<T>` dict). On a cache hit, check if the entry is older than `ttl` (default 30 minutes); if so, treat as a miss and re-query `ContactsStoring`. Expose `ttl: TimeInterval` as an injectable parameter (default `1800`). Tests: a fresh entry is returned from cache without re-query; an entry older than TTL triggers a re-query; TTL=0 always re-queries.
@@ -271,7 +271,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-150000
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `IMessageChannel.recentThreads` fetches all messages for each thread with no upper limit. For threads with hundreds of messages, this burns unnecessary memory and slows the initial sync. Add a `messageLimit: Int = 20` parameter (injectable for tests) to the inner SQL query (`ORDER BY message.date DESC LIMIT :limit`). Return the most recent N messages per thread. Tests: a thread with >20 messages in the fixture returns exactly 20; a thread with <20 messages returns all of them; the returned messages are the most recent (sorted DESC, then reversed to chronological order for display).
@@ -285,7 +285,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-150000
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `InboxViewModel.send(thread:)` calls `IMessageSender.send(text:toChatGUID:)` and on success clears the draft via `DraftEngine`. Two critical state transitions are untested: (1) on success, the composer draft is cleared (DraftState → .idle); (2) on failure, the draft text is preserved so the user can retry. Use the injectable `executeHook` on `IMessageSender` (REP-093 pattern) and the mock DraftEngine from existing tests. Tests: `testSendSuccessClearsDraft`, `testSendFailurePreservesDraft`.
@@ -370,7 +370,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-150000
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex.search(query:)` behavior for empty string is unspecified and untested. An empty FTS5 query either returns all rows or raises a SQLite error depending on dialect. Add a test: insert 3 threads, call `search(query: "")`, assert result is empty (not all-rows, not a crash). If the current implementation returns all rows on empty query, update `SearchIndex.search` to guard against it with an early return. The test drives the correct contract.

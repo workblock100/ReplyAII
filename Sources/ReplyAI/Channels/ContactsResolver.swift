@@ -35,20 +35,33 @@ final class ContactsResolver: @unchecked Sendable {
         case denied
     }
 
+    private struct CacheEntry {
+        let name: String
+        let cachedAt: Date
+    }
+
     private struct ResolverState {
-        var cache: [String: String] = [:]
+        var cache: [String: CacheEntry] = [:]
         var access: Access = .unknown
     }
 
     private let store: ContactsStoring
+    /// How long a cached name remains fresh before the store is re-queried.
+    /// Default 1800 s (30 min). Zero means always re-query (useful in tests).
+    let ttl: TimeInterval
     private let locked = Locked<ResolverState>(ResolverState())
 
-    init(store: ContactsStoring? = nil) {
+    init(store: ContactsStoring? = nil, ttl: TimeInterval = 1800) {
         self.store = store ?? CNContactStoreBackedStoring()
+        self.ttl = ttl
     }
 
     var access: Access {
         locked.withLock { $0.access }
+    }
+
+    private func isFresh(_ entry: CacheEntry, now: Date) -> Bool {
+        ttl > 0 && now.timeIntervalSince(entry.cachedAt) < ttl
     }
 
     /// Kick off the permission prompt if we haven't asked yet. Safe to
@@ -64,20 +77,20 @@ final class ContactsResolver: @unchecked Sendable {
     }
 
     /// Resolves a batch of handles in exactly two lock acquisitions regardless
-    /// of inbox size. Cache hits are resolved inside the first lock; store
-    /// queries for misses happen outside any lock; the second acquisition
-    /// writes the results back. Equivalent to calling `name(for:)` on each
-    /// handle serially, but faster for large batches.
+    /// of inbox size. Cache hits (that are still within TTL) are resolved inside
+    /// the first lock; store queries for misses/stale entries happen outside any
+    /// lock; the second acquisition writes the results back.
     func resolveAll(handles: [String]) -> [String: String] {
+        let now = Date()
         let keys = handles.map { (original: $0, normalized: normalizedHandle($0)) }
 
-        // Pass 1: collect cache hits and identify misses — one lock acquisition.
+        // Pass 1: collect fresh cache hits and identify misses/stale entries.
         var result: [String: String] = [:]
         var missKeys: [(original: String, normalized: String)] = []
         let gate: Access = locked.withLock { state in
             for pair in keys {
-                if let cached = state.cache[pair.normalized] {
-                    if !cached.isEmpty { result[pair.original] = cached }
+                if let entry = state.cache[pair.normalized], isFresh(entry, now: now) {
+                    if !entry.name.isEmpty { result[pair.original] = entry.name }
                 } else {
                     missKeys.append(pair)
                 }
@@ -96,9 +109,10 @@ final class ContactsResolver: @unchecked Sendable {
 
         // Pass 3: write miss results into the cache — second lock acquisition.
         if !storeResults.isEmpty {
+            let writeAt = Date()
             locked.withLock { state in
                 for item in storeResults {
-                    state.cache[item.normalized] = item.name
+                    state.cache[item.normalized] = CacheEntry(name: item.name, cachedAt: writeAt)
                 }
             }
         }
@@ -110,15 +124,17 @@ final class ContactsResolver: @unchecked Sendable {
     /// don't have a match (or don't have permission). Callable from any
     /// thread.
     func name(for handle: String) -> String? {
+        let now = Date()
         let key = normalizedHandle(handle)
-        let (hit, gate) = locked.withLock { state -> (String?, Access) in
+        let (entry, gate) = locked.withLock { state -> (CacheEntry?, Access) in
             (state.cache[key], state.access)
         }
-        if let hit { return hit.isEmpty ? nil : hit }
+        if let entry, isFresh(entry, now: now) { return entry.name.isEmpty ? nil : entry.name }
         if gate != .granted { return nil }
 
         let resolved = store.lookup(handle: key) ?? ""
-        locked.withLock { $0.cache[key] = resolved }
+        let writeAt = Date()
+        locked.withLock { $0.cache[key] = CacheEntry(name: resolved, cachedAt: writeAt) }
         return resolved.isEmpty ? nil : resolved
     }
 

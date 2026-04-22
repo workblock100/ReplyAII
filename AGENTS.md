@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                294 tests
+Tests/ReplyAITests/                304 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,7 @@ Tests/ReplyAITests/                294 tests
 
 Commits (newest first; run `git log` for detail):
 
+- *(pending)* ContactsResolver TTL, IMessageChannel message cap, send-state tests, SearchIndex empty-query test (REP-074, REP-095, REP-096, REP-102, worker-2026-04-22-150000)
 - `7196e9d` SearchIndex disk persistence + PromptBuilder truncate invariants (REP-041, REP-073, worker-2026-04-22-144200)
 - `a5bd7a4` RulesStore: export/import rules via JSON file URL; AGENTS.md sync (REP-035, REP-042, worker-2026-04-22-142600)
 - `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-130300)
@@ -166,7 +167,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-294 XCTest cases, all green.
+304 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
@@ -221,7 +222,7 @@ Pick in order. Each has a concrete starting point.
 
 ## Testing expectations
 
-- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (294 as of worker-2026-04-22-144200; kept current in the repo layout header above). `swift test` from repo root.
+- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (304 as of worker-2026-04-22-150000; kept current in the repo layout header above). `swift test` from repo root.
 - **Pure Swift (models, evaluators, parsers) gets unit tests.** View code gets ad-hoc visual checking.
 - **Async tests**: use the `waitUntil(timeout:_:)` helper pattern in `DraftEngineTests` rather than arbitrary sleeps.
 - **Never add `#Preview` blocks** — they break the SwiftPM path.

@@ -817,3 +817,101 @@ final class IMessageChannelDeliveredAtTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Per-thread message-history cap (REP-095)
+
+final class IMessageChannelMessageLimitTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-MsgLimit-\(UUID().uuidString).db")
+        try buildSchema()
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    /// A thread with 25 messages should return exactly 20 when limit=20.
+    func testMessageLimitCapsResults() async throws {
+        try insertChatAndMessages(identifier: "+15550300", count: 25)
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgs = try await channel.messages(forThreadID: "+15550300", limit: 20)
+        XCTAssertEqual(msgs.count, 20, "limit=20 must cap results even when 25 rows exist")
+    }
+
+    /// A thread with fewer messages than the limit should return all of them.
+    func testMessageLimitDoesNotDropShortThreads() async throws {
+        try insertChatAndMessages(identifier: "+15550301", count: 7)
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgs = try await channel.messages(forThreadID: "+15550301", limit: 20)
+        XCTAssertEqual(msgs.count, 7, "threads with fewer than limit messages must return all")
+    }
+
+    /// With limit=20 and 25 messages, the returned messages must be the 20 most recent.
+    func testMessageLimitPreservesMostRecent() async throws {
+        // Insert 25 messages with dates 1…25; the most recent have text "msg-22"..."msg-25" etc.
+        try insertChatAndMessages(identifier: "+15550302", count: 25)
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgs = try await channel.messages(forThreadID: "+15550302", limit: 20)
+        // messages() returns oldest→newest after the DESC+reverse; the 20 returned
+        // should span dates 6…25 (the 20 most recent). First msg text is "msg-6".
+        XCTAssertEqual(msgs.first?.text, "msg-6",
+                       "first of the 20 returned should be the 6th oldest (date=6)")
+        XCTAssertEqual(msgs.last?.text, "msg-25",
+                       "last of the 20 returned should be the most recent (date=25)")
+    }
+
+    // MARK: - Helpers
+
+    private func buildSchema() throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db,
+                              SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let db else { throw NSError(domain: "sqlite", code: -1) }
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT,
+            service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT, attributedBody BLOB,
+            is_from_me INTEGER, is_read INTEGER, date INTEGER,
+            associated_message_type INTEGER DEFAULT 0,
+            cache_has_attachments INTEGER DEFAULT 0, date_delivered INTEGER DEFAULT 0);
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertChatAndMessages(identifier: String, count: Int) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db,
+                              SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let db else { throw NSError(domain: "sqlite", code: -1) }
+        defer { sqlite3_close(db) }
+
+        let chatID: Int64 = abs(Int64(identifier.hashValue)) % 10000 + 1
+        sqlite3_exec(db, "INSERT INTO chat VALUES (\(chatID), '\(identifier)', '', 'iMessage', '');",
+                     nil, nil, nil)
+
+        for i in 1...count {
+            let msgID = Int64(i)
+            var stmt: OpaquePointer?
+            let msql = "INSERT INTO message(ROWID,text,attributedBody,is_from_me,is_read,date,associated_message_type) VALUES (?1,?2,NULL,0,0,?3,0);"
+            sqlite3_prepare_v2(db, msql, -1, &stmt, nil)
+            sqlite3_bind_int64(stmt, 1, msgID)
+            let txt = "msg-\(i)"
+            sqlite3_bind_text(stmt, 2, txt, -1, Self.TRANSIENT)
+            sqlite3_bind_int64(stmt, 3, Int64(i))
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+
+            sqlite3_exec(db,
+                "INSERT INTO chat_message_join VALUES (\(chatID), \(msgID));",
+                nil, nil, nil)
+        }
+    }
+}

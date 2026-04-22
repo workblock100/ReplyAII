@@ -25,6 +25,12 @@ extension ChannelService {
         try await recentThreads(limit: 50)
     }
 
+    /// Convenience overload: fetch the 20 most recent messages (the default per-thread cap).
+    /// Callers that need more for context-building should pass an explicit limit.
+    func messages(forThreadID id: String) async throws -> [Message] {
+        try await messages(forThreadID: id, limit: 20)
+    }
+
     /// Default shim so existing mocks/stubs don't have to implement the
     /// incremental fetch until they care about rule actions.
     func newIncomingMessages(forThreadID id: String, sinceRowID: Int64) async throws -> [Message] {

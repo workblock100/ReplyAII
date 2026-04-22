@@ -547,3 +547,73 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
                       "archivedThreadIDs must survive a simulated relaunch via UserDefaults")
     }
 }
+
+// MARK: - send() state transitions (REP-096)
+
+@MainActor
+final class InboxViewModelSendTests: XCTestCase {
+
+    /// On a successful send, `sendConfirmation` is nil and `sendToast` contains
+    /// the "Sent to…" confirmation — verifying the composer returns to its idle state.
+    func testSendSuccessClearsConfirmationAndShowsToast() async {
+        let thread = MessageThread(
+            id: "t-send", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "now",
+            chatGUID: "iMessage;-;t-send")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-send")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "Hello Alice!")
+        XCTAssertNotNil(vm.sendConfirmation, "requestSend must stage a pending confirmation")
+
+        await vm.confirmSend()
+
+        XCTAssertNil(vm.sendConfirmation,
+                     "sendConfirmation must be nil after a successful send")
+        XCTAssertNotNil(vm.sendToast,
+                        "sendToast must be set with success message after send")
+        XCTAssertTrue(vm.sendToast?.contains("Alice") == true,
+                      "sendToast must name the recipient")
+    }
+
+    /// On a failed send, `sendConfirmation` is already cleared (it was consumed
+    /// at the start of confirmSend), but `sendToast` carries the error message —
+    /// the user can re-stage the send via requestSend without losing their text.
+    func testSendFailurePreservesEditAndShowsErrorToast() async {
+        let thread = MessageThread(
+            id: "t-fail", channel: .imessage, name: "Bob",
+            avatar: "B", preview: "hey", time: "now",
+            chatGUID: "iMessage;-;t-fail")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-fail")
+        vm.setEdit(threadID: "t-fail", tone: .warm, text: "My draft text")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in
+            throw IMessageSender.SendError.notAuthorized
+        }
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "My draft text")
+        await vm.confirmSend()
+
+        XCTAssertNil(vm.sendConfirmation,
+                     "sendConfirmation is consumed at start of confirmSend regardless of outcome")
+        XCTAssertNotNil(vm.sendToast,
+                        "sendToast must surface the error so the user knows the send failed")
+        // The user's edited draft text must still be intact so they can retry.
+        let draft = vm.effectiveDraft(threadID: "t-fail", tone: .warm, fallback: "")
+        XCTAssertEqual(draft, "My draft text",
+                       "userEdits must be preserved on failure so the user can retry")
+    }
+}
