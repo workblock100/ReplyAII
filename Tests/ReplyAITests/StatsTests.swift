@@ -121,4 +121,51 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(snap.rulesFiredByAction["archive"], iterations * threads)
         XCTAssertEqual(snap.messagesIndexed, iterations * threads)
     }
+
+    // MARK: - Weekly log (REP-056)
+
+    func testWeeklyLogContainsAllCounters() throws {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated()
+        stats.recordDraftSent()
+        stats.recordRuleFired(action: "archive")
+        stats.recordMessagesIndexed(10)
+        stats.recordRuleLoadSkips(2)
+
+        let logURL = tempURL("weekly.md")
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL, encoding: .utf8)
+
+        XCTAssertTrue(content.contains("# Stats week of"), "must include date heading")
+        XCTAssertTrue(content.contains("rulesFiredByAction"), "must include rules fired")
+        XCTAssertTrue(content.contains("draftsGenerated: 1"), "must include draftsGenerated counter")
+        XCTAssertTrue(content.contains("draftsSent: 1"), "must include draftsSent counter")
+        XCTAssertTrue(content.contains("messagesIndexed: 10"), "must include messagesIndexed counter")
+        XCTAssertTrue(content.contains("ruleLoadSkips: 2"), "must include ruleLoadSkips counter")
+    }
+
+    func testWeeklyLogZeroValuesNotOmitted() throws {
+        let stats = Stats(fileURL: tempURL())
+
+        let logURL = tempURL("weekly-zeros.md")
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL, encoding: .utf8)
+
+        XCTAssertTrue(content.contains("draftsGenerated: 0"), "zero counters must appear in log")
+        XCTAssertTrue(content.contains("draftsSent: 0"))
+        XCTAssertTrue(content.contains("messagesIndexed: 0"))
+        XCTAssertTrue(content.contains("ruleLoadSkips: 0"))
+    }
+
+    func testWeeklyLogWritesToFile() throws {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated()
+
+        let logURL = tempURL("weekly-write.md")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: logURL.path))
+        try stats.writeWeeklyLog(to: logURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: logURL.path), "file must be created")
+        let size = (try? FileManager.default.attributesOfItem(atPath: logURL.path)[.size] as? Int) ?? 0
+        XCTAssertGreaterThan(size, 0, "file must not be empty")
+    }
 }

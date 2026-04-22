@@ -65,6 +65,22 @@ final class DraftEngine {
         generate(thread: thread, tone: tone, history: history, force: true)
     }
 
+    /// Number of live (threadID, tone) entries in the draft cache.
+    var cacheSize: Int { drafts.count }
+
+    /// Drops all cached draft states and in-flight tasks for a thread.
+    /// Called when a thread is deselected so the cache doesn't grow
+    /// unboundedly as the user browses.
+    func evict(threadID: String) {
+        let keys = drafts.keys.filter { $0.threadID == threadID }
+        for key in keys {
+            tasks[key]?.cancel()
+            tasks[key] = nil
+            primingTasks["\(key.threadID):\(key.tone.rawValue)"] = nil
+            drafts[key] = nil
+        }
+    }
+
     /// Clears the in-flight task + state for a specific key (⌘.).
     func dismiss(threadID: String, tone: Tone) {
         let key = Key(threadID: threadID, tone: tone)

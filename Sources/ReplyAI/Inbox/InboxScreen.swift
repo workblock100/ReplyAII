@@ -74,6 +74,7 @@ struct InboxScreen: View {
         .task(id: model.selectedThreadID) {
             await model.loadMessages(for: model.selectedThreadID)
         }
+        .onChange(of: model.selectedThreadID) { old, _ in engine.evict(threadID: old) }
         // Global command shortcuts — wired through .background so they stay
         // active whenever the inbox is on screen.
         .background(keyboardCommands)

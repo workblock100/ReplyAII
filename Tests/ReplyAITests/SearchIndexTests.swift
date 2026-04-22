@@ -249,4 +249,54 @@ final class SearchIndexTests: XCTestCase {
         let hits = await index.search("cafe")
         XCTAssertEqual(hits.count, 1)
     }
+
+    // MARK: - Concurrency (REP-057)
+
+    func testConcurrentUpsertAndSearch() async {
+        // SearchIndex is a Swift actor, so all calls are serialised through
+        // the actor executor — no data races are possible. This test verifies
+        // that 100 concurrent upsert + search tasks drain cleanly and that
+        // the index contains the expected rows after all work completes.
+        let index = SearchIndex()
+        let threadCount = 10
+
+        // Seed an initial set of threads so searches can return results
+        // while concurrent upserts are in flight.
+        let threads = (0..<threadCount).map { i in
+            MessageThread(id: "t\(i)", channel: .imessage, name: "Thread \(i)",
+                          avatar: "T", preview: "", time: "", unread: 0)
+        }
+        let messages: [String: [Message]] = Dictionary(uniqueKeysWithValues: threads.map { t in
+            (t.id, [Message(from: .them, text: "concurrent stress test \(t.id)", time: "now")])
+        })
+        await index.rebuild(from: messages, threads: threads)
+
+        // Run 100 concurrent tasks — half upsert, half search.
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<100 {
+                group.addTask {
+                    let threadIdx = i % threadCount
+                    if i % 2 == 0 {
+                        let t = threads[threadIdx]
+                        let newMsg = Message(from: .them,
+                                            text: "updated message \(i)",
+                                            time: "now")
+                        await index.upsert(thread: t, messages: [newMsg])
+                    } else {
+                        _ = await index.search("stress")
+                    }
+                }
+            }
+        }
+
+        // After all concurrent work, the index must still be queryable and
+        // return a deterministic count for a term present in upserted rows.
+        let hits = await index.search("updated")
+        // At least some threads were upserted with "updated message"; the
+        // exact count depends on ordering but must be ≥ 1 and ≤ threadCount.
+        XCTAssertGreaterThanOrEqual(hits.count, 1,
+            "index must return results after concurrent upserts")
+        XCTAssertLessThanOrEqual(hits.count, threadCount,
+            "result count must not exceed the number of threads")
+    }
 }

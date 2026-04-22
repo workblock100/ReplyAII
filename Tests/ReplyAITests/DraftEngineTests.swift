@@ -107,6 +107,43 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertEqual(state.text, Fixtures.seedDraft(threadID: thread.id, tone: .playful))
     }
 
+    // MARK: - Cache eviction (REP-034)
+
+    func testEvictClearsSingleThread() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertGreaterThan(engine.cacheSize, 0)
+
+        engine.evict(threadID: thread.id)
+        XCTAssertEqual(engine.cacheSize, 0, "all tone entries for the thread must be removed")
+        XCTAssertEqual(engine.state(threadID: thread.id, tone: .warm).text, "",
+                       "evicted state returns the default empty state")
+    }
+
+    func testEvictLeavesOtherThreadsIntact() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let threadA = Fixtures.threads[0]
+        let threadB = Fixtures.threads[1]
+
+        engine.prime(thread: threadA, tone: .warm, history: [])
+        engine.prime(thread: threadB, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: threadA.id, tone: .warm).isDone &&
+            engine.state(threadID: threadB.id, tone: .warm).isDone
+        }
+        XCTAssertEqual(engine.cacheSize, 2)
+
+        engine.evict(threadID: threadA.id)
+        XCTAssertEqual(engine.cacheSize, 1, "only threadA's entry must be removed")
+        XCTAssertFalse(engine.state(threadID: threadB.id, tone: .warm).text.isEmpty,
+                       "threadB's draft must survive eviction of threadA")
+    }
+
     // MARK: - helper
 
     private func waitUntil(

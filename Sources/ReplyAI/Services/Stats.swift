@@ -105,6 +105,37 @@ final class Stats: @unchecked Sendable {
         return try? JSONDecoder().decode(Snapshot.self, from: data)
     }
 
+    // MARK: - Weekly log
+
+    /// Serializes current counters to a Markdown snapshot at `url`. Intended
+    /// for planner/reviewer scripts that archive weekly stats to
+    /// `.automation/logs/stats-YYYY-WW.md`. Zero-value counters are included
+    /// so the file always reflects the full schema.
+    func writeWeeklyLog(to url: URL) throws {
+        let snap = snapshot()
+        let dateString = ISO8601DateFormatter().string(from: Date()).prefix(10)
+        var lines: [String] = ["# Stats week of \(dateString)", ""]
+
+        let actionsSorted = snap.rulesFiredByAction.sorted { $0.key < $1.key }
+        if actionsSorted.isEmpty {
+            lines.append("- rulesFiredByAction: {}")
+        } else {
+            let pairs = actionsSorted.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+            lines.append("- rulesFiredByAction: {\(pairs)}")
+        }
+        lines.append("- draftsGenerated: \(snap.draftsGenerated)")
+        lines.append("- draftsSent: \(snap.draftsSent)")
+        lines.append("- messagesIndexed: \(snap.messagesIndexed)")
+        lines.append("- ruleLoadSkips: \(snap.ruleLoadSkips)")
+        lines.append("")
+
+        let content = lines.joined(separator: "\n")
+        guard let data = content.data(using: .utf8) else { return }
+        try data.write(to: url, options: .atomic)
+    }
+
+    // MARK: - Persistence (internal JSON)
+
     /// Atomic write. Errors are swallowed — an observability failure
     /// must never break the caller. Snapshot is copied out of the lock
     /// first so the encode doesn't hold the lock across I/O.
