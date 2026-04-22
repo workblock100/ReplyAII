@@ -192,3 +192,76 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
             "enabling a pin rule must immediately pin the matching thread")
     }
 }
+
+// MARK: - Notification reply consumption (REP-072)
+
+@MainActor
+final class InboxViewModelNotificationReplyTests: XCTestCase {
+
+    /// When `pendingNotificationReply` is set with a known threadID,
+    /// `InboxViewModel` must dispatch an iMessage send with the thread's
+    /// real chatGUID and then clear the pending value.
+    func testNotificationReplyConsumedAndSent() async throws {
+        let thread = MessageThread(
+            id: "tA", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "10:00",
+            chatGUID: "iMessage;+;chat9999")
+
+        let noopChannel = BlockingMockChannel()
+        noopChannel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: noopChannel,
+                                contacts: fastContacts())
+
+        // Intercept the AppleScript execution to capture what would be sent.
+        var capturedScript: String? = nil
+        let hookExpectation = expectation(description: "execute hook fires")
+        IMessageSender.executeHook = { src in
+            capturedScript = src
+            hookExpectation.fulfill()
+        }
+        defer { IMessageSender.executeHook = nil }
+
+        // Trigger the observation.
+        vm.pendingNotificationReply = (threadID: "tA", text: "Hello!")
+        // Allow the Task inside onChange to dispatch and complete.
+        await Task.yield()
+        await Task.yield()
+
+        // The hook runs on a background thread inside Task.detached; give it
+        // a moment to fire before timing out.
+        await fulfillment(of: [hookExpectation], timeout: 3)
+
+        XCTAssertNil(vm.pendingNotificationReply, "pending reply must be cleared after consumption")
+        let script = try XCTUnwrap(capturedScript, "execute hook must have fired")
+        XCTAssertTrue(script.contains("chat9999"),
+            "script must use the thread's real chatGUID, not a synthesized one")
+        XCTAssertTrue(script.contains("Hello!"),
+            "script must embed the reply text")
+    }
+
+    /// When `pendingNotificationReply` names a threadID not in the loaded list,
+    /// `InboxViewModel` must discard the reply without calling IMessageSender.
+    func testNotificationReplyUnknownThreadDiscarded() async throws {
+        let thread = MessageThread(
+            id: "tB", channel: .imessage, name: "Bob",
+            avatar: "B", preview: "hey", time: "11:00")
+
+        let noopChannel = BlockingMockChannel()
+        noopChannel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: noopChannel,
+                                contacts: fastContacts())
+
+        var hookFired = false
+        IMessageSender.executeHook = { _ in hookFired = true }
+        defer { IMessageSender.executeHook = nil }
+
+        vm.pendingNotificationReply = (threadID: "unknown-id", text: "Whoops")
+        await Task.yield()
+        await Task.yield()
+        // Give background tasks a moment to complete (should be a no-op).
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 s
+
+        XCTAssertNil(vm.pendingNotificationReply, "pending reply must be cleared even for unknown thread")
+        XCTAssertFalse(hookFired, "execute hook must NOT fire for an unknown threadID")
+    }
+}

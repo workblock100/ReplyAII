@@ -125,6 +125,7 @@ final class InboxViewModel {
             resolver.name(for: handle)
         })
         startObservingRules()
+        startObservingNotificationReply()
     }
 
     var selectedThread: MessageThread {
@@ -202,6 +203,42 @@ final class InboxViewModel {
                 self?.reEvaluateRulesForAllThreads()
                 self?.startObservingRules()
             }
+        }
+    }
+
+    // MARK: - Notification reply consumption (REP-072)
+
+    /// Watches `pendingNotificationReply` and immediately dispatches the
+    /// send when a value arrives. Re-arms after each fire so future inline
+    /// replies are also handled.
+    private func startObservingNotificationReply() {
+        withObservationTracking {
+            _ = pendingNotificationReply
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.consumeNotificationReply()
+                self?.startObservingNotificationReply()
+            }
+        }
+    }
+
+    /// Consumes a pending notification reply: finds the thread, fires the
+    /// send, then clears the pending value. Unknown thread IDs are logged
+    /// and discarded without crashing.
+    func consumeNotificationReply() {
+        guard let pending = pendingNotificationReply else { return }
+        pendingNotificationReply = nil
+        guard let thread = threads.first(where: { $0.id == pending.threadID }) else {
+            // Thread not in the loaded list — either archived or not yet
+            // synced. Discard silently; the user can open the thread and
+            // reply manually.
+            print("[NotificationReply] thread \(pending.threadID) not found — discarding reply")
+            return
+        }
+        let text = pending.text
+        let threadCopy = thread
+        Task.detached(priority: .userInitiated) {
+            try? IMessageSender.send(text, to: threadCopy)
         }
     }
 
