@@ -424,8 +424,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-122448
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: The FTS5 table currently stores `thread_id TEXT, sender TEXT, preview TEXT`. Add a `channel TEXT` column storing `thread.channel.rawValue`. Update `upsert(thread:)` to include the channel value. Add a `search(query:channel:) -> [String]` overload that appends `AND channel = ?` to the FTS5 WHERE clause when `channel` is non-nil (default nil = no filter). Backwards compatible: the nil overload calls through to the existing unfiltered path. Tests: filter by channel returns only matching threads; nil channel returns all; upserted channel value survives re-query.
 - success_criteria:
@@ -475,8 +475,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-122448
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 exact-token matching means a user typing `"ali"` in the ⌘K palette won't find a thread with "Alice" until they type the full word. Append `*` to the last token in the query for FTS5 prefix matching. For multi-word queries, only the final token gets the star (`"ali sto*"`). Coordinate with REP-092's sanitizer: the sanitizer must strip or avoid quoting the trailing `*` when prefix-matching is active (implement both in the same method so they share a single pass over tokens). Tests: partial `"ali"` matches "Alice"; multi-word `"ali sto"` matches a thread with "Alice Stone"; an exact full-word query still matches; empty query returns empty results.
 - success_criteria:
@@ -491,8 +491,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-122448
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 MATCH queries built from user input (e.g. ⌘K palette) pass text directly into SQL without escaping. Characters like `"`, `*`, `-`, `NOT`, `AND`, `OR` have special meaning in FTS5 MATCH syntax. A user searching for a name containing a hyphen or quotes can crash with `SQLITE_ERROR`. Sanitize the query by splitting into tokens, stripping or escaping FTS5 operator keywords and special characters per-token, then rejoining with `AND`. Do not phrase-quote the whole string as that would break prefix matching (REP-085 depends on per-token access). Tests: double-quote in query doesn't crash; hyphen-only query returns safe results; FTS5 reserved word `NOT` treated as literal; valid alpha query is unmodified.
 - success_criteria:
