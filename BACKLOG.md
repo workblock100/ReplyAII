@@ -135,8 +135,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-020653
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex.search(query:)` passes the raw query string to FTS5. A query like "hello world" is interpreted by FTS5 as a phrase (adjacent "hello world"), not an AND of the two terms. For an inbox search, AND semantics ("must contain both words anywhere in the thread") are more useful. Preprocess the query: split on whitespace, strip FTS5 special chars, rejoin with ` AND ` for 2+ tokens. Single-token queries pass through unchanged. Test with a thread containing "hello" but not adjacent to "world" — verify it matches "hello world" as an AND query but not a phrase query.
 - success_criteria:
