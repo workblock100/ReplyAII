@@ -8,7 +8,7 @@ final class ContactsResolverTests: XCTestCase {
     func testCacheMissQueriesStore() {
         let fake = FakeContactStore()
         fake.prepopulate(initialAccess: .granted)
-        fake.names["+15551111111"] = "Maya Lee"
+        fake.names["5551111111"] = "Maya Lee"  // normalized key (10-digit canonical form)
 
         let resolver = ContactsResolver(store: fake)
         resolver.overrideAccessForTesting(.granted)
@@ -20,7 +20,7 @@ final class ContactsResolverTests: XCTestCase {
     func testCacheHitSkipsStoreCall() {
         let fake = FakeContactStore()
         fake.prepopulate(initialAccess: .granted)
-        fake.names["+15552222222"] = "Ravi Patel"
+        fake.names["5552222222"] = "Ravi Patel"  // normalized key
 
         let resolver = ContactsResolver(store: fake)
         resolver.overrideAccessForTesting(.granted)
@@ -101,7 +101,7 @@ final class ContactsResolverTests: XCTestCase {
     func testConcurrentResolutionIsSafe() {
         let fake = FakeContactStore()
         fake.prepopulate(initialAccess: .granted)
-        fake.names["+15553333333"] = "Theo"
+        fake.names["5553333333"] = "Theo"  // normalized key
 
         let resolver = ContactsResolver(store: fake)
         resolver.overrideAccessForTesting(.granted)
@@ -131,6 +131,42 @@ final class ContactsResolverTests: XCTestCase {
         // loses the cache entirely under concurrency.
         XCTAssertLessThanOrEqual(fake.lookupCallCount, workers,
                                  "cache should have coalesced ~\(workers * iterations) reads into ≤\(workers) store hits")
+    }
+
+    // MARK: - REP-019: E.164 phone normalization
+
+    func testNormalizedHandleStripsPlus() {
+        let resolver = ContactsResolver(store: FakeContactStore())
+        XCTAssertEqual(resolver.normalizedHandle("+14155551234"), "4155551234")
+    }
+
+    func testNormalizedHandleStripsCountryCode() {
+        let resolver = ContactsResolver(store: FakeContactStore())
+        XCTAssertEqual(resolver.normalizedHandle("14155551234"), "4155551234")
+        XCTAssertEqual(resolver.normalizedHandle("+14155551234"), "4155551234")
+    }
+
+    func testNormalizedHandlePreservesEmail() {
+        let resolver = ContactsResolver(store: FakeContactStore())
+        let email = "user@example.com"
+        XCTAssertEqual(resolver.normalizedHandle(email), email)
+    }
+
+    func testAlternateFormsHitSameCache() {
+        let fake = FakeContactStore()
+        fake.names["4155551234"] = "Bob"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let r1 = resolver.name(for: "+14155551234")
+        let r2 = resolver.name(for: "14155551234")
+        let r3 = resolver.name(for: "4155551234")
+
+        XCTAssertEqual(r1, "Bob")
+        XCTAssertEqual(r2, "Bob")
+        XCTAssertEqual(r3, "Bob")
+        XCTAssertEqual(fake.lookupCallCount, 1,
+                       "all three variants should collapse to one store lookup")
     }
 }
 

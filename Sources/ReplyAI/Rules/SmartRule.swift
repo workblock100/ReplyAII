@@ -67,6 +67,8 @@ indirect enum RulePredicate: Hashable, Sendable {
     case textMatchesRegex(String)
     case isUnread
     case senderUnknown        // no matching Contact
+    case isGroupChat          // iMessage chat identifier starts with "chat"
+    case hasAttachment        // preview is the "📎 Attachment" sentinel
     case and([RulePredicate])
     case or([RulePredicate])
     case not(RulePredicate)
@@ -93,6 +95,8 @@ extension RulePredicate: Codable {
         case textMatchesRegex = "text_matches_regex"
         case isUnread         = "is_unread"
         case senderUnknown    = "sender_unknown"
+        case isGroupChat      = "is_group_chat"
+        case hasAttachment    = "has_attachment"
         case and, or, not
     }
 
@@ -109,6 +113,8 @@ extension RulePredicate: Codable {
         case .textMatchesRegex: self = .textMatchesRegex(try c.decode(String.self, forKey: .value))
         case .isUnread:         self = .isUnread
         case .senderUnknown:    self = .senderUnknown
+        case .isGroupChat:      self = .isGroupChat
+        case .hasAttachment:    self = .hasAttachment
         case .and:              self = .and(try c.decode([RulePredicate].self, forKey: .clauses))
         case .or:               self = .or(try c.decode([RulePredicate].self, forKey: .clauses))
         case .not:              self = .not(try c.decode(RulePredicate.self, forKey: .clause))
@@ -125,6 +131,8 @@ extension RulePredicate: Codable {
         case .textMatchesRegex(let s): try c.encode(Kind.textMatchesRegex, forKey: .kind); try c.encode(s, forKey: .value)
         case .isUnread:                try c.encode(Kind.isUnread, forKey: .kind)
         case .senderUnknown:           try c.encode(Kind.senderUnknown, forKey: .kind)
+        case .isGroupChat:             try c.encode(Kind.isGroupChat, forKey: .kind)
+        case .hasAttachment:           try c.encode(Kind.hasAttachment, forKey: .kind)
         case .and(let xs):             try c.encode(Kind.and, forKey: .kind); try c.encode(xs, forKey: .clauses)
         case .or(let xs):              try c.encode(Kind.or, forKey: .kind);  try c.encode(xs, forKey: .clauses)
         case .not(let x):              try c.encode(Kind.not, forKey: .kind); try c.encode(x, forKey: .clause)

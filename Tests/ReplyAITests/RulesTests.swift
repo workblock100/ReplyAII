@@ -61,7 +61,8 @@ final class RulesTests: XCTestCase {
             channel: .slack,
             lastMessageText: "can you review the deck?",
             isUnread: true,
-            senderKnown: true
+            senderKnown: true,
+            chatIdentifier: ""
         )
         XCTAssertTrue(RuleEvaluator.matches(.channelIs(.slack), in: ctx))
         XCTAssertTrue(RuleEvaluator.matches(.senderContains("maya"), in: ctx))
@@ -77,7 +78,8 @@ final class RulesTests: XCTestCase {
             channel: .slack,
             lastMessageText: "can you review the deck before 4?",
             isUnread: true,
-            senderKnown: true
+            senderKnown: true,
+            chatIdentifier: ""
         )
         let predicate: RulePredicate = .and([
             .channelIs(.slack),
@@ -97,7 +99,8 @@ final class RulesTests: XCTestCase {
             channel: .sms,
             lastMessageText: "Your verification code is 820193",
             isUnread: true,
-            senderKnown: false
+            senderKnown: false,
+            chatIdentifier: ""
         )
         XCTAssertTrue(RuleEvaluator.matches(.textMatchesRegex(#"(?i)\bverification code\b"#), in: ctx))
         XCTAssertTrue(RuleEvaluator.matches(.textMatchesRegex(#"\b\d{6}\b"#), in: ctx))
@@ -109,7 +112,8 @@ final class RulesTests: XCTestCase {
         )
         let ctx = RuleContext(
             senderName: "x", senderHandle: "x", channel: .slack,
-            lastMessageText: "", isUnread: false, senderKnown: true
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
         )
         XCTAssertTrue(RuleEvaluator.matching([rule], in: ctx).isEmpty)
         rule.active = true
@@ -123,7 +127,8 @@ final class RulesTests: XCTestCase {
         ]
         let ctx = RuleContext(
             senderName: "x", senderHandle: "x", channel: .slack,
-            lastMessageText: "", isUnread: false, senderKnown: true
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
         )
         XCTAssertEqual(RuleEvaluator.defaultTone(for: rules, in: ctx), .direct)
     }
@@ -556,7 +561,8 @@ final class RulesTests: XCTestCase {
         )
         let ctx = RuleContext(
             senderName: "x", senderHandle: "x", channel: .imessage,
-            lastMessageText: "", isUnread: false, senderKnown: true
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
         )
         // Low-priority rule is first in the array; high-priority must still win.
         let tone = RuleEvaluator.defaultTone(for: [lowPriority, highPriority], in: ctx)
@@ -607,7 +613,8 @@ final class RulesTests: XCTestCase {
         )
         let ctx = RuleContext(
             senderName: "x", senderHandle: "x", channel: .imessage,
-            lastMessageText: "", isUnread: false, senderKnown: true
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
         )
         let matched = RuleEvaluator.matching([first, second], in: ctx)
         XCTAssertEqual(matched.first?.name, "first", "equal priority: insertion order is tiebreaker")
@@ -722,5 +729,71 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(store.rules.count, countBefore, "rule count must not change on phantom remove")
         let reopened = RulesStore(fileURL: tmp)
         XCTAssertEqual(reopened.rules.count, countBefore, "persisted count must not change either")
+    }
+
+    // MARK: - REP-018: isGroupChat + hasAttachment predicates
+
+    func testIsGroupChatPredicateTrue() {
+        let ctx = RuleContext(
+            senderName: "Launch Crew",
+            senderHandle: "chat1234567890",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "chat1234567890"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.isGroupChat, in: ctx))
+    }
+
+    func testIsGroupChatPredicateFalse() {
+        let ctx = RuleContext(
+            senderName: "Alice",
+            senderHandle: "+14155551234",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "+14155551234"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.isGroupChat, in: ctx))
+    }
+
+    func testHasAttachmentPredicateTrue() {
+        let ctx = RuleContext(
+            senderName: "Alice",
+            senderHandle: "+14155551234",
+            channel: .imessage,
+            lastMessageText: "📎 Attachment",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "+14155551234"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.hasAttachment, in: ctx))
+    }
+
+    func testHasAttachmentPredicateFalse() {
+        let ctx = RuleContext(
+            senderName: "Alice",
+            senderHandle: "+14155551234",
+            channel: .imessage,
+            lastMessageText: "just a text",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "+14155551234"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.hasAttachment, in: ctx))
+    }
+
+    func testNewPredicatesCodableRoundTrip() throws {
+        let rules: [SmartRule] = [
+            SmartRule(name: "group", when: .isGroupChat, then: .pin),
+            SmartRule(name: "attachment", when: .hasAttachment, then: .archive),
+        ]
+        let data = try JSONEncoder().encode(rules)
+        let decoded = try JSONDecoder().decode([SmartRule].self, from: data)
+        XCTAssertEqual(decoded.count, 2)
+        XCTAssertEqual(decoded[0].when, .isGroupChat)
+        XCTAssertEqual(decoded[1].when, .hasAttachment)
     }
 }

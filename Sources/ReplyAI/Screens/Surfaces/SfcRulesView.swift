@@ -128,6 +128,8 @@ struct SfcRulesView: View {
         case .textMatchesRegex(let r):  return "text matches /\(r)/"
         case .isUnread:                 return "is unread"
         case .senderUnknown:            return "sender not in contacts"
+        case .isGroupChat:              return "is a group chat"
+        case .hasAttachment:            return "has attachment"
         case .and(let clauses):
             return clauses.map { humanize(predicate: $0) }.joined(separator: " AND ")
         case .or(let clauses):

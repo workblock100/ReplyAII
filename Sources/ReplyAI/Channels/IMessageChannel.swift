@@ -64,6 +64,8 @@ struct IMessageChannel: ChannelService {
                 SELECT m.ROWID FROM message m
                 JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
                 WHERE cmj.chat_id = c.ROWID
+                  AND (COALESCE(m.associated_message_type, 0) = 0)
+                  AND (m.text IS NOT NULL OR m.attributedBody IS NOT NULL)
                 ORDER BY m.date DESC
                 LIMIT 1
             ) AS last_msg_rowid,
@@ -71,6 +73,8 @@ struct IMessageChannel: ChannelService {
                 SELECT m.date FROM message m
                 JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
                 WHERE cmj.chat_id = c.ROWID
+                  AND (COALESCE(m.associated_message_type, 0) = 0)
+                  AND (m.text IS NOT NULL OR m.attributedBody IS NOT NULL)
                 ORDER BY m.date DESC
                 LIMIT 1
             ) AS last_date,

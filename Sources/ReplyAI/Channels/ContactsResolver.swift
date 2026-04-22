@@ -64,15 +64,27 @@ final class ContactsResolver: @unchecked Sendable {
     /// don't have a match (or don't have permission). Callable from any
     /// thread.
     func name(for handle: String) -> String? {
+        let key = normalizedHandle(handle)
         let (hit, gate) = synced { () -> (String?, Access) in
-            (cache[handle], _access)
+            (cache[key], _access)
         }
         if let hit { return hit.isEmpty ? nil : hit }
         if gate != .granted { return nil }
 
-        let resolved = store.lookup(handle: handle) ?? ""
-        synced { cache[handle] = resolved }
+        let resolved = store.lookup(handle: key) ?? ""
+        synced { cache[key] = resolved }
         return resolved.isEmpty ? nil : resolved
+    }
+
+    /// Collapse E.164 variants to a 10-digit canonical form so `+14155551234`,
+    /// `14155551234`, and `4155551234` all share the same cache entry.
+    /// Non-phone handles (email addresses, group chat IDs) pass through unchanged.
+    internal func normalizedHandle(_ handle: String) -> String {
+        guard !handle.contains("@"), !handle.hasPrefix("chat") else { return handle }
+        let digits = handle.filter(\.isNumber)
+        guard digits.count >= 10 else { return handle }
+        if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+        return digits.count == 10 ? digits : handle
     }
 
     // MARK: - Synchronous lock helpers

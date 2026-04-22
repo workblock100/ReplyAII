@@ -100,6 +100,36 @@ final class IMessageChannelTests: XCTestCase {
                        "display_name should win over participant handle for group threads")
     }
 
+    // MARK: - REP-020 reaction + delivery-receipt filtering
+
+    func testReactionRowExcludedFromPreview() async throws {
+        try buildSchema()
+        try insertChat(rowid: 1, identifier: "+15550010", display: "", service: "iMessage", guid: "iMessage;-;+15550010")
+        // Real message arrives first (older date), then a tapback reaction (newer).
+        try insertMessage(rowid: 40, chatRowID: 1, text: "let's meet up", fromMe: false, date: 700_000_000)
+        try insertReactionMessage(rowid: 41, chatRowID: 1, reactionType: 2000, date: 700_000_001)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertEqual(threads[0].preview, "let's meet up",
+                       "tapback reaction should not displace the real last message as preview")
+    }
+
+    func testDeliveryReceiptRowExcludedFromPreview() async throws {
+        try buildSchema()
+        try insertChat(rowid: 1, identifier: "+15550011", display: "", service: "iMessage", guid: "iMessage;-;+15550011")
+        // Real message arrives, then a NULL-text delivery-receipt row with a newer date.
+        try insertMessage(rowid: 50, chatRowID: 1, text: "on my way", fromMe: true, date: 700_000_000)
+        try insertDeliveryReceiptMessage(rowid: 51, chatRowID: 1, date: 700_000_002)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertEqual(threads[0].preview, "on my way",
+                       "NULL-text delivery receipt should not displace the real last message as preview")
+    }
+
     // MARK: - SQLite test helpers
 
     private func openDB() throws -> OpaquePointer {
@@ -139,7 +169,8 @@ final class IMessageChannelTests: XCTestCase {
             attributedBody BLOB,
             is_from_me INTEGER,
             is_read INTEGER,
-            date INTEGER
+            date INTEGER,
+            associated_message_type INTEGER DEFAULT 0
         );
         CREATE TABLE chat_message_join (
             chat_id INTEGER,
@@ -169,7 +200,10 @@ final class IMessageChannelTests: XCTestCase {
                                fromMe: Bool, date: Int64) throws {
         let db = try openDB()
         defer { sqlite3_close(db) }
-        let msgSQL = "INSERT INTO message VALUES (?1, ?2, NULL, ?3, 0, ?4);"
+        let msgSQL = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type)
+        VALUES (?1, ?2, NULL, ?3, 0, ?4, 0);
+        """
         var m: OpaquePointer?
         XCTAssertEqual(sqlite3_prepare_v2(db, msgSQL, -1, &m, nil), SQLITE_OK)
         sqlite3_bind_int64(m, 1, rowid)
@@ -182,13 +216,54 @@ final class IMessageChannelTests: XCTestCase {
         try linkMessage(db: db, chatRowID: chatRowID, messageRowID: rowid)
     }
 
+    /// Insert a tapback reaction row (associated_message_type 2000–2005).
+    private func insertReactionMessage(rowid: Int64, chatRowID: Int64,
+                                       reactionType: Int32 = 2000, date: Int64) throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let msgSQL = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type)
+        VALUES (?1, '❤ to "…"', NULL, 0, 0, ?2, ?3);
+        """
+        var m: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(db, msgSQL, -1, &m, nil), SQLITE_OK)
+        sqlite3_bind_int64(m, 1, rowid)
+        sqlite3_bind_int64(m, 2, date)
+        sqlite3_bind_int(m, 3, reactionType)
+        XCTAssertEqual(sqlite3_step(m), SQLITE_DONE)
+        sqlite3_finalize(m)
+
+        try linkMessage(db: db, chatRowID: chatRowID, messageRowID: rowid)
+    }
+
+    /// Insert a delivery/read-receipt row (text NULL, attributedBody NULL).
+    private func insertDeliveryReceiptMessage(rowid: Int64, chatRowID: Int64, date: Int64) throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let msgSQL = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type)
+        VALUES (?1, NULL, NULL, 0, 1, ?2, 0);
+        """
+        var m: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(db, msgSQL, -1, &m, nil), SQLITE_OK)
+        sqlite3_bind_int64(m, 1, rowid)
+        sqlite3_bind_int64(m, 2, date)
+        XCTAssertEqual(sqlite3_step(m), SQLITE_DONE)
+        sqlite3_finalize(m)
+
+        try linkMessage(db: db, chatRowID: chatRowID, messageRowID: rowid)
+    }
+
     private func insertMessageWithAttributedBody(
         rowid: Int64, chatRowID: Int64, attributedBody: Data,
         fromMe: Bool, date: Int64
     ) throws {
         let db = try openDB()
         defer { sqlite3_close(db) }
-        let msgSQL = "INSERT INTO message VALUES (?1, NULL, ?2, ?3, 0, ?4);"
+        let msgSQL = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type)
+        VALUES (?1, NULL, ?2, ?3, 0, ?4, 0);
+        """
         var m: OpaquePointer?
         XCTAssertEqual(sqlite3_prepare_v2(db, msgSQL, -1, &m, nil), SQLITE_OK)
         sqlite3_bind_int64(m, 1, rowid)
