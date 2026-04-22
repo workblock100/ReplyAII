@@ -367,7 +367,7 @@ final class InboxViewModel {
             for rule in matched {
                 switch rule.then {
                 case .archive:
-                    archivedThreadIDs.insert(thread.id)
+                    archive(thread.id)
                     stats.recordRuleFired(action: "archive")
                 case .silentlyIgnore:
                     silentlyIgnoredThreadIDs.insert(thread.id)
@@ -453,6 +453,12 @@ final class InboxViewModel {
     private static func saveLastSeenRowID(_ watermarks: [String: Int64]) {
         let data = (try? JSONEncoder().encode(watermarks)) ?? Data()
         UserDefaults.standard.set(data, forKey: lastSeenRowIDKey)
+    }
+
+    /// Hides a thread from the inbox and removes it from the search index.
+    func archive(_ threadID: String) {
+        archivedThreadIDs.insert(threadID)
+        Task { await searchIndex.delete(threadID: threadID) }
     }
 
     /// Undoes an archive — used for the future "Undo" UX in set-privacy /

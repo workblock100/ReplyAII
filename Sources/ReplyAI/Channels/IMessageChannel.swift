@@ -87,7 +87,16 @@ struct IMessageChannel: ChannelService {
                 JOIN chat_message_join cmj3 ON cmj3.message_id = m2.ROWID
                 WHERE cmj3.chat_id = c.ROWID AND m2.is_from_me = 0 AND COALESCE(m2.is_read, 0) = 0
             ) AS unread_count,
-            COALESCE(c.guid, '') AS chat_guid
+            COALESCE(c.guid, '') AS chat_guid,
+            (
+                SELECT COALESCE(m.cache_has_attachments, 0) FROM message m
+                JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+                WHERE cmj.chat_id = c.ROWID
+                  AND (COALESCE(m.associated_message_type, 0) = 0)
+                  AND (m.text IS NOT NULL OR m.attributedBody IS NOT NULL)
+                ORDER BY m.date DESC
+                LIMIT 1
+            ) AS last_has_attachment
         FROM chat c
         WHERE EXISTS (SELECT 1 FROM chat_message_join cmj WHERE cmj.chat_id = c.ROWID)
         ORDER BY last_date DESC NULLS LAST
@@ -109,6 +118,7 @@ struct IMessageChannel: ChannelService {
             let msgCount: Int
             let unread: Int
             let chatGUID: String?
+            let lastHasAttachment: Bool
         }
 
         var pending: [Pending] = []
@@ -122,6 +132,7 @@ struct IMessageChannel: ChannelService {
             let msgCount     = Int(sqlite3_column_int(stmt, 7))
             let unread       = Int(sqlite3_column_int(stmt, 8))
             let guid         = Self.text(stmt, 9) ?? ""
+            let hasAtt       = sqlite3_column_int(stmt, 10) != 0
 
             let resolvedName: String = {
                 if !displayName.isEmpty { return displayName }
@@ -139,7 +150,8 @@ struct IMessageChannel: ChannelService {
                 lastDateRaw: lastDateRaw,
                 msgCount: msgCount,
                 unread: unread,
-                chatGUID: guid.isEmpty ? nil : guid
+                chatGUID: guid.isEmpty ? nil : guid,
+                lastHasAttachment: hasAtt
             ))
         }
         sqlite3_finalize(stmt)
@@ -161,7 +173,8 @@ struct IMessageChannel: ChannelService {
                 pinned: false,
                 contextCount: p.msgCount,
                 contextSummary: nil,
-                chatGUID: p.chatGUID
+                chatGUID: p.chatGUID,
+                hasAttachment: p.lastHasAttachment
             ))
         }
         return out
@@ -198,7 +211,8 @@ struct IMessageChannel: ChannelService {
             m.text,
             m.attributedBody,
             m.is_from_me,
-            m.date
+            m.date,
+            COALESCE(m.cache_has_attachments, 0)
         FROM message m
         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
         JOIN chat c ON c.ROWID = cmj.chat_id
@@ -231,13 +245,15 @@ struct IMessageChannel: ChannelService {
             }()
             guard let body = decoded, !body.isEmpty else { continue }
 
-            let fromMe = sqlite3_column_int(stmt, 3) != 0
-            let date   = sqlite3_column_int64(stmt, 4)
+            let fromMe     = sqlite3_column_int(stmt, 3) != 0
+            let date       = sqlite3_column_int64(stmt, 4)
+            let hasAtt     = sqlite3_column_int(stmt, 5) != 0
             out.append(Message(
                 from: fromMe ? .me : .them,
                 text: body,
                 time: Self.formatTime(appleDate: date),
-                rowID: rowID
+                rowID: rowID,
+                hasAttachment: hasAtt
             ))
         }
         return out.reversed()  // oldest → newest for thread stream

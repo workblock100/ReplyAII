@@ -52,6 +52,42 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(rule, decoded)
     }
 
+    // MARK: - senderIs case-insensitive (REP-065)
+
+    func testSenderIsCaseInsensitiveMatch() {
+        let ctx = RuleContext(
+            senderName: "Alice Smith",
+            senderHandle: "alice",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: true,
+            senderKnown: true,
+            chatIdentifier: ""
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.senderIs("alice smith"), in: ctx),
+                      "lowercase rule must match mixed-case display name")
+        XCTAssertTrue(RuleEvaluator.matches(.senderIs("ALICE SMITH"), in: ctx),
+                      "uppercase rule must also match")
+        XCTAssertTrue(RuleEvaluator.matches(.senderIs("Alice Smith"), in: ctx),
+                      "exact-case match must still work")
+    }
+
+    func testSenderIsCaseInsensitiveMismatch() {
+        let ctx = RuleContext(
+            senderName: "Alice Smith",
+            senderHandle: "alice",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: true,
+            senderKnown: true,
+            chatIdentifier: ""
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.senderIs("bob"), in: ctx),
+                       "different name must not match regardless of case")
+        XCTAssertFalse(RuleEvaluator.matches(.senderIs("Alice"), in: ctx),
+                       "partial name match must not match (senderIs is full-string)")
+    }
+
     // MARK: - Evaluation
 
     func testSimpleEvaluationMatches() {
@@ -760,7 +796,9 @@ final class RulesTests: XCTestCase {
     }
 
     func testHasAttachmentPredicateTrue() {
-        let ctx = RuleContext(
+        // hasAttachment is now driven by cache_has_attachments from chat.db,
+        // not the "📎 Attachment" sentinel — RuleContext.hasAttachment must be true.
+        var ctx = RuleContext(
             senderName: "Alice",
             senderHandle: "+14155551234",
             channel: .imessage,
@@ -769,6 +807,7 @@ final class RulesTests: XCTestCase {
             senderKnown: true,
             chatIdentifier: "+14155551234"
         )
+        ctx.hasAttachment = true
         XCTAssertTrue(RuleEvaluator.matches(.hasAttachment, in: ctx))
     }
 
@@ -782,6 +821,7 @@ final class RulesTests: XCTestCase {
             senderKnown: true,
             chatIdentifier: "+14155551234"
         )
+        // hasAttachment defaults to false — sentinel text alone must not fire.
         XCTAssertFalse(RuleEvaluator.matches(.hasAttachment, in: ctx))
     }
 

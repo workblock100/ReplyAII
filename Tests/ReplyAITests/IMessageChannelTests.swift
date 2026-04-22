@@ -215,7 +215,8 @@ final class IMessageChannelTests: XCTestCase {
             is_from_me INTEGER,
             is_read INTEGER,
             date INTEGER,
-            associated_message_type INTEGER DEFAULT 0
+            associated_message_type INTEGER DEFAULT 0,
+            cache_has_attachments INTEGER DEFAULT 0
         );
         CREATE TABLE chat_message_join (
             chat_id INTEGER,
@@ -398,5 +399,115 @@ final class ChannelErrorResultCodeTests: XCTestCase {
         } catch {
             XCTFail("unexpected non-ChannelError: \(error)")
         }
+    }
+}
+
+// MARK: - cache_has_attachments projection (REP-068)
+
+final class IMessageChannelAttachmentTests: XCTestCase {
+    private var dbURL: URL!
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-AttachTest-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    private func openDB() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else {
+            throw ChannelError.databaseError(code: 1, message: "could not open test db")
+        }
+        return handle
+    }
+
+    private func buildSchema() throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (
+            ROWID INTEGER PRIMARY KEY,
+            text TEXT,
+            attributedBody BLOB,
+            is_from_me INTEGER,
+            is_read INTEGER,
+            date INTEGER,
+            associated_message_type INTEGER DEFAULT 0,
+            cache_has_attachments INTEGER DEFAULT 0
+        );
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertChat(_ db: OpaquePointer, rowid: Int64, identifier: String) {
+        let sql = "INSERT INTO chat VALUES (?1, ?2, '', 'iMessage', ?3);"
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, identifier, -1, Self.TRANSIENT)
+        sqlite3_bind_text(s, 3, "iMessage;-;\(identifier)", -1, Self.TRANSIENT)
+        sqlite3_step(s)
+        sqlite3_finalize(s)
+    }
+
+    private func insertMessage(_ db: OpaquePointer, rowid: Int64, chatRowID: Int64,
+                               text: String, hasAttachment: Bool) {
+        let sql = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type, cache_has_attachments)
+        VALUES (?1, ?2, NULL, 0, 0, 700000000, 0, ?3);
+        """
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, text, -1, Self.TRANSIENT)
+        sqlite3_bind_int(s, 3, hasAttachment ? 1 : 0)
+        sqlite3_step(s)
+        sqlite3_finalize(s)
+        // link
+        let link = "INSERT INTO chat_message_join VALUES (?1, ?2);"
+        var l: OpaquePointer?
+        sqlite3_prepare_v2(db, link, -1, &l, nil)
+        sqlite3_bind_int64(l, 1, chatRowID)
+        sqlite3_bind_int64(l, 2, rowid)
+        sqlite3_step(l)
+        sqlite3_finalize(l)
+    }
+
+    func testHasAttachmentTrueFromColumn() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 1, identifier: "+15550001")
+        insertMessage(db, rowid: 10, chatRowID: 1, text: "see attached", hasAttachment: true)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "+15550001", limit: 10)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertTrue(messages[0].hasAttachment,
+                      "cache_has_attachments=1 must project to Message.hasAttachment=true")
+    }
+
+    func testHasAttachmentFalseFromColumn() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 2, identifier: "+15550002")
+        insertMessage(db, rowid: 20, chatRowID: 2, text: "plain text only", hasAttachment: false)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "+15550002", limit: 10)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertFalse(messages[0].hasAttachment,
+                       "cache_has_attachments=0 must project to Message.hasAttachment=false")
     }
 }

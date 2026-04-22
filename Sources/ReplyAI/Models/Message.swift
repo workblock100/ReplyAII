@@ -11,18 +11,23 @@ struct Message: Identifiable, Hashable, Sendable {
     /// messages we've already evaluated. Zero for fixtures / mocks that
     /// don't care about dedup.
     let rowID: Int64
+    /// Projected from `message.cache_has_attachments` (1 = true). False
+    /// for fixtures and mocks that don't set it explicitly.
+    let hasAttachment: Bool
 
     init(
         id: UUID = UUID(),
         from: Author,
         text: String,
         time: String,
-        rowID: Int64 = 0
+        rowID: Int64 = 0,
+        hasAttachment: Bool = false
     ) {
         self.id = id
         self.from = from
         self.text = text
         self.time = time
         self.rowID = rowID
+        self.hasAttachment = hasAttachment
     }
 }

@@ -68,6 +68,18 @@ actor SearchIndex {
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
 
+    /// Remove all index rows for a thread. Called when a thread is archived
+    /// so it no longer appears in search results.
+    func delete(threadID: String) {
+        guard let db else { return }
+        var del: OpaquePointer?
+        if sqlite3_prepare_v2(db, "DELETE FROM messages_fts WHERE thread_id = ?1;", -1, &del, nil) == SQLITE_OK {
+            sqlite3_bind_text(del, 1, threadID, -1, Self.SQLITE_TRANSIENT)
+            sqlite3_step(del)
+        }
+        sqlite3_finalize(del)
+    }
+
     /// Replace the index rows for a single thread. Used on the hot
     /// path — a watcher fire brings in one updated thread at a time,
     /// and re-running a full `rebuild` per fire is O(n) in the whole

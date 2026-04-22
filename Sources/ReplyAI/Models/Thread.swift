@@ -17,6 +17,9 @@ struct MessageThread: Identifiable, Hashable, Sendable {
     /// otherwise it falls back to synthesizing a 1:1-shaped GUID from
     /// the channel + chat_identifier, which only works for 1:1 threads.
     let chatGUID: String?
+    /// True when the last message in this thread has `cache_has_attachments = 1`
+    /// in chat.db. Used by the rule engine instead of the "📎 Attachment" sentinel.
+    let hasAttachment: Bool
 
     init(
         id: String,
@@ -29,7 +32,8 @@ struct MessageThread: Identifiable, Hashable, Sendable {
         pinned: Bool = false,
         contextCount: Int = 41,
         contextSummary: String? = nil,
-        chatGUID: String? = nil
+        chatGUID: String? = nil,
+        hasAttachment: Bool = false
     ) {
         self.id = id
         self.channel = channel
@@ -42,5 +46,6 @@ struct MessageThread: Identifiable, Hashable, Sendable {
         self.contextCount = contextCount
         self.contextSummary = contextSummary
         self.chatGUID = chatGUID
+        self.hasAttachment = hasAttachment
     }
 }

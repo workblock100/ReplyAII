@@ -13,6 +13,8 @@ struct RuleContext: Sendable {
     /// Raw chat identifier from chat.db — "chat1234567890" for group chats,
     /// "+14155551234" or "user@example.com" for 1:1 threads.
     var chatIdentifier: String
+    /// True when the last message has `cache_has_attachments = 1` in chat.db.
+    var hasAttachment: Bool = false
 
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
@@ -28,7 +30,8 @@ struct RuleContext: Sendable {
             senderKnown: !thread.name.hasPrefix("+") && !thread.name.contains("@") || !thread.name.allSatisfy {
                 "+0123456789 ()-".contains($0)
             },
-            chatIdentifier: thread.id
+            chatIdentifier: thread.id,
+            hasAttachment: thread.hasAttachment
         )
     }
 }
@@ -65,7 +68,7 @@ enum RuleEvaluator {
             return ctx.channel == .imessage && ctx.chatIdentifier.hasPrefix("chat")
 
         case .hasAttachment:
-            return ctx.lastMessageText == "📎 Attachment"
+            return ctx.hasAttachment
 
         case .and(let clauses):
             return clauses.allSatisfy { matches($0, in: ctx) }

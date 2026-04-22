@@ -299,4 +299,31 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertLessThanOrEqual(hits.count, threadCount,
             "result count must not exceed the number of threads")
     }
+
+    // MARK: - Delete (REP-063)
+
+    func testDeleteRemovesFromSearch() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "del1", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "remember to buy milk", time: "now")
+        ])
+
+        var hits = await index.search("milk")
+        XCTAssertEqual(hits.count, 1, "thread must be findable before delete")
+
+        await index.delete(threadID: "del1")
+
+        hits = await index.search("milk")
+        XCTAssertEqual(hits.count, 0, "thread must not appear in search after delete")
+    }
+
+    func testDeleteNonExistentThreadIsNoOp() async {
+        let index = SearchIndex()
+        // No crash or error expected when deleting a thread that was never indexed.
+        await index.delete(threadID: "ghost-thread-id")
+        let hits = await index.search("anything")
+        XCTAssertTrue(hits.isEmpty)
+    }
 }
