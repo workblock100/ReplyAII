@@ -237,6 +237,59 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertNil(state.error, "dismiss must not produce an error")
     }
 
+    // MARK: - dismiss() state-transition tests (REP-107)
+
+    func testDismissAfterReadyTransitionsToIdle() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+
+        engine.dismiss(threadID: thread.id, tone: .warm)
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertEqual(state.text, "", "dismiss after ready must clear text")
+        XCTAssertFalse(state.isDone, "dismiss after ready must clear isDone")
+        XCTAssertFalse(state.isStreaming, "dismiss after ready must clear isStreaming")
+        XCTAssertNil(state.error)
+    }
+
+    func testDismissOfUnknownEntryIsNoop() {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        // Dismiss an entry that was never primed — must not crash and state stays idle.
+        engine.dismiss(threadID: "never-primed-thread", tone: .direct)
+        let state = engine.state(threadID: "never-primed-thread", tone: .direct)
+        XCTAssertEqual(state.text, "", "dismiss of unknown entry must be a noop")
+        XCTAssertFalse(state.isDone)
+        XCTAssertFalse(state.isStreaming)
+    }
+
+    func testDismissDoesNotInvalidateOtherEntries() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let t1 = Fixtures.threads[0]
+        let t2 = Fixtures.threads[1]
+
+        engine.prime(thread: t1, tone: .warm, history: [])
+        engine.prime(thread: t2, tone: .direct, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: t1.id, tone: .warm).isDone &&
+            engine.state(threadID: t2.id, tone: .direct).isDone
+        }
+
+        // Dismiss only t1/warm.
+        engine.dismiss(threadID: t1.id, tone: .warm)
+
+        XCTAssertEqual(engine.state(threadID: t1.id, tone: .warm).text, "",
+                       "dismissed entry must be cleared")
+        XCTAssertTrue(engine.state(threadID: t2.id, tone: .direct).isDone,
+                      "other entry must remain intact after dismiss")
+        XCTAssertFalse(engine.state(threadID: t2.id, tone: .direct).text.isEmpty,
+                       "other entry must retain its draft text")
+    }
+
     // MARK: - helper
 
     private func waitUntil(

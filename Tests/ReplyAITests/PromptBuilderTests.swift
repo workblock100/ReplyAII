@@ -110,4 +110,25 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertFalse(result.isEmpty, "must retain at least one message after truncation")
         XCTAssertEqual(result.last?.text, last.text, "most recent message must always be retained")
     }
+
+    // MARK: - Tone system instruction tests (REP-112)
+
+    func testEachToneProducesNonEmptySystemInstruction() {
+        for tone in Tone.allCases {
+            let instruction = PromptBuilder.systemPrompt(tone: tone)
+            XCTAssertFalse(instruction.isEmpty,
+                           "systemPrompt(tone: \(tone)) must return a non-empty string")
+        }
+    }
+
+    func testToneInstructionsAreDistinct() {
+        var seen: [String: Tone] = [:]
+        for tone in Tone.allCases {
+            let instruction = PromptBuilder.systemPrompt(tone: tone)
+            if let duplicate = seen[instruction] {
+                XCTFail("Tone.\(tone) and Tone.\(duplicate) produce identical system instructions — each tone must be distinct")
+            }
+            seen[instruction] = tone
+        }
+    }
 }

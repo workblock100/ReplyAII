@@ -1202,4 +1202,135 @@ final class RulesTests: XCTestCase {
                        "only the valid rule must be appended; malformed entry skipped")
         XCTAssertTrue(target.rules.contains(where: { $0.id == validRule.id }))
     }
+
+    // MARK: - `not` predicate (REP-100)
+
+    func testNotPredicateNegatesMatch() {
+        let aliceCtx = RuleContext(
+            senderName: "Alice", senderHandle: "alice",
+            channel: .imessage, lastMessageText: "hey",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        let bobCtx = RuleContext(
+            senderName: "Bob", senderHandle: "bob",
+            channel: .imessage, lastMessageText: "yo",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.not(.senderIs("Alice")), in: aliceCtx),
+                       "not(senderIs) must return false when sender IS Alice")
+        XCTAssertTrue(RuleEvaluator.matches(.not(.senderIs("Alice")), in: bobCtx),
+                      "not(senderIs) must return true when sender is NOT Alice")
+    }
+
+    func testDoubleNegationEquivalentToOriginal() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "alice",
+            channel: .imessage, lastMessageText: "hi",
+            isUnread: true, senderKnown: true, chatIdentifier: ""
+        )
+        let base = RuleEvaluator.matches(.senderIs("Alice"), in: ctx)
+        let doubleNot = RuleEvaluator.matches(.not(.not(.senderIs("Alice"))), in: ctx)
+        XCTAssertEqual(base, doubleNot,
+                       "not(not(p)) must equal p — evaluator must not short-circuit")
+    }
+
+    func testNotOrDeMorganEquivalence() {
+        // De Morgan: not(A or B) == not(A) and not(B)
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "alice",
+            channel: .slack, lastMessageText: "deck",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        let notOr = RuleEvaluator.matches(.not(.or([.senderIs("Alice"), .senderIs("Bob")])), in: ctx)
+        let andNots = RuleEvaluator.matches(.and([.not(.senderIs("Alice")), .not(.senderIs("Bob"))]), in: ctx)
+        XCTAssertEqual(notOr, andNots, "De Morgan law: not(A or B) must equal and(not A, not B)")
+    }
+
+    // MARK: - `or` predicate with 3+ branches (REP-113)
+
+    func testOr3BranchesMiddleMatchReturnsTrue() {
+        let ctx = RuleContext(
+            senderName: "Maya", senderHandle: "maya",
+            channel: .imessage, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        // First and last branches do NOT match; middle one does.
+        let pred: RulePredicate = .or([.senderIs("Alice"), .senderIs("Maya"), .senderIs("Bob")])
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx),
+                      "or([nomatch, match, nomatch]) must return true")
+    }
+
+    func testOr3BranchesNoneMatchReturnsFalse() {
+        let ctx = RuleContext(
+            senderName: "Carol", senderHandle: "carol",
+            channel: .imessage, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        let pred: RulePredicate = .or([.senderIs("Alice"), .senderIs("Maya"), .senderIs("Bob")])
+        XCTAssertFalse(RuleEvaluator.matches(pred, in: ctx),
+                       "or([nm, nm, nm]) must return false when no branch matches")
+    }
+
+    func testOr3BranchesAllMatchReturnsTrue() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "alice",
+            channel: .imessage, lastMessageText: "hi",
+            isUnread: true, senderKnown: true, chatIdentifier: ""
+        )
+        let pred: RulePredicate = .or([.senderIs("Alice"), .isUnread, .textContains("hi")])
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx),
+                      "or([m, m, m]) must return true when all branches match")
+    }
+
+    func testOrEmptyArrayReturnsFalse() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "alice",
+            channel: .imessage, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: ""
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.or([]), in: ctx),
+                       "or([]) must return false — defined behavior for empty disjunction")
+    }
+
+    // MARK: - `messageAgeOlderThan` predicate (REP-106)
+
+    func testMessageOlderThanHoursMatches() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Old Bot", senderHandle: "old",
+            channel: .imessage, lastMessageText: "ping",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+        ctx.lastMessageDate = now.addingTimeInterval(-25 * 3600) // 25 hours ago
+        XCTAssertTrue(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "Thread last-messaged 25h ago must match messageAgeOlderThan(hours: 24)"
+        )
+    }
+
+    func testMessageYoungerThanHoursDoesNotMatch() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Recent Bot", senderHandle: "recent",
+            channel: .imessage, lastMessageText: "pong",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+        ctx.lastMessageDate = now.addingTimeInterval(-1 * 3600) // 1 hour ago
+        XCTAssertFalse(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "Thread last-messaged 1h ago must NOT match messageAgeOlderThan(hours: 24)"
+        )
+    }
+
+    func testMessageAgeOlderThanCodableRoundTrip() throws {
+        let pred: RulePredicate = .messageAgeOlderThan(hours: 48)
+        let data = try JSONEncoder().encode(pred)
+        let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+        XCTAssertEqual(pred, decoded, "messageAgeOlderThan must survive JSON encode/decode round-trip")
+        if case .messageAgeOlderThan(let hours) = decoded {
+            XCTAssertEqual(hours, 48)
+        } else {
+            XCTFail("decoded predicate has wrong case")
+        }
+    }
 }

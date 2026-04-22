@@ -72,6 +72,8 @@ indirect enum RulePredicate: Hashable, Sendable {
     case and([RulePredicate])
     case or([RulePredicate])
     case not(RulePredicate)
+    /// True when the last message in the thread is older than `hours` hours.
+    case messageAgeOlderThan(hours: Int)
 }
 
 /// Consequence of a rule matching. Intentionally small for v1 — we add
@@ -98,9 +100,10 @@ extension RulePredicate: Codable {
         case isGroupChat      = "is_group_chat"
         case hasAttachment    = "has_attachment"
         case and, or, not
+        case messageAgeOlderThan = "message_age_older_than"
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause }
+    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -118,6 +121,7 @@ extension RulePredicate: Codable {
         case .and:              self = .and(try c.decode([RulePredicate].self, forKey: .clauses))
         case .or:               self = .or(try c.decode([RulePredicate].self, forKey: .clauses))
         case .not:              self = .not(try c.decode(RulePredicate.self, forKey: .clause))
+        case .messageAgeOlderThan: self = .messageAgeOlderThan(hours: try c.decode(Int.self, forKey: .hours))
         }
     }
 
@@ -136,6 +140,7 @@ extension RulePredicate: Codable {
         case .and(let xs):             try c.encode(Kind.and, forKey: .kind); try c.encode(xs, forKey: .clauses)
         case .or(let xs):              try c.encode(Kind.or, forKey: .kind);  try c.encode(xs, forKey: .clauses)
         case .not(let x):              try c.encode(Kind.not, forKey: .kind); try c.encode(x, forKey: .clause)
+        case .messageAgeOlderThan(let h): try c.encode(Kind.messageAgeOlderThan, forKey: .kind); try c.encode(h, forKey: .hours)
         }
     }
 }

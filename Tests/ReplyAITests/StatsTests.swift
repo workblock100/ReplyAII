@@ -290,4 +290,20 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(second.snapshot().rulesMatchedCount, 3,
                        "rulesMatchedCount must survive JSON persistence round-trip")
     }
+
+    // MARK: - Concurrent increment stress test (REP-097)
+
+    func testConcurrentIncrementNeverLosesUpdates() async {
+        let stats = Stats(fileURL: tempURL("concurrent-test"))
+        let taskCount = 200
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<taskCount {
+                group.addTask {
+                    stats.incrementRulesMatched()
+                }
+            }
+        }
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, taskCount,
+                       "All \(taskCount) concurrent increments must be reflected — no lost updates under concurrent access")
+    }
 }

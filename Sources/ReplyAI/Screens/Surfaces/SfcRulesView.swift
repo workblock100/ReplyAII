@@ -136,6 +136,8 @@ struct SfcRulesView: View {
             return clauses.map { humanize(predicate: $0) }.joined(separator: " OR ")
         case .not(let p):
             return "NOT (\(humanize(predicate: p)))"
+        case .messageAgeOlderThan(let hours):
+            return "message older than \(hours)h"
         }
     }
 

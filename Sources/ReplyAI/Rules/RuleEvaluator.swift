@@ -15,6 +15,10 @@ struct RuleContext: Sendable {
     var chatIdentifier: String
     /// True when the last message has `cache_has_attachments = 1` in chat.db.
     var hasAttachment: Bool = false
+    /// Timestamp of the last message in the thread. Defaults to `Date()` when
+    /// the thread source cannot supply a real date, so `messageAgeOlderThan`
+    /// does not accidentally fire on threads with unknown ages.
+    var lastMessageDate: Date = Date()
 
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
@@ -38,7 +42,14 @@ struct RuleContext: Sendable {
 
 enum RuleEvaluator {
     /// True if the predicate holds against `ctx`.
-    static func matches(_ predicate: RulePredicate, in ctx: RuleContext) -> Bool {
+    /// - Parameter currentDate: The reference "now" for time-based predicates.
+    ///   Defaults to `Date()`. Pass a fixed value in tests to avoid clock
+    ///   sensitivity.
+    static func matches(
+        _ predicate: RulePredicate,
+        in ctx: RuleContext,
+        currentDate: Date = Date()
+    ) -> Bool {
         switch predicate {
         case .senderIs(let s):
             return ctx.senderName.caseInsensitiveCompare(s) == .orderedSame
@@ -71,13 +82,16 @@ enum RuleEvaluator {
             return ctx.hasAttachment
 
         case .and(let clauses):
-            return clauses.allSatisfy { matches($0, in: ctx) }
+            return clauses.allSatisfy { matches($0, in: ctx, currentDate: currentDate) }
 
         case .or(let clauses):
-            return clauses.contains { matches($0, in: ctx) }
+            return clauses.contains { matches($0, in: ctx, currentDate: currentDate) }
 
         case .not(let clause):
-            return !matches(clause, in: ctx)
+            return !matches(clause, in: ctx, currentDate: currentDate)
+
+        case .messageAgeOlderThan(let hours):
+            return currentDate.timeIntervalSince(ctx.lastMessageDate) > Double(hours) * 3600
         }
     }
 
