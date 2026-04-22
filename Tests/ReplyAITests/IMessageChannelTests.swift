@@ -130,6 +130,51 @@ final class IMessageChannelTests: XCTestCase {
                        "NULL-text delivery receipt should not displace the real last message as preview")
     }
 
+    // MARK: - REP-021 pagination
+
+    /// 60 chats with messages → only 50 returned when limit=50.
+    func testThreadListHonorsLimit() async throws {
+        try buildSchema()
+        for i in 1...60 {
+            let rowid = Int64(i)
+            let identifier = "+1555000\(String(format: "%04d", i))"
+            try insertChat(rowid: rowid, identifier: identifier, display: "",
+                           service: "iMessage", guid: "iMessage;-;\(identifier)")
+            try insertMessage(rowid: rowid, chatRowID: rowid, text: "msg \(i)",
+                              fromMe: false, date: Int64(600_000_000 + i))
+        }
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 50)
+        XCTAssertEqual(threads.count, 50, "limit=50 must cap result at 50 even when 60 rows exist")
+    }
+
+    /// With 60 chats, limit=50 returns the 50 most recent (highest date) ones.
+    func testThreadListSortedByRecencyWithLimit() async throws {
+        try buildSchema()
+        // Chats 1–60; chat i has date 600_000_000 + i so chat 60 is newest.
+        for i in 1...60 {
+            let rowid = Int64(i)
+            let identifier = "+1555999\(String(format: "%04d", i))"
+            try insertChat(rowid: rowid, identifier: identifier, display: "",
+                           service: "iMessage", guid: "iMessage;-;\(identifier)")
+            try insertMessage(rowid: rowid, chatRowID: rowid, text: "msg \(i)",
+                              fromMe: false, date: Int64(600_000_000 + i))
+        }
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 50)
+
+        // The 50 returned should be chats 11–60 (most recent), ordered newest-first.
+        XCTAssertEqual(threads.count, 50)
+        // Oldest chat returned should be chat 11 (the 11th most-recent), not chat 1.
+        XCTAssertFalse(threads.map(\.id).contains("+15559990001"),
+                       "the 10 oldest chats must not appear when limit=50 and 60 exist")
+        // Newest chat (60) should be first.
+        XCTAssertEqual(threads[0].id, "+15559990060",
+                       "most recent chat must be first in the list")
+    }
+
     // MARK: - SQLite test helpers
 
     private func openDB() throws -> OpaquePointer {

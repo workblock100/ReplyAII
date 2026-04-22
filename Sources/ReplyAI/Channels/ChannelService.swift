@@ -20,6 +20,11 @@ protocol ChannelService: Sendable {
 }
 
 extension ChannelService {
+    /// Convenience overload: fetch at most 50 threads (the default page size).
+    func recentThreads() async throws -> [MessageThread] {
+        try await recentThreads(limit: 50)
+    }
+
     /// Default shim so existing mocks/stubs don't have to implement the
     /// incremental fetch until they care about rule actions.
     func newIncomingMessages(forThreadID id: String, sinceRowID: Int64) async throws -> [Message] {
