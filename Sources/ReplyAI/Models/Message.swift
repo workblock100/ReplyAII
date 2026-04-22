@@ -14,6 +14,12 @@ struct Message: Identifiable, Hashable, Sendable {
     /// Projected from `message.cache_has_attachments` (1 = true). False
     /// for fixtures and mocks that don't set it explicitly.
     let hasAttachment: Bool
+    /// Projected from `message.is_read`. False if the column is NULL or 0.
+    let isRead: Bool
+    /// Projected from `message.date_delivered`. Nil when the column is 0
+    /// (message not yet delivered, or a received message where the field
+    /// isn't populated).
+    let deliveredAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -21,7 +27,9 @@ struct Message: Identifiable, Hashable, Sendable {
         text: String,
         time: String,
         rowID: Int64 = 0,
-        hasAttachment: Bool = false
+        hasAttachment: Bool = false,
+        isRead: Bool = false,
+        deliveredAt: Date? = nil
     ) {
         self.id = id
         self.from = from
@@ -29,5 +37,7 @@ struct Message: Identifiable, Hashable, Sendable {
         self.time = time
         self.rowID = rowID
         self.hasAttachment = hasAttachment
+        self.isRead = isRead
+        self.deliveredAt = deliveredAt
     }
 }

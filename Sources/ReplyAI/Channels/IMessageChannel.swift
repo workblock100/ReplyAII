@@ -31,12 +31,23 @@ struct IMessageChannel: ChannelService {
     /// so the query layer can be exercised without Full Disk Access.
     let dbPathOverride: String?
 
+    /// Injectable sqlite3_open_v2 wrapper. Returns (resultCode, dbHandle).
+    /// The default delegates directly to sqlite3_open_v2; tests inject a
+    /// mock that returns SQLITE_BUSY on the first call to verify retry logic.
+    let dbOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?)
+
     init(
         nameFor: @escaping @Sendable (String) -> String? = { _ in nil },
-        dbPathOverride: String? = nil
+        dbPathOverride: String? = nil,
+        dbOpener: @escaping @Sendable (String, Int32) -> (Int32, OpaquePointer?) = { path, flags in
+            var db: OpaquePointer?
+            let rc = sqlite3_open_v2(path, &db, flags, nil)
+            return (rc, db)
+        }
     ) {
         self.nameFor = nameFor
         self.dbPathOverride = dbPathOverride
+        self.dbOpener = dbOpener
     }
 
     // SQLite wants transient text to live long enough for bind+step; use
@@ -212,7 +223,9 @@ struct IMessageChannel: ChannelService {
             m.attributedBody,
             m.is_from_me,
             m.date,
-            COALESCE(m.cache_has_attachments, 0)
+            COALESCE(m.cache_has_attachments, 0),
+            COALESCE(m.is_read, 0),
+            COALESCE(m.date_delivered, 0)
         FROM message m
         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
         JOIN chat c ON c.ROWID = cmj.chat_id
@@ -245,15 +258,22 @@ struct IMessageChannel: ChannelService {
             }()
             guard let body = decoded, !body.isEmpty else { continue }
 
-            let fromMe     = sqlite3_column_int(stmt, 3) != 0
-            let date       = sqlite3_column_int64(stmt, 4)
-            let hasAtt     = sqlite3_column_int(stmt, 5) != 0
+            let fromMe      = sqlite3_column_int(stmt, 3) != 0
+            let date        = sqlite3_column_int64(stmt, 4)
+            let hasAtt      = sqlite3_column_int(stmt, 5) != 0
+            let isRead      = sqlite3_column_int(stmt, 6) != 0
+            let dateDel     = sqlite3_column_int64(stmt, 7)
+            let deliveredAt: Date? = dateDel > 0
+                ? Date(timeIntervalSinceReferenceDate: Self.secondsSinceReferenceDate(appleDate: dateDel))
+                : nil
             out.append(Message(
                 from: fromMe ? .me : .them,
                 text: body,
                 time: Self.formatTime(appleDate: date),
                 rowID: rowID,
-                hasAttachment: hasAtt
+                hasAttachment: hasAtt,
+                isRead: isRead,
+                deliveredAt: deliveredAt
             ))
         }
         return out.reversed()  // oldest → newest for thread stream
@@ -317,16 +337,21 @@ struct IMessageChannel: ChannelService {
 
     private func openReadOnly() throws -> OpaquePointer {
         let path = dbPathOverride ?? Self.chatDBPath
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: path) else {
+        guard FileManager.default.fileExists(atPath: path) else {
             throw ChannelError.unavailable("No Messages database found at \(path).")
         }
-        // Try opening; the common failure mode is FDA-denied, which reads
-        // as "unable to open database file".
-        var db: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX
-        let rc = sqlite3_open_v2(path, &db, flags, nil)
-        if rc != SQLITE_OK {
+
+        var (rc, db) = dbOpener(path, flags)
+        if rc == SQLITE_BUSY {
+            // SQLITE_BUSY is common while macOS Messages holds a write lock
+            // during iCloud sync. One short retry is enough to ride it out.
+            sqlite3_close(db)
+            Thread.sleep(forTimeInterval: 0.1)
+            (rc, db) = dbOpener(path, flags)
+        }
+
+        guard rc == SQLITE_OK else {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown SQLite error \(rc)"
             sqlite3_close(db)
             if msg.lowercased().contains("authorization") || msg.lowercased().contains("unable to open") {

@@ -326,4 +326,54 @@ final class SearchIndexTests: XCTestCase {
         let hits = await index.search("anything")
         XCTAssertTrue(hits.isEmpty)
     }
+
+    // MARK: - BM25 ranking (REP-033)
+
+    func testExactMatchRanksAbovePartialMatch() async {
+        let index = SearchIndex()
+        // t1: single occurrence of "dinner" in a long sentence → low term frequency
+        // t2: body is five repetitions of "dinner" → high term frequency → higher BM25
+        let threads = [
+            MessageThread(id: "t1", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "t2", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "", time: "", unread: 0),
+        ]
+        let messages: [String: [Message]] = [
+            "t1": [Message(from: .them,
+                           text: "hey want to grab lunch or maybe dinner at some point soon",
+                           time: "now")],
+            "t2": [Message(from: .them, text: "dinner dinner dinner dinner dinner", time: "now")],
+        ]
+        await index.rebuild(from: messages, threads: threads)
+
+        let hits = await index.search("dinner")
+        XCTAssertEqual(hits.count, 2)
+        XCTAssertEqual(hits[0].threadID, "t2",
+                       "higher term-frequency document must rank above lower one")
+        XCTAssertEqual(hits[1].threadID, "t1")
+    }
+
+    func testResultsOrderedByRelevance() async {
+        let index = SearchIndex()
+        let threads = (1...3).map { i in
+            MessageThread(id: "t\(i)", channel: .slack, name: "Thread \(i)",
+                          avatar: "\(i)", preview: "", time: "", unread: 0)
+        }
+        // Relevance scales with repetition of the query term.
+        let messages: [String: [Message]] = [
+            "t1": [Message(from: .them, text: "lunch", time: "now")],
+            "t2": [Message(from: .them, text: "lunch lunch lunch", time: "now")],
+            "t3": [Message(from: .them, text: "lunch lunch lunch lunch lunch", time: "now")],
+        ]
+        await index.rebuild(from: messages, threads: threads)
+
+        let hits = await index.search("lunch")
+        XCTAssertEqual(hits.count, 3)
+        // FTS5 ORDER BY rank is ascending (lower = better); t3 > t2 > t1 by term frequency.
+        let ids = hits.map(\.threadID)
+        XCTAssertEqual(ids[0], "t3", "highest term-frequency must rank first")
+        XCTAssertEqual(ids[1], "t2")
+        XCTAssertEqual(ids[2], "t1", "lowest term-frequency must rank last")
+    }
 }

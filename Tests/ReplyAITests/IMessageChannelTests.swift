@@ -216,7 +216,8 @@ final class IMessageChannelTests: XCTestCase {
             is_read INTEGER,
             date INTEGER,
             associated_message_type INTEGER DEFAULT 0,
-            cache_has_attachments INTEGER DEFAULT 0
+            cache_has_attachments INTEGER DEFAULT 0,
+            date_delivered INTEGER DEFAULT 0
         );
         CREATE TABLE chat_message_join (
             chat_id INTEGER,
@@ -442,7 +443,8 @@ final class IMessageChannelAttachmentTests: XCTestCase {
             is_read INTEGER,
             date INTEGER,
             associated_message_type INTEGER DEFAULT 0,
-            cache_has_attachments INTEGER DEFAULT 0
+            cache_has_attachments INTEGER DEFAULT 0,
+            date_delivered INTEGER DEFAULT 0
         );
         CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
         """
@@ -509,5 +511,230 @@ final class IMessageChannelAttachmentTests: XCTestCase {
         XCTAssertEqual(messages.count, 1)
         XCTAssertFalse(messages[0].hasAttachment,
                        "cache_has_attachments=0 must project to Message.hasAttachment=false")
+    }
+}
+
+// MARK: - SQLITE_BUSY retry (REP-029)
+
+final class IMessageChannelBusyRetryTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-BusyRetry-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private func buildMinimalDB() throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else { XCTFail("test db creation failed"); return }
+        defer { sqlite3_close(handle) }
+        let schema = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT, attributedBody BLOB, is_from_me INTEGER, is_read INTEGER, date INTEGER, associated_message_type INTEGER DEFAULT 0, cache_has_attachments INTEGER DEFAULT 0, date_delivered INTEGER DEFAULT 0);
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(handle, schema, nil, nil, nil), SQLITE_OK)
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(handle, "INSERT INTO chat VALUES (1,'+15550001','','iMessage','iMessage;-;+15550001');", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+        sqlite3_prepare_v2(handle, "INSERT INTO message(ROWID,text,is_from_me,is_read,date) VALUES (1,'hello',0,0,700000000);", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+        sqlite3_prepare_v2(handle, "INSERT INTO chat_message_join VALUES (1,1);", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+    }
+
+    func testBusyOnFirstCallRetriesToSuccess() async throws {
+        try buildMinimalDB()
+        var callCount = 0
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: { path, flags in
+                callCount += 1
+                if callCount == 1 { return (SQLITE_BUSY, nil) }
+                var db: OpaquePointer?
+                let rc = sqlite3_open_v2(path, &db, flags, nil)
+                return (rc, db)
+            }
+        )
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(callCount, 2, "opener called twice: first SQLITE_BUSY, then success")
+        XCTAssertEqual(threads.count, 1)
+    }
+
+    func testPersistentBusyThrowsDatabaseError() async throws {
+        try buildMinimalDB()
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: { _, _ in (SQLITE_BUSY, nil) }
+        )
+        do {
+            _ = try await channel.recentThreads(limit: 10)
+            XCTFail("expected throw on persistent SQLITE_BUSY")
+        } catch let err as ChannelError {
+            guard case .databaseError(let code, _) = err else {
+                XCTFail("expected databaseError, got \(err)"); return
+            }
+            XCTAssertEqual(code, SQLITE_BUSY)
+        }
+    }
+}
+
+// MARK: - Message.isRead projection (REP-036)
+
+final class IMessageChannelIsReadTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-IsRead-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private func openDB() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else {
+            throw ChannelError.databaseError(code: 1, message: "test db open failed")
+        }
+        return handle
+    }
+
+    private func buildSchema(_ db: OpaquePointer) {
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT, attributedBody BLOB, is_from_me INTEGER, is_read INTEGER, date INTEGER, associated_message_type INTEGER DEFAULT 0, cache_has_attachments INTEGER DEFAULT 0, date_delivered INTEGER DEFAULT 0);
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertMsg(_ db: OpaquePointer, rowid: Int64, chatRowID: Int64,
+                           text: String, isRead: Bool) {
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, "INSERT INTO message(ROWID,text,is_from_me,is_read,date) VALUES (?1,?2,0,?3,700000000);", -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, text, -1, Self.TRANSIENT)
+        sqlite3_bind_int(s, 3, isRead ? 1 : 0)
+        sqlite3_step(s); sqlite3_finalize(s)
+        sqlite3_prepare_v2(db, "INSERT INTO chat_message_join VALUES (?1,?2);", -1, &s, nil)
+        sqlite3_bind_int64(s, 1, chatRowID); sqlite3_bind_int64(s, 2, rowid)
+        sqlite3_step(s); sqlite3_finalize(s)
+    }
+
+    func testIsReadProjectedCorrectly() async throws {
+        let db = try openDB()
+        buildSchema(db)
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, "INSERT INTO chat VALUES (1,'+15550001','','iMessage','iMessage;-;+15550001');", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+        insertMsg(db, rowid: 1, chatRowID: 1, text: "read msg",   isRead: true)
+        insertMsg(db, rowid: 2, chatRowID: 1, text: "unread msg", isRead: false)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "+15550001", limit: 10)
+        XCTAssertEqual(messages.count, 2)
+        let byText = Dictionary(uniqueKeysWithValues: messages.map { ($0.text, $0.isRead) })
+        XCTAssertEqual(byText["read msg"],   true,  "is_read=1 must project to isRead=true")
+        XCTAssertEqual(byText["unread msg"], false, "is_read=0 must project to isRead=false")
+    }
+}
+
+// MARK: - Message.deliveredAt projection (REP-055)
+
+final class IMessageChannelDeliveredAtTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-DeliveredAt-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private func openDB() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else {
+            throw ChannelError.databaseError(code: 1, message: "test db open failed")
+        }
+        return handle
+    }
+
+    private func buildSchema(_ db: OpaquePointer) {
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT, attributedBody BLOB, is_from_me INTEGER, is_read INTEGER, date INTEGER, associated_message_type INTEGER DEFAULT 0, cache_has_attachments INTEGER DEFAULT 0, date_delivered INTEGER DEFAULT 0);
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertMsg(_ db: OpaquePointer, rowid: Int64, chatRowID: Int64,
+                           text: String, dateDelivered: Int64) {
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, "INSERT INTO message(ROWID,text,is_from_me,is_read,date,date_delivered) VALUES (?1,?2,0,0,700000000,?3);", -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, text, -1, Self.TRANSIENT)
+        sqlite3_bind_int64(s, 3, dateDelivered)
+        sqlite3_step(s); sqlite3_finalize(s)
+        sqlite3_prepare_v2(db, "INSERT INTO chat_message_join VALUES (?1,?2);", -1, &s, nil)
+        sqlite3_bind_int64(s, 1, chatRowID); sqlite3_bind_int64(s, 2, rowid)
+        sqlite3_step(s); sqlite3_finalize(s)
+    }
+
+    func testDeliveredAtNonNilWhenNonZero() async throws {
+        let db = try openDB()
+        buildSchema(db)
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, "INSERT INTO chat VALUES (1,'+15550001','','iMessage','iMessage;-;+15550001');", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+        insertMsg(db, rowid: 1, chatRowID: 1, text: "delivered", dateDelivered: 700_000_000)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "+15550001", limit: 10)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertNotNil(messages[0].deliveredAt, "date_delivered > 0 must produce non-nil deliveredAt")
+        let expected = Date(timeIntervalSinceReferenceDate: 700_000_000)
+        XCTAssertEqual(
+            messages[0].deliveredAt?.timeIntervalSinceReferenceDate ?? 0,
+            expected.timeIntervalSinceReferenceDate,
+            accuracy: 1.0
+        )
+    }
+
+    func testDeliveredAtNilWhenZero() async throws {
+        let db = try openDB()
+        buildSchema(db)
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, "INSERT INTO chat VALUES (2,'+15550002','','iMessage','iMessage;-;+15550002');", -1, &s, nil)
+        sqlite3_step(s); sqlite3_finalize(s)
+        insertMsg(db, rowid: 2, chatRowID: 2, text: "not delivered", dateDelivered: 0)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "+15550002", limit: 10)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertNil(messages[0].deliveredAt, "date_delivered=0 must produce nil deliveredAt")
     }
 }
