@@ -151,7 +151,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-032627
 - files_to_touch: `Sources/ReplyAI/App/ReplyAIApp.swift`, `Sources/ReplyAI/Services/NotificationCoordinator.swift` (new), `Tests/ReplyAITests/NotificationCoordinatorTests.swift` (new)
 - scope: Register a `UNNotificationCategory` with a `UNTextInputNotificationAction` (identifier: "REPLY") so the system shows an inline reply field on ReplyAI notifications. Create `NotificationCoordinator` (`@Observable @MainActor`) that: requests UNAuthorizationOptions (.alert, .badge, .sound) on first launch, registers the "REPLY" category, implements `UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:)` to extract the reply text and route to `InboxViewModel.pendingNotificationReply`. Wire into `ReplyAIApp.init()`. Tests use a mock `UNUserNotificationCenter` (protocol-extracted) to verify: category registered on launch, delegate callback extracts text correctly, authorization re-request is skipped if already granted.

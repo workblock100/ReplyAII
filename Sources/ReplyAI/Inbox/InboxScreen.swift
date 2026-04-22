@@ -2,6 +2,7 @@ import SwiftUI
 
 struct InboxScreen: View {
     @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
+    @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?
     @State private var model = InboxViewModel()
     @State private var engine: DraftEngine = {
         let useMLXNow = UserDefaults.standard.bool(forKey: PreferenceKey.useMLX)
@@ -66,6 +67,8 @@ struct InboxScreen: View {
             SendConfirmSheet(model: model)
         }
         .task(id: "initial-sync") {
+            coordinator?.inbox = model
+            await coordinator?.setUp()
             await model.syncFromIMessage()
         }
         .task(id: model.selectedThreadID) {

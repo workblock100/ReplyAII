@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct ReplyAIApp: App {
+    @State private var coordinator = NotificationCoordinator()
+
     init() {
         UserDefaults.registerReplyAIDefaults()
     }
@@ -20,6 +22,7 @@ struct ReplyAIApp: App {
         // menu-bar "Open inbox" button and from palette shortcuts.
         WindowGroup("Inbox", id: "inbox") {
             InboxScreen()
+                .environment(coordinator)
         }
         .defaultSize(width: 1180, height: 720)
         .windowStyle(.hiddenTitleBar)

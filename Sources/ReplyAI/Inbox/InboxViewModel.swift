@@ -64,6 +64,10 @@ final class InboxViewModel {
     var sendConfirmation: SendConfirmation?
     /// Transient toast shown in the composer for 2s after a send.
     var sendToast: String?
+    /// Set by NotificationCoordinator when the user replies inline from a
+    /// notification. The UI consumes this (sets to nil) once it stages the
+    /// reply text in the composer for the matching thread.
+    var pendingNotificationReply: (threadID: String, text: String)?
 
     struct SendConfirmation: Equatable {
         let threadID: String
