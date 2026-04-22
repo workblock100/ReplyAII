@@ -106,8 +106,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-054016
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: When `InboxViewModel.archive(threadID:)` is called, the archived thread remains in the FTS5 index and continues to appear in search results — a silent correctness bug. Add `SearchIndex.delete(threadID:)` that removes all rows for a thread from the FTS5 table (`DELETE FROM thread_search WHERE thread_id = ?`). Wire it in `InboxViewModel.archive`: call `searchIndex.delete(threadID:)` after marking the thread archived. If SearchIndex is not yet injectable via environment, add a stored reference or expose a shared default.
 - success_criteria:
@@ -122,8 +122,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-054016
 - files_to_touch: `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulePredicate.senderIs(String)` uses exact `==` string comparison. Contact resolution can return "Alice Smith" while a user's rule stores "alice smith" (casing varies by when the rule was created vs. how CNContactStore resolved the contact at that moment). Change the comparison to `.lowercased() == pattern.lowercased()`. The fix is one source line; add tests verifying case variants match and non-matching names still reject.
 - success_criteria:
@@ -138,8 +138,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-054016
 - files_to_touch: `Sources/ReplyAI/Models/Message.swift`, `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: The `message` table has a `cache_has_attachments` column (Bool stored as Int 0/1). Currently `Message.hasAttachment` is not projected from SQL — the `RulePredicate.hasAttachment` predicate from REP-018 still relies on the sidebar sentinel string "📎 Attachment" from IMessagePreview, which is fragile. Add `cache_has_attachments` to the SQL SELECT in `IMessageChannel.recentThreads` and project it as `Message.hasAttachment: Bool`. Update `RuleEvaluator` to use `thread.messages.contains { $0.hasAttachment }` instead of the string sentinel. Tests: row with `cache_has_attachments=1` → `hasAttachment=true`; 0 → false.
 - success_criteria:
