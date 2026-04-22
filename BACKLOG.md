@@ -98,21 +98,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - success_criteria: `wip/` branch — human reviews scope creep, merges when ready.
 - test_plan: mock Slack API responses in tests; no real HTTP in CI.
 
-### REP-041 — SearchIndex: persist FTS5 index to disk between launches
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status:   done
-- claimed_by: worker-2026-04-22-144200
-- files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: `SearchIndex` uses an in-memory SQLite FTS5 database. Every app launch rebuilds it from `IMessageChannel`. For large inboxes, this rebuild is slow and blocks the first search. Persist the FTS5 database to `~/Library/Application Support/ReplyAI/search.db`. On launch, open the persisted file instead of `:memory:`. Rebuild is still triggered on first launch (if file missing) or explicit settings wipe. Add a `SearchIndex(databaseURL: URL?)` initializer: nil = in-memory (tests), non-nil = file-backed (production). Tests: create an index, insert threads, close, reopen with same URL, verify threads are still searchable.
-- success_criteria:
-  - `SearchIndex(databaseURL: URL?)` initializer
-  - File-backed mode survives close + reopen
-  - `testPersistenceAcrossReopens`
-  - Existing in-memory tests use `SearchIndex(databaseURL: nil)` — no regressions
-- test_plan: Use a temp-file URL in persistence test; tear down in `tearDownWithError`.
-
 ### REP-043 — InboxViewModel: sync error state + inline error surface
 - priority: P2
 - effort: M
@@ -212,21 +197,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testSnippetContainsMatchedTerm`, `testSnippetNilOnEmptyQuery`, `testResultTypeIsSearchResult`
   - Existing SearchIndex callers updated (PalettePopover)
 - test_plan: Extend `SearchIndexTests.swift` with 3 new cases using in-memory FTS5.
-
-### REP-073 — PromptBuilder: verify most-recent-message invariant + short-thread passthrough test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status:   done
-- claimed_by: worker-2026-04-22-144200
-- files_to_touch: `Sources/ReplyAI/Services/PromptBuilder.swift` (access-level change only), `Tests/ReplyAITests/PromptBuilderTests.swift` (extend)
-- scope: REP-026 (commit 9717756) already implemented `PromptBuilder.truncate` (private) with a `historyCharBudget = 2_000` constant and shipped `testLongHistoryIsTruncatedToCharBudget`. Two invariants are untested: (1) a short history (well under budget) passes through unchanged — no messages are dropped; (2) when truncation does occur, the most-recent message (last in the array) is always retained, never the first. Change `truncate` visibility from `private` to `internal` so tests can call it directly with a custom budget. Add `testShortHistoryPassesThroughUnchanged` and `testMostRecentMessageAlwaysRetained`. No structural code changes — access-level bump + 2 test cases.
-- success_criteria:
-  - `PromptBuilder.truncate` is `internal` (not `private`)
-  - `testShortHistoryPassesThroughUnchanged` — short history unchanged after truncate
-  - `testMostRecentMessageAlwaysRetained` — last message present in any truncated output
-  - Existing `testLongHistoryIsTruncatedToCharBudget` still passes
-- test_plan: Extend `PromptBuilderTests.swift` with 2 cases using a custom low budget value.
 
 ### REP-074 — ContactsResolver: per-handle cache TTL (30 min) for post-launch contact changes
 - priority: P2
@@ -437,11 +407,191 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing PreferencesTests remain green
 - test_plan: Extend `PreferencesTests.swift` with 2 new cases using suiteName-isolated UserDefaults.
 
+### REP-105 — Stats: persist lifetime counters to disk across app launches
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.shared` resets all in-memory counters to zero on every app launch. Persist cumulative counters to `~/Library/Application Support/ReplyAI/stats-lifetime.json` (separate from the per-session weekly file REP-056 produces). On `Stats.init`, read the JSON file and seed the in-memory counters from it. On each `increment*` call, schedule an atomic write of the updated totals (debounced 2s to avoid write-per-increment overhead). Use an injectable `statsFileURL: URL?` (nil = skip persistence, for tests). Tests: `testLifetimeCountersSeedFromDisk` — init with pre-written JSON, verify counters start at correct value; `testLifetimeCountersAccumulateAcrossInits` — write to disk in first instance, init second instance, verify accumulation; `testNilURLSkipsPersistence` — ensure tests using nil URL never read/write files.
+- success_criteria:
+  - `Stats(statsFileURL:)` initializer accepting injectable URL
+  - In-memory counters seeded from disk on init
+  - Atomic write on increment (debounced 2s)
+  - `testLifetimeCountersSeedFromDisk`, `testLifetimeCountersAccumulateAcrossInits`, `testNilURLSkipsPersistence`
+  - Existing StatsTests remain green (use `nil` URL)
+- test_plan: New test cases in `StatsTests.swift` using temp-file URL injection; tear down in `tearDownWithError`.
+
+### REP-106 — SmartRule: `messageAgeOlderThan(hours:)` predicate
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: Add `case messageAgeOlderThan(hours: Int)` to `RulePredicate`. `RuleEvaluator` computes `Date() - thread.lastMessageDate` and returns true if the difference exceeds `hours * 3600`. Inject a `DateProvider: () -> Date` (same pattern as REP-079's `timeOfDay`). Tests: a thread last-messaged 25h ago matches `messageAgeOlderThan(hours: 24)`; a thread 1h ago does not; a thread exactly at the threshold (±1s) is checked for boundary behavior; Codable round-trip preserves `hours`.
+- success_criteria:
+  - `RulePredicate.messageAgeOlderThan(hours:)` added, Codable, evaluatable
+  - `testMessageOlderThanHoursMatches`, `testMessageYoungerThanHoursDoesNotMatch`, `testMessageAgeOlderThanCodableRoundTrip`
+  - Existing RulesTests remain green
+- test_plan: Extend `RulesTests.swift` with 3 new cases using injectable `DateProvider`.
+
+### REP-107 — DraftEngine: explicit dismiss() state-transition tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftEngine.dismiss(threadID:tone:)` transitions a cached draft to `.idle` without triggering a new LLM call — used when the user presses ⌘. The path is only covered implicitly via eviction tests. Add explicit coverage: `testDismissAfterReadyTransitionsToIdle` — prime, wait for `.ready`, call `dismiss`, assert state is `.idle`; `testDismissOfUnknownEntryIsNoop` — call `dismiss` on an entry that was never primed, assert no crash and state is `.idle`; `testDismissDoesNotInvalidateOtherEntries` — prime two distinct `(threadID, tone)` pairs, dismiss one, assert the other is still `.ready`. Uses existing `StubLLMService`. No production code changes.
+- success_criteria:
+  - `testDismissAfterReadyTransitionsToIdle`
+  - `testDismissOfUnknownEntryIsNoop`
+  - `testDismissDoesNotInvalidateOtherEntries`
+  - Existing DraftEngineTests remain green
+- test_plan: Extend `DraftEngineTests.swift` with 3 new cases.
+
+### REP-108 — ContactsResolver: flush cache on CNContactStoreDidChange notification
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: The in-memory cache in `ContactsResolver` is never flushed mid-session unless TTL expires (REP-074). If the user adds a new contact, that handle remains cached as the raw string until TTL. Register for `NSNotification.Name.CNContactStoreDidChange` in `ContactsResolver.init` and flush all cache entries when the notification fires, forcing a re-query on the next access. Inject `NotificationCenter` via init parameter (default `.default`) for testability. Tests: `testContactStoreChangeFlushesCache` — resolve a handle, post the notification, resolve again, verify the store was called twice (not once from cache); `testFlushDoesNotCrashOnEmptyCache` — post the notification without any prior resolutions.
+- success_criteria:
+  - `ContactsResolver(store:notificationCenter:ttl:)` initializer (or equivalent injection)
+  - Cache flushed on `CNContactStoreDidChange`
+  - `testContactStoreChangeFlushesCache`, `testFlushDoesNotCrashOnEmptyCache`
+  - Existing ContactsResolverTests remain green
+- test_plan: Extend `ContactsResolverTests.swift`; use `NotificationCenter()` (fresh instance) in tests to avoid global notification side-effects.
+
+### REP-109 — SearchIndex: channel-filter integration test with two-channel data
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-080 added a `channel` TEXT column and per-channel filter support to `SearchIndex`, but no test exercises the filter with mixed-channel data. Add a test: insert 5 threads tagged `channel: "iMessage"` and 3 threads tagged `channel: "Slack"`, all with the same preview text. Assert that `search(query:channel:"iMessage")` returns exactly 5 results; `search(query:channel:"Slack")` returns exactly 3; unfiltered `search(query:)` returns all 8. Tests guard against the channel filter silently matching all rows or none.
+- success_criteria:
+  - `testChannelFilterIsolatesResults` — per-channel search returns correct count
+  - `testUnfilteredSearchReturnsAllChannels` — no filter returns full result set
+  - No production code changes
+- test_plan: Extend `SearchIndexTests.swift` with 2 new cases using in-memory FTS5.
+
+### REP-110 — RulesStore: export format version field for schema evolution
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore.exportRules(to:)` (REP-035) writes a bare JSON array `[SmartRule]`. This is fragile: a future predicate type addition would silently corrupt imports on older versions. Wrap the export in a `RulesExport` struct `{ "version": 1, "rules": [...] }`. Update `importRules(from:)` to read the version key and handle `version == 1` as the current schema; unknown versions throw a new `RulesStoreError.unsupportedExportVersion`. Tests: `testExportIncludesVersionField` — verify exported JSON contains `"version": 1`; `testImportRoundTripWithVersionField` — export then import produces same rules; `testImportUnknownVersionThrows` — JSON with `"version": 99` throws `unsupportedExportVersion`.
+- success_criteria:
+  - `RulesExport` wrapper type with `version: Int` and `rules: [SmartRule]`
+  - `exportRules(to:)` writes the wrapper
+  - `importRules(from:)` reads version; unknown version throws
+  - `testExportIncludesVersionField`, `testImportRoundTripWithVersionField`, `testImportUnknownVersionThrows`
+  - Existing export/import tests remain green
+- test_plan: Extend `RulesTests.swift` with 3 new cases.
+
+### REP-111 — InboxViewModel: snooze thread action + resumption
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Models/MessageThread.swift` (or equivalent), `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: The gallery has a `sfc-snooze` screen with a snooze-duration picker. Add the underlying ViewModel action: `snooze(thread: MessageThread, until: Date)`. This sets `thread.snoozedUntil = until`, adds the thread ID to a `snoozedThreadIDs: Set<String>` persisted in Preferences (`pref.inbox.snoozedThreadIDs`), and removes the thread from the `threads` display array. A `Task.sleep(until: date, clock: .continuous)` is started that re-inserts the thread when it wakes. UI that triggers this (the snooze picker view) is ui_sensitive and handled separately. Tests: `testSnoozedThreadHiddenFromList` — snooze a thread, assert it's absent from `threads`; `testSnoozedThreadResurfacesAfterExpiry` — use a mock clock (pass `wakeDate` in the near past) to verify re-insertion; `testSnoozeSetPersistedAcrossInit` — verify `pref.inbox.snoozedThreadIDs` is written.
+- success_criteria:
+  - `InboxViewModel.snooze(thread:until:)` implemented
+  - Snoozed threads hidden from `threads` array
+  - Resumption timer re-inserts thread
+  - `pref.inbox.snoozedThreadIDs` Preferences key for persistence
+  - `testSnoozedThreadHiddenFromList`, `testSnoozedThreadResurfacesAfterExpiry`, `testSnoozeSetPersistedAcrossInit`
+- test_plan: Extend `InboxViewModelTests.swift` with 3 new cases; use injected `Date` for deterministic timer tests.
+
+### REP-112 — PromptBuilder: tone system instruction distinctness test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.build(thread:tone:)` incorporates a tone-specific system instruction, but no test verifies that each `Tone` case produces a distinct, non-empty instruction. Add a test that iterates over all `Tone` enum cases, calls `build`, extracts the system instruction string, and asserts: (1) it is non-empty for every tone; (2) no two tones produce the same system instruction text (distinctness). This guards against accidental copy-paste in the tone→instruction mapping. No production code changes.
+- success_criteria:
+  - `testEachToneProducesNonEmptySystemInstruction` — all tones non-empty
+  - `testToneInstructionsAreDistinct` — no duplicate instruction strings across tones
+  - Existing PromptBuilderTests remain green
+- test_plan: Extend `PromptBuilderTests.swift` with 2 new cases; use the full `Tone` enum.
+
+### REP-113 — SmartRule: `or` predicate with 3+ branches evaluation
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulePredicate.or([...])` accepts an array of predicates. Existing tests only exercise 2-branch `or`. Add tests for 3-branch cases: `testOr3BranchesMiddleMatchReturnsTrue` — `or([nomatch, match, nomatch])` returns true; `testOr3BranchesNoneMatchReturnsFalse` — `or([nm, nm, nm])` returns false; `testOr3BranchesAllMatchReturnsTrue` — `or([m, m, m])` returns true; `testOrEmptyArrayReturnsFalse` — `or([])` returns false (document the defined behavior). Uses `senderIs` with controlled thread contexts. No production changes.
+- success_criteria:
+  - `testOr3BranchesMiddleMatchReturnsTrue`
+  - `testOr3BranchesNoneMatchReturnsFalse`
+  - `testOr3BranchesAllMatchReturnsTrue`
+  - `testOrEmptyArrayReturnsFalse`
+  - Existing RulesTests remain green
+- test_plan: Extend `RulesTests.swift` with 4 new cases; no production code changes.
+
+### REP-114 — DraftEngine: LLM error path surfaces in DraftState
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: When `LLMService.draft(...)` throws, `DraftEngine` should transition to `.error(Error)` (or equivalent) rather than leaving the state as `.loading`. This path is documented in `DraftState` but its test coverage is thin — only the eviction tests touch error scenarios indirectly. Add explicit tests using a `ThrowingStubLLMService` (a simple struct returning an `AsyncThrowingStream` that immediately throws): `testLLMErrorTransitionsToDraftStateError` — verify state is `.error` after failed prime; `testRegenerateAfterErrorRetries` — after an error, calling regenerate kicks off a new prime attempt and eventually reaches `.ready`.
+- success_criteria:
+  - `testLLMErrorTransitionsToDraftStateError` — state is `.error(...)` after LLM failure
+  - `testRegenerateAfterErrorRetries` — regenerate clears error and attempts new draft
+  - No production code changes (test harness only)
+- test_plan: Extend `DraftEngineTests.swift`; add `ThrowingStubLLMService` as a test-only type in the same test file.
+
+### REP-115 — Preferences: `pref.app.launchCount` key + increment on startup
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: Add `pref.app.launchCount: Int` (default 0) to `Preferences`. This key is NOT wiped by `wipe()` — it tracks lifetime launches regardless of settings resets. Increment in `ReplyAIApp.init()` using `Preferences.shared.launchCount += 1`. Future consumers can gate first-run hints or onboarding nudges on `launchCount == 1`. Tests: `testLaunchCountStartsAtZero` — fresh suite returns 0; `testLaunchCountIncrementsOnWrite` — write 1, read back 1; `testLaunchCountSurvivesWipe` — set to 5, call wipe(), verify count is still 5 (not reset).
+- success_criteria:
+  - `pref.app.launchCount` key in `Preferences`
+  - Key excluded from `wipe()` sweep
+  - Incremented in `ReplyAIApp.init()`
+  - `testLaunchCountStartsAtZero`, `testLaunchCountIncrementsOnWrite`, `testLaunchCountSurvivesWipe`
+  - Existing PreferencesTests remain green
+- test_plan: Extend `PreferencesTests.swift` with 3 new cases using suiteName-isolated UserDefaults.
+
 ---
 
 ## Done / archived
 
 *(Planner moves finished items here each day. Worker never modifies this section.)*
+
+### REP-041 — SearchIndex: persist FTS5 index to disk between launches
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-144200
+
+### REP-073 — PromptBuilder: most-recent-message invariant + short-thread passthrough test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-144200
 
 ### REP-032 — Stats: draft acceptance rate per tone
 - priority: P2

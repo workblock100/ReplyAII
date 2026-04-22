@@ -110,6 +110,7 @@ Tests/ReplyAITests/                294 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `7196e9d` SearchIndex disk persistence + PromptBuilder truncate invariants (REP-041, REP-073, worker-2026-04-22-144200)
 - `a5bd7a4` RulesStore: export/import rules via JSON file URL; AGENTS.md sync (REP-035, REP-042, worker-2026-04-22-142600)
 - `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-130300)
 - `fa4d009` DraftEngine: invalidate stale draft on watcher refire; ContactsResolver: batch resolve (REP-054, REP-037, worker-2026-04-22-141222)
