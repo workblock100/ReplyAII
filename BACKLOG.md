@@ -107,8 +107,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-21-223700
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Sources/ReplyAI/Channels/ChannelService.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `recentThreads()` currently returns all threads (no LIMIT). Large inboxes (1000+ threads) make initial sync slow and memory-heavy. Add `limit: Int = 50` parameter to `recentThreads(limit:)` and propagate to the SQL `ORDER BY ... LIMIT ?`. Update `ChannelService` protocol signature with a default parameter. In `InboxViewModel.syncFromIMessage()`, pass the user's preferred limit (from `Preferences.pref.inbox.threadLimit` once REP-030 ships; hard-code 50 for now). Add an in-memory SQLite test that inserts 60 rows and verifies exactly 50 are returned, sorted by recency.
 - success_criteria:
