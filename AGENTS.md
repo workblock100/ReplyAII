@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                218 tests
+Tests/ReplyAITests/                245 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,9 @@ Tests/ReplyAITests/                218 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `7667f22` message length guard, IMessageSender -1708 retry, RulesStore 100-rule cap, mark-as-read on select, SQLITE_NOTADB graceful error, NotificationCoordinator test coverage (REP-059, REP-064, REP-069, REP-076, REP-077, REP-078, worker-2026-04-22-065225)
+- `bbedd1a` InboxViewModel: consume pending UNNotification inline reply (REP-072, worker-2026-04-22-064413)
+- `3169995` preference keys threadLimit/autoPrime, SmartRule regex validation, IMessageSender dry-run mode (REP-030, REP-031, REP-040, worker-2026-04-22-061633)
 - `90e21f6` SQLITE_BUSY retry, isRead/deliveredAt fields, BM25 ranking tests (REP-029, REP-036, REP-055, REP-033, worker-2026-04-22-055942)
 - `ec9e723` SearchIndex.delete, senderIs case-insensitive, cache_has_attachments projection (REP-063, REP-065, REP-068, worker-2026-04-22-054016)
 - `ea37669` DraftEngine eviction, Stats weekly log, SearchIndex concurrency test (REP-034, REP-056, REP-057, worker-2026-04-22-042232)
@@ -155,11 +158,11 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-218 XCTest cases, all green.
+245 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
-- **UNNotification inline reply**. `NotificationCoordinator` registered (`UNTextInputNotificationAction`, "REPLY" category) and wired to `InboxViewModel.pendingNotificationReply` (REP-028, commit `9810196`). Reply consumption in `InboxViewModel` pending (REP-072).
+- ~~**UNNotification inline reply.**~~ Resolved: `InboxViewModel` observes `pendingNotificationReply` via `NotificationCoordinator` callback, looks up the thread by ID, calls `IMessageSender.send(text:toChatGUID:)`, then clears the pending state. Unknown thread IDs are logged and discarded without crash (REP-072, commit `bbedd1a`). Test coverage: 2 cases in `InboxViewModelTests.swift`.
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.
