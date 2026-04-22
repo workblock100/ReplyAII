@@ -299,8 +299,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats` uses `NSLock` (via `Locked<T>`) to protect all counter mutations. The lock has been correct in review but was never stressed with concurrent callers. Add a test that spawns 200 concurrent Swift `Task`s, each calling `Stats.incrementRulesFired()` once. After all tasks complete (via `TaskGroup`), assert `stats.rulesEvaluated == 200`. If any increment is lost, the count will be under 200. This is a data-race detector test — run with `-sanitize=thread` in CI.
 - success_criteria:
@@ -341,8 +341,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulePredicate.not(inner:)` was added in the DSL but its evaluation path in `RuleEvaluator` is only implicitly tested via the wip branch tests (not yet on main). Add explicit `RuleEvaluator` unit tests: (1) `not(senderIs("Alice"))` returns false when sender is Alice, true otherwise; (2) `not(not(senderIs("Alice")))` double-negation returns the same result as `senderIs("Alice")` — verifying the evaluator doesn't short-circuit; (3) `not` combined with `or` via De Morgan's law equivalence. Tests live in `RulesTests.swift` alongside existing predicate tests.
 - success_criteria:
@@ -427,8 +427,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add `case messageAgeOlderThan(hours: Int)` to `RulePredicate`. `RuleEvaluator` computes `Date() - thread.lastMessageDate` and returns true if the difference exceeds `hours * 3600`. Inject a `DateProvider: () -> Date` (same pattern as REP-079's `timeOfDay`). Tests: a thread last-messaged 25h ago matches `messageAgeOlderThan(hours: 24)`; a thread 1h ago does not; a thread exactly at the threshold (±1s) is checked for boundary behavior; Codable round-trip preserves `hours`.
 - success_criteria:
@@ -441,8 +441,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.dismiss(threadID:tone:)` transitions a cached draft to `.idle` without triggering a new LLM call — used when the user presses ⌘. The path is only covered implicitly via eviction tests. Add explicit coverage: `testDismissAfterReadyTransitionsToIdle` — prime, wait for `.ready`, call `dismiss`, assert state is `.idle`; `testDismissOfUnknownEntryIsNoop` — call `dismiss` on an entry that was never primed, assert no crash and state is `.idle`; `testDismissDoesNotInvalidateOtherEntries` — prime two distinct `(threadID, tone)` pairs, dismiss one, assert the other is still `.ready`. Uses existing `StubLLMService`. No production code changes.
 - success_criteria:
@@ -517,8 +517,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: `PromptBuilder.build(thread:tone:)` incorporates a tone-specific system instruction, but no test verifies that each `Tone` case produces a distinct, non-empty instruction. Add a test that iterates over all `Tone` enum cases, calls `build`, extracts the system instruction string, and asserts: (1) it is non-empty for every tone; (2) no two tones produce the same system instruction text (distinctness). This guards against accidental copy-paste in the tone→instruction mapping. No production code changes.
 - success_criteria:
@@ -531,8 +531,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-163000
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulePredicate.or([...])` accepts an array of predicates. Existing tests only exercise 2-branch `or`. Add tests for 3-branch cases: `testOr3BranchesMiddleMatchReturnsTrue` — `or([nomatch, match, nomatch])` returns true; `testOr3BranchesNoneMatchReturnsFalse` — `or([nm, nm, nm])` returns false; `testOr3BranchesAllMatchReturnsTrue` — `or([m, m, m])` returns true; `testOrEmptyArrayReturnsFalse` — `or([])` returns false (document the defined behavior). Uses `senderIs` with controlled thread contexts. No production changes.
 - success_criteria:
