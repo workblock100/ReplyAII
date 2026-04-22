@@ -161,8 +161,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-111201
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Add `pref.drafts.autoPrime: Bool` (default `true`) to `Preferences`. In `InboxViewModel.selectThread(_:)`, guard the `engine.prime(...)` call behind this preference. When false, the user's first draft is generated only on explicit `⌘J`. This gives power users a way to avoid triggering the LLM on every thread open. Tests: default is true (existing behavior unchanged), false skips prime call.
 - success_criteria:
@@ -377,8 +377,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-111201
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `InboxViewModelTests.swift` (added by REP-022) covers the sync guard and rule re-evaluation paths but not the thread selection flow. Add coverage for: `selectThread(_:)` sets `selectedThreadID`; `selectThread` calls `engine.prime(for:tone:)` when `autoPrime` is true; selecting the same thread twice calls prime once (idempotent). Uses a `MockDraftEngine` added inline. Optionally cover `evict` on deselect if REP-034 has landed.
 - success_criteria:
@@ -469,8 +469,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-111201
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Rules currently fire on every `syncFromIMessage()` call. Power users who perform an initial large sync (hundreds of threads) may not want rules auto-applied during that bulk import. Add `pref.rules.autoApplyOnSync: Bool` (default `true`). In `InboxViewModel.syncFromIMessage()`, guard the `RuleEvaluator` call behind this preference. When `false`, rules are only applied when the user manually selects a thread (`selectThread(_:)` path is unaffected). Tests: default is true (existing behavior unchanged); false skips the rules call during sync but not on thread select.
 - success_criteria:
@@ -633,6 +633,54 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testWeeklyLogHandlesNonExistentDirectory`
   - Existing StatsTests remain green
 - test_plan: Extend `StatsTests.swift` with 4 new cases; use a `FileManager`-based temp directory.
+
+### REP-092 — SearchIndex: sanitize FTS5 special-character input
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: [`Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`]
+- scope: `SearchIndex.search(query:)` passes user-typed text directly into the FTS5 `MATCH` clause. FTS5 operators (`"`, `*`, `-`, uppercase `AND`/`OR`/`NOT`) can produce SQL errors or unexpected operator semantics when present in literal search text. Add `private func sanitize(_ raw: String) -> String` that wraps the input in double-quote FTS5 phrase syntax (`"` → `""` escaping, then `"<escaped>"`) so every query becomes a literal phrase match. Wire it at the top of `search(query:)` and `search(query:channel:)`. This is safe to do because users search for thread content (names, words), not FTS5 operators. Tests: query containing `"`, `*`, `-`, `AND` returns threads with those literal strings; sanitized query still matches a normal word; empty query returns empty (unchanged behavior).
+- success_criteria:
+  - `sanitize(_:)` private method applied to all search paths
+  - User query `"hello"` matches thread containing the string `"hello"` (not FTS phrase)
+  - User query `hello AND world` matches only if both words are together, not as FTS5 AND operator
+  - `testQueryWithQuotesDoesNotError`, `testQueryWithAsteriskLiteral`, `testNormalQueryStillMatches`
+  - Existing SearchIndexTests remain green
+- test_plan: Extend `SearchIndexTests.swift` with 3 new cases using in-memory FTS5.
+
+### REP-093 — IMessageSender: migrate static `isDryRun` to `executeHook` pattern
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: [`Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`]
+- scope: REP-040 added `static var isDryRun: Bool` so tests can prevent real AppleScript sends. REP-025 already ships `executeHook: ((String, String) -> Void)?` for a cleaner injection pattern — when non-nil, the hook is called instead of AppleScript. These two mechanisms are redundant and `isDryRun` as a static var introduces test-isolation risk: if one test sets it true and the teardown fails, subsequent tests skip real sends silently. Remove `static var isDryRun`. Update the dry-run check in `sendRaw` to rely solely on `executeHook != nil` (if the hook is present, skip real AppleScript and call the hook). Update existing dry-run test cases to provide an `executeHook` closure instead of setting `isDryRun`. No behavior change for production path (hook is nil by default).
+- success_criteria:
+  - `static var isDryRun` removed from `IMessageSender`
+  - `sendRaw` uses `executeHook != nil` as the dry-run signal
+  - All existing IMessageSenderTests pass after migration
+  - No test sets a global static var
+  - `testDryRunUsesHookNotStaticVar` (replaces old `isDryRun`-based test)
+- test_plan: Migrate `IMessageSenderTests.swift` dry-run tests to use hook injection; verify zero static-mutation in test file.
+
+### REP-094 — Stats: add `rulesMatchedCount` counter (distinct from `rulesEvaluated`)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: [`Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/StatsTests.swift`]
+- scope: `Stats.rulesEvaluated` increments on every `RuleEvaluator.matching()` call regardless of outcome. There is no counter distinguishing "we ran the evaluator" from "the evaluator found a match." Add `rulesMatchedCount: Int` to `Stats` (JSON-persisted alongside existing counters). In `RulesStore`'s rule-application path (wherever `matching()` is called and results are acted on), call `Stats.shared.incrementRulesMatched()` only when the returned rules array is non-empty. Expose `matchRate: Double?` computed property (nil if `rulesEvaluated == 0`; otherwise `Double(rulesMatchedCount) / Double(rulesEvaluated)`). Tests: counter increments only on non-empty match result; stays at 0 for no-match evaluation; `matchRate` is correct; JSON round-trip.
+- success_criteria:
+  - `rulesMatchedCount: Int` on `Stats`, persisted to stats.json
+  - Incremented only when `matching()` returns non-empty results
+  - `matchRate: Double?` computed property correct
+  - `testRulesMatchedCountOnlyForNonEmpty`, `testRulesMatchedCountZeroOnNoMatch`, `testMatchRateCalculation`, `testMatchedCountJSONRoundTrip`
+  - Existing StatsTests remain green
+- test_plan: Extend `StatsTests.swift` with 4 new cases; use injectable `RulesStore` with a mock evaluator to control match vs no-match.
 
 ---
 
