@@ -110,6 +110,11 @@ Tests/ReplyAITests/                254 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-145500)
+- `fa4d009` DraftEngine: invalidate stale draft on watcher refire; ContactsResolver: batch resolve (REP-054, REP-037, worker-2026-04-22-141222)
+- `038826e` per-tone draft counters + acceptance rate on Stats (REP-032, worker-2026-04-22-120935)
+- `6a629a2` SearchIndex: channel column filter, FTS5 sanitizer, prefix-match tests (REP-080, REP-085, REP-092, worker-2026-04-22-122448)
+- `c114189` per-channel index counter, lastFiredActions debug surface, load-progress + cancellation tests (REP-070, REP-058, REP-038, worker-2026-04-22-120200)
 - `874f483` autoPrime + autoApplyOnSync preference flags, InboxViewModel thread-selection test coverage (REP-039, REP-071, REP-081, worker-2026-04-22-111201)
 - `7667f22` message length guard, IMessageSender -1708 retry, RulesStore 100-rule cap, mark-as-read on select, SQLITE_NOTADB graceful error, NotificationCoordinator test coverage (REP-059, REP-064, REP-069, REP-076, REP-077, REP-078, worker-2026-04-22-065225)
 - `bbedd1a` InboxViewModel: consume pending UNNotification inline reply (REP-072, worker-2026-04-22-064413)
@@ -159,7 +164,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-254 XCTest cases, all green.
+290 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.

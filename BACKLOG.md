@@ -117,7 +117,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-142600
 - files_to_touch: `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add `RulesStore.export(to url: URL) throws` that encodes `rules` as JSON and writes it to `url`. Add `RulesStore.import(from url: URL) throws` that reads + decodes rules from `url` and merges by UUID: existing rules with the same UUID are updated; new UUIDs are appended; nothing is deleted. Import is resilient to malformed entries (same skip logic as REP-024). Tests cover: export round-trips, import merges correctly, import skips malformed entries, import with duplicate UUID updates existing.
@@ -176,7 +176,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-142600
 - files_to_touch: `AGENTS.md`
 - scope: After REP-016, REP-017, and REP-048 land (wip branch merges), the `What's done` section in AGENTS.md will again be stale: test count will have grown past 254, and new commits will not be listed. Update: (1) prepend the merged commits to the `What's done` list; (2) update the `N XCTest cases, all green` line; (3) remove any `What's still stubbed` bullets resolved by merged work. Docs-only commit — no code changes. NOTE: planner updated test count to 254 and prepended commits through 874f483 on 2026-04-22; this task handles the post-wip-merge pass only.

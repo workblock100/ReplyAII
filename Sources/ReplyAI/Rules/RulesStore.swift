@@ -88,6 +88,41 @@ final class RulesStore {
         return matched
     }
 
+    // MARK: - Export / Import
+
+    /// Encodes all current rules to JSON and writes them atomically to `url`.
+    /// Intended for user-initiated backups and cross-device transfer.
+    func export(to url: URL) throws {
+        let data = try Self.encoder().encode(rules)
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Merges rules from a JSON file at `url` into the store.
+    /// - Rules with a UUID already in the store are updated in place.
+    /// - Rules with a new UUID are appended.
+    /// - Nothing is deleted from the store.
+    /// - Malformed entries are silently skipped (same policy as REP-024).
+    /// - Throws only if `url` is unreadable or the file is not valid JSON.
+    func `import`(from url: URL) throws {
+        let data = try Data(contentsOf: url)
+        guard let rawArray = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let dec = Self.decoder()
+        for element in rawArray {
+            guard let elementData = try? JSONSerialization.data(withJSONObject: element),
+                  let incoming = try? dec.decode(SmartRule.self, from: elementData) else {
+                continue
+            }
+            if let i = rules.firstIndex(where: { $0.id == incoming.id }) {
+                rules[i] = incoming
+            } else {
+                rules.append(incoming)
+            }
+        }
+        save()
+    }
+
     // MARK: - IO
 
     nonisolated static func defaultFileURL() -> URL {

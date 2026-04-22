@@ -1099,4 +1099,107 @@ final class RulesTests: XCTestCase {
         XCTAssertTrue(store.lastFiredActions.isEmpty,
                       "no matching rule must leave lastFiredActions empty")
     }
+
+    // MARK: - RulesStore: export + import (REP-035)
+
+    private func tmpURL(_ name: String) -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("RulesTests-\(name)-\(UUID().uuidString).json")
+    }
+
+    @MainActor
+    func testExportRoundTrips() throws {
+        let storeURL = tmpURL("export-store")
+        let exportURL = tmpURL("export-out")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let rule = SmartRule(name: "export test", when: .senderIs("Alice"), then: .pin)
+        try store.add(rule)
+
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: tmpURL("export-reimport"))
+        try importStore.import(from: exportURL)
+        XCTAssertTrue(importStore.rules.contains(where: { $0.id == rule.id }),
+                      "exported rule must be importable by UUID")
+        XCTAssertEqual(importStore.rules.first(where: { $0.id == rule.id })?.name,
+                       "export test")
+    }
+
+    @MainActor
+    func testImportMergesNewRules() throws {
+        let storeURL = tmpURL("merge-store")
+        let exportURL = tmpURL("merge-export")
+        let targetURL = tmpURL("merge-target")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+            try? FileManager.default.removeItem(at: targetURL)
+        }
+        let source = RulesStore(fileURL: storeURL)
+        let newRule = SmartRule(name: "incoming", when: .textContains("meeting"), then: .archive)
+        try source.add(newRule)
+        try source.export(to: exportURL)
+
+        let target = RulesStore(fileURL: targetURL)
+        let preCount = target.rules.count
+        try target.import(from: exportURL)
+
+        XCTAssertEqual(target.rules.count, preCount + 1,
+                       "import must append rules with new UUIDs")
+        XCTAssertTrue(target.rules.contains(where: { $0.id == newRule.id }))
+    }
+
+    @MainActor
+    func testImportUpdatesExistingRule() throws {
+        let storeURL = tmpURL("update-store")
+        let exportURL = tmpURL("update-export")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let original = SmartRule(name: "original name", when: .senderIs("Bob"), then: .pin)
+        try store.add(original)
+
+        // Mutate a copy with the same UUID and export it from a separate store.
+        let updated = SmartRule(id: original.id, name: "updated name",
+                                when: original.when, then: original.then,
+                                active: original.active, priority: original.priority)
+        let tempStore = RulesStore(fileURL: tmpURL("update-temp"))
+        try tempStore.add(updated)
+        try tempStore.export(to: exportURL)
+
+        try store.import(from: exportURL)
+        XCTAssertEqual(store.rules.first(where: { $0.id == original.id })?.name,
+                       "updated name", "import must update the rule in place when UUID matches")
+    }
+
+    @MainActor
+    func testImportSkipsMalformed() throws {
+        let targetURL = tmpURL("malformed-target")
+        let malformedURL = tmpURL("malformed-src")
+        defer {
+            try? FileManager.default.removeItem(at: targetURL)
+            try? FileManager.default.removeItem(at: malformedURL)
+        }
+        // Write a JSON array with one valid rule and one corrupt object.
+        let validRule = SmartRule(name: "valid", when: .senderIs("Carol"), then: .archive)
+        let validData = try JSONEncoder().encode(validRule)
+        let validObj = try JSONSerialization.jsonObject(with: validData)
+        let array: [Any] = [validObj, ["bad_key": "no kind field"]]
+        let mixedData = try JSONSerialization.data(withJSONObject: array)
+        try mixedData.write(to: malformedURL)
+
+        let target = RulesStore(fileURL: targetURL)
+        let before = target.rules.count
+        XCTAssertNoThrow(try target.import(from: malformedURL),
+                         "import must not throw on malformed entries")
+        XCTAssertEqual(target.rules.count, before + 1,
+                       "only the valid rule must be appended; malformed entry skipped")
+        XCTAssertTrue(target.rules.contains(where: { $0.id == validRule.id }))
+    }
 }
