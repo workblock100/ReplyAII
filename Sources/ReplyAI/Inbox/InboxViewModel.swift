@@ -271,7 +271,8 @@ final class InboxViewModel {
         syncStatus = .syncing
         await contacts.ensureAccess()   // prompts once, if .notDetermined
         do {
-            let live = try await imessage.recentThreads(limit: 50)
+            let threadLimit = UserDefaults.standard.integer(forKey: PreferenceKey.inboxThreadLimit)
+            let live = try await imessage.recentThreads(limit: max(1, threadLimit == 0 ? PreferenceDefaults.inboxThreadLimit : threadLimit))
             guard !live.isEmpty else {
                 syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
                 return

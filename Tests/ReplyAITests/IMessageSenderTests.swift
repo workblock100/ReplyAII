@@ -218,4 +218,46 @@ final class IMessageSenderTests: XCTestCase {
         )
         XCTAssertNoThrow(try IMessageSender.send("hello", to: thread))
     }
+
+    // MARK: - Dry-run mode (REP-040)
+
+    func testDryRunReturnsSuccessWithoutScript() {
+        let prevDryRun = IMessageSender.isDryRun
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.isDryRun = prevDryRun
+            IMessageSender.executeHook = prevHook
+        }
+        var scriptExecuted = false
+        IMessageSender.executeHook = { _ in scriptExecuted = true }
+        IMessageSender.isDryRun = true
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("hello dry-run", to: thread))
+        XCTAssertFalse(scriptExecuted, "isDryRun must bypass AppleScript execution")
+    }
+
+    func testDryRunOffInvokesScript() {
+        let prevDryRun = IMessageSender.isDryRun
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.isDryRun = prevDryRun
+            IMessageSender.executeHook = prevHook
+        }
+        var scriptExecuted = false
+        IMessageSender.executeHook = { _ in scriptExecuted = true }
+        IMessageSender.isDryRun = false
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("hello live", to: thread))
+        XCTAssertTrue(scriptExecuted, "isDryRun=false must reach the AppleScript executor")
+    }
 }

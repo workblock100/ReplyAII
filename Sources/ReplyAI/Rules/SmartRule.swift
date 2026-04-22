@@ -170,6 +170,47 @@ extension RuleAction: Codable {
     }
 }
 
+// MARK: - Validation
+
+/// Errors thrown when a rule cannot be stored.
+enum RuleValidationError: LocalizedError {
+    case invalidRegex(pattern: String, reason: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRegex(let p, let r):
+            return "Invalid regex pattern \"\(p)\": \(r)"
+        }
+    }
+}
+
+extension SmartRule {
+    /// Validates that a regex pattern compiles. Throws `RuleValidationError.invalidRegex`
+    /// with the offending pattern and NSRegularExpression's own error message so the
+    /// caller can surface both to the user.
+    static func validateRegex(_ pattern: String) throws {
+        do {
+            _ = try NSRegularExpression(pattern: pattern)
+        } catch {
+            throw RuleValidationError.invalidRegex(pattern: pattern, reason: error.localizedDescription)
+        }
+    }
+
+    /// Walks the predicate tree and validates every `.textMatchesRegex` leaf.
+    static func validatePredicateRegexes(_ predicate: RulePredicate) throws {
+        switch predicate {
+        case .textMatchesRegex(let p):
+            try validateRegex(p)
+        case .and(let xs), .or(let xs):
+            for x in xs { try validatePredicateRegexes(x) }
+        case .not(let x):
+            try validatePredicateRegexes(x)
+        default:
+            break
+        }
+    }
+}
+
 // MARK: - Seed rules
 
 extension SmartRule {

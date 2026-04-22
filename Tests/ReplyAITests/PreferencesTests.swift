@@ -87,4 +87,50 @@ final class PreferencesTests: XCTestCase {
         UserDefaults.wipeReplyAIDefaults(in: defaults)   // should not crash
         XCTAssertNil(defaults.persistentDomain(forName: suiteName)?[customKey])
     }
+
+    // MARK: - inboxThreadLimit (REP-030)
+
+    func testInboxThreadLimitDefaultIs50() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit),
+                       PreferenceDefaults.inboxThreadLimit,
+                       "default thread limit must match PreferenceDefaults")
+        XCTAssertEqual(PreferenceDefaults.inboxThreadLimit, 50,
+                       "sentinel: shipping default is 50 threads")
+    }
+
+    func testInboxThreadLimitWipedAndRestored() {
+        defaults.set(100, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit), 100)
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertNil(defaults.persistentDomain(forName: suiteName)?[PreferenceKey.inboxThreadLimit],
+                     "wipe must remove inboxThreadLimit from the persistent domain")
+
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit),
+                       PreferenceDefaults.inboxThreadLimit,
+                       "re-register must restore the default value")
+    }
+
+    // MARK: - autoPrime (REP-039)
+
+    func testAutoPrimeDefaultIsTrue() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoPrime),
+                      "autoPrime must default to true so existing behaviour is unchanged")
+    }
+
+    func testAutoPrimeWipedAndRestored() {
+        defaults.set(false, forKey: PreferenceKey.autoPrime)
+        XCTAssertFalse(defaults.bool(forKey: PreferenceKey.autoPrime))
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertNil(defaults.persistentDomain(forName: suiteName)?[PreferenceKey.autoPrime],
+                     "wipe must remove autoPrime from the persistent domain")
+
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoPrime),
+                      "re-register must restore default true")
+    }
 }

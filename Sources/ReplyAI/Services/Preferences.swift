@@ -9,6 +9,8 @@ enum PreferenceKey {
     static let iCloudSync     = "pref.privacy.iCloudSync"
     static let defaultTone    = "pref.composer.defaultTone"
     static let useMLX         = "pref.model.useMLX"
+    static let inboxThreadLimit = "pref.inbox.threadLimit"
+    static let autoPrime        = "pref.drafts.autoPrime"
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
@@ -19,6 +21,10 @@ enum PreferenceDefaults {
     static let defaultTone    = Tone.warm.rawValue
     /// Opt-in; enabling triggers a ~2 GB model download on first draft.
     static let useMLX         = false
+    /// How many threads to load from chat.db on each sync pass.
+    static let inboxThreadLimit = 50
+    /// When true, ReplyAI generates a draft as soon as the user selects a thread.
+    static let autoPrime        = true
 }
 
 extension UserDefaults {
@@ -29,11 +35,13 @@ extension UserDefaults {
     ///   `.standard` in production; tests pass an isolated suite.
     static func registerReplyAIDefaults(in defaults: UserDefaults = .standard) {
         defaults.register(defaults: [
-            PreferenceKey.crashReports:   PreferenceDefaults.crashReports,
-            PreferenceKey.licenseUpdates: PreferenceDefaults.licenseUpdates,
-            PreferenceKey.iCloudSync:     PreferenceDefaults.iCloudSync,
-            PreferenceKey.defaultTone:    PreferenceDefaults.defaultTone,
-            PreferenceKey.useMLX:         PreferenceDefaults.useMLX,
+            PreferenceKey.crashReports:     PreferenceDefaults.crashReports,
+            PreferenceKey.licenseUpdates:   PreferenceDefaults.licenseUpdates,
+            PreferenceKey.iCloudSync:       PreferenceDefaults.iCloudSync,
+            PreferenceKey.defaultTone:      PreferenceDefaults.defaultTone,
+            PreferenceKey.useMLX:           PreferenceDefaults.useMLX,
+            PreferenceKey.inboxThreadLimit: PreferenceDefaults.inboxThreadLimit,
+            PreferenceKey.autoPrime:        PreferenceDefaults.autoPrime,
         ])
     }
 

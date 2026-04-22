@@ -36,6 +36,11 @@ enum IMessageSender {
     /// background thread; may throw a SendError to simulate script failures.
     nonisolated(unsafe) static var executeHook: ((String) throws -> Void)? = nil
 
+    /// When true, `send` returns immediately without executing AppleScript.
+    /// Never set this in production code; it exists purely for test harnesses
+    /// that need to exercise the send path without messaging anyone.
+    nonisolated(unsafe) static var isDryRun: Bool = false
+
     /// Send `text` to the given thread. Blocks the calling thread until
     /// AppleScript returns (or the timeout fires); call from a background task.
     static func send(_ text: String, to thread: MessageThread) throws {
@@ -71,6 +76,7 @@ enum IMessageSender {
     }
 
     private static func sendRaw(_ text: String, chatGUID: String) throws {
+        if isDryRun { return }
         let escapedText = escape(text)
         let escapedGUID = escape(chatGUID)
 

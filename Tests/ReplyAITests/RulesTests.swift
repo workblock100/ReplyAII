@@ -920,4 +920,83 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(store.rules.count, 0)
         XCTAssertEqual(stats.snapshot().ruleLoadSkips, 0)
     }
+
+    // MARK: - Regex validation (REP-031)
+
+    func testValidRegexPasses() {
+        XCTAssertNoThrow(try SmartRule.validateRegex(#"\d{6}"#))
+        XCTAssertNoThrow(try SmartRule.validateRegex(#"(?i)hello"#))
+        XCTAssertNoThrow(try SmartRule.validateRegex(#"[a-z]+"#))
+    }
+
+    func testInvalidRegexThrows() {
+        XCTAssertThrowsError(try SmartRule.validateRegex("[unclosed")) { error in
+            guard let ve = error as? RuleValidationError,
+                  case .invalidRegex(let pattern, _) = ve else {
+                XCTFail("Expected RuleValidationError.invalidRegex, got \(error)")
+                return
+            }
+            XCTAssertEqual(pattern, "[unclosed")
+        }
+    }
+
+    func testErrorMessageContainsPattern() {
+        do {
+            try SmartRule.validateRegex("[unclosed")
+            XCTFail("Should have thrown")
+        } catch let error as RuleValidationError {
+            let description = error.errorDescription ?? ""
+            XCTAssertTrue(description.contains("[unclosed"),
+                          "error description must embed the offending pattern: \(description)")
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
+    @MainActor
+    func testAddValidatingRejectsInvalidRegex() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        let badRule = SmartRule(
+            name: "Bad regex rule",
+            when: .textMatchesRegex("[unclosed"),
+            then: .pin
+        )
+        XCTAssertThrowsError(try store.addValidating(badRule))
+        XCTAssertTrue(store.rules.allSatisfy { $0.id != badRule.id },
+                      "invalid rule must not be stored")
+    }
+
+    @MainActor
+    func testAddValidatingAcceptsValidRegex() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        let goodRule = SmartRule(
+            name: "Good regex rule",
+            when: .textMatchesRegex(#"\d{6}"#),
+            then: .archive
+        )
+        let before = store.rules.count
+        XCTAssertNoThrow(try store.addValidating(goodRule))
+        XCTAssertEqual(store.rules.count, before + 1)
+    }
+
+    @MainActor
+    func testAddValidatingNestedRegex() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let stats = Stats(fileURL: tempRulesURL())
+        let store = RulesStore(fileURL: url, stats: stats)
+        let nestedBad = SmartRule(
+            name: "Nested bad regex",
+            when: .and([.textContains("hi"), .textMatchesRegex("[bad")]),
+            then: .pin
+        )
+        XCTAssertThrowsError(try store.addValidating(nestedBad),
+                             "validation must walk nested predicates")
+    }
 }

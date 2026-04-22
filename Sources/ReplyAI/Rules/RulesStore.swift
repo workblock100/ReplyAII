@@ -29,6 +29,14 @@ final class RulesStore {
         save()
     }
 
+    /// Validates regex predicates in `rule.when` before storing. Use this
+    /// path when the rule originates from user input; `add` is for
+    /// programmatic/seed callers where patterns are known-good.
+    func addValidating(_ rule: SmartRule) throws {
+        try SmartRule.validatePredicateRegexes(rule.when)
+        add(rule)
+    }
+
     func update(_ rule: SmartRule) {
         if let i = rules.firstIndex(where: { $0.id == rule.id }) {
             rules[i] = rule
