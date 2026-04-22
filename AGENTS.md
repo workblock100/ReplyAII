@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                290 tests
+Tests/ReplyAITests/                294 tests
 ```
 
 ## Architecture patterns
@@ -165,7 +165,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-290 XCTest cases, all green.
+294 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
@@ -220,7 +220,7 @@ Pick in order. Each has a concrete starting point.
 
 ## Testing expectations
 
-- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (290 as of planner-2026-04-22-run8; kept current in the repo layout header above). `swift test` from repo root.
+- **Every new feature ships with XCTest coverage.** Run `grep -r "func test" Tests/ | wc -l` for the current count (294 as of worker-2026-04-22-144200; kept current in the repo layout header above). `swift test` from repo root.
 - **Pure Swift (models, evaluators, parsers) gets unit tests.** View code gets ad-hoc visual checking.
 - **Async tests**: use the `waitUntil(timeout:_:)` helper pattern in `DraftEngineTests` rather than arbitrary sleeps.
 - **Never add `#Preview` blocks** — they break the SwiftPM path.

@@ -89,4 +89,25 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(messageLine?.contains("line one line two line three") == true,
                       "Embedded newlines should be collapsed to spaces")
     }
+
+    // MARK: - truncate invariants (REP-073)
+
+    func testShortHistoryPassesThroughUnchanged() {
+        // A history well under the budget must not lose any messages.
+        let messages = (1...5).map { makeMessage("short \($0)") }
+        let result = PromptBuilder.truncate(messages, budget: 10_000)
+        XCTAssertEqual(result.count, messages.count, "short history must pass through unchanged")
+        XCTAssertEqual(result.map(\.text), messages.map(\.text))
+    }
+
+    func testMostRecentMessageAlwaysRetained() {
+        // When truncation drops messages, the last (most recent) message must survive.
+        // Use a tiny budget so everything except the last message is dropped.
+        let last = makeMessage("the latest message that must survive truncation")
+        let old  = makeMessage(String(repeating: "x", count: 500))
+        let messages = [old, old, old, old, last]
+        let result = PromptBuilder.truncate(messages, budget: 50)
+        XCTAssertFalse(result.isEmpty, "must retain at least one message after truncation")
+        XCTAssertEqual(result.last?.text, last.text, "most recent message must always be retained")
+    }
 }

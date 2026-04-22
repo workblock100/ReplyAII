@@ -519,4 +519,42 @@ final class SearchIndexTests: XCTestCase {
         let iMsgHits = await index.search(query: "deploy", channel: .imessage)
         XCTAssertEqual(iMsgHits.count, 0, "imessage filter must not find a slack-indexed thread")
     }
+
+    // MARK: - Disk persistence (REP-041)
+
+    func testPersistenceAcrossReopens() async throws {
+        // Write rows into a file-backed index, close it by letting the actor
+        // deinit, then reopen the same file and verify the rows are still searchable.
+        let dbURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-search-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: dbURL) }
+
+        let thread = MessageThread(id: "p1", channel: .imessage, name: "Persistence",
+                                   avatar: "P", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "remember this message", time: "t")
+
+        do {
+            let index = SearchIndex(databaseURL: dbURL)
+            await index.upsert(thread: thread, messages: [msg])
+            let hits = await index.search("remember")
+            XCTAssertEqual(hits.count, 1, "must find row before close")
+        }
+        // index is deinit'd here; SQLite file is flushed to disk.
+
+        let reopened = SearchIndex(databaseURL: dbURL)
+        let hits = await reopened.search("remember")
+        XCTAssertEqual(hits.count, 1, "file-backed index must survive close + reopen")
+        XCTAssertEqual(hits.first?.threadID, "p1")
+        XCTAssertEqual(hits.first?.threadName, "Persistence")
+    }
+
+    func testInMemoryIndexUsedWhenURLIsNil() async {
+        // The default initializer produces an in-memory index — same semantics as before REP-041.
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "m1", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [Message(from: .them, text: "in memory test", time: "t")])
+        let hits = await index.search("memory")
+        XCTAssertEqual(hits.count, 1, "in-memory index must still work after REP-041 refactor")
+    }
 }

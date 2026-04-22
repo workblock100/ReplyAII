@@ -1,11 +1,10 @@
 import Foundation
 import SQLite3
 
-/// In-memory SQLite FTS5 index over live message bodies + thread names.
-/// Rebuilt on each successful sync — cheap enough for 50 × 40 rows, and
-/// avoids the staleness headaches of a disk-persistent index whose
-/// writes race the FSEvents watcher. Move to disk if this ever shows up
-/// in a profile.
+/// SQLite FTS5 index over live message bodies + thread names.
+/// Supports both in-memory (tests, default) and file-backed (production)
+/// modes. File-backed mode survives app restarts so the first post-launch
+/// search does not block on a full inbox rebuild.
 actor SearchIndex {
     struct Result: Hashable, Sendable {
         let threadID: String
@@ -20,9 +19,28 @@ actor SearchIndex {
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
     )
 
-    init() {
-        open()
+    /// - Parameter databaseURL: Path for the on-disk SQLite file.
+    ///   Pass `nil` (the default) for an in-memory database — suitable for
+    ///   tests where isolation matters more than persistence.
+    init(databaseURL: URL? = nil) {
+        open(url: databaseURL)
         createSchema()
+    }
+
+    /// Convenience URL pointing to the shared app-support search database.
+    static func productionDatabaseURL() -> URL {
+        let fm = FileManager.default
+        let appSupport = try? fm.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = appSupport?.appendingPathComponent("ReplyAI", isDirectory: true)
+            ?? URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Application Support/ReplyAI", isDirectory: true)
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.appendingPathComponent("search.db")
     }
 
     deinit {
@@ -194,10 +212,10 @@ actor SearchIndex {
 
     // MARK: - Setup
 
-    private func open() {
+    private func open(url: URL?) {
         var handle: OpaquePointer?
-        // :memory: database — fresh state every app launch.
-        guard sqlite3_open_v2(":memory:", &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
+        let path = url?.path ?? ":memory:"
+        guard sqlite3_open_v2(path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
             return
         }
         self.db = handle

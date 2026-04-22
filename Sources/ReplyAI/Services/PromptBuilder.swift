@@ -21,7 +21,7 @@ struct PromptBuilder {
         lines.append("")
         lines.append("Recent messages (oldest first):")
 
-        let truncated = truncate(history)
+        let truncated = truncate(history, budget: Self.historyCharBudget)
         if truncated.isEmpty {
             lines.append("(no messages yet)")
         } else {
@@ -58,13 +58,15 @@ struct PromptBuilder {
     // MARK: - Private
 
     /// Trims the history from the oldest end so the total character count of
-    /// all message texts stays at or below `historyCharBudget`.
-    private static func truncate(_ messages: [Message]) -> [Message] {
+    /// all message texts stays at or below `budget` (defaults to `historyCharBudget`).
+    /// The most-recent message (last in the array) is always retained when any
+    /// messages survive truncation, so the model always sees the immediate context.
+    static func truncate(_ messages: [Message], budget: Int = historyCharBudget) -> [Message] {
         var total = 0
         var result: [Message] = []
         for m in messages.reversed() {
             let chars = m.text.count
-            if total + chars > historyCharBudget { break }
+            if total + chars > budget { break }
             total += chars
             result.insert(m, at: 0)
         }
