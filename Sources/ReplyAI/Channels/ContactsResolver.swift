@@ -63,6 +63,49 @@ final class ContactsResolver: @unchecked Sendable {
         setAccess(resolved)
     }
 
+    /// Resolves a batch of handles in exactly two lock acquisitions regardless
+    /// of inbox size. Cache hits are resolved inside the first lock; store
+    /// queries for misses happen outside any lock; the second acquisition
+    /// writes the results back. Equivalent to calling `name(for:)` on each
+    /// handle serially, but faster for large batches.
+    func resolveAll(handles: [String]) -> [String: String] {
+        let keys = handles.map { (original: $0, normalized: normalizedHandle($0)) }
+
+        // Pass 1: collect cache hits and identify misses — one lock acquisition.
+        var result: [String: String] = [:]
+        var missKeys: [(original: String, normalized: String)] = []
+        let gate: Access = locked.withLock { state in
+            for pair in keys {
+                if let cached = state.cache[pair.normalized] {
+                    if !cached.isEmpty { result[pair.original] = cached }
+                } else {
+                    missKeys.append(pair)
+                }
+            }
+            return state.access
+        }
+
+        // Pass 2: query the store for misses (outside the lock).
+        guard gate == .granted else { return result }
+        var storeResults: [(normalized: String, name: String)] = []
+        for pair in missKeys {
+            let resolved = store.lookup(handle: pair.normalized) ?? ""
+            storeResults.append((normalized: pair.normalized, name: resolved))
+            if !resolved.isEmpty { result[pair.original] = resolved }
+        }
+
+        // Pass 3: write miss results into the cache — second lock acquisition.
+        if !storeResults.isEmpty {
+            locked.withLock { state in
+                for item in storeResults {
+                    state.cache[item.normalized] = item.name
+                }
+            }
+        }
+
+        return result
+    }
+
     /// Returns the contact's display name for a handle, or nil if we
     /// don't have a match (or don't have permission). Callable from any
     /// thread.

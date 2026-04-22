@@ -133,6 +133,62 @@ final class ContactsResolverTests: XCTestCase {
                                  "cache should have coalesced ~\(workers * iterations) reads into ≤\(workers) store hits")
     }
 
+    // MARK: - REP-037: batch resolution
+
+    func testBatchResultMatchesSerial() {
+        let fake = FakeContactStore()
+        fake.names["4155550001"] = "Alice"
+        fake.names["4155550002"] = "Bob"
+        fake.names["4155550003"] = "Carol"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let handles = ["+14155550001", "+14155550002", "+14155550003"]
+        let batch = resolver.resolveAll(handles: handles)
+
+        // Batch must agree with individual lookups on every handle.
+        for h in handles {
+            XCTAssertEqual(batch[h], resolver.name(for: h),
+                           "resolveAll result for \(h) must match name(for:)")
+        }
+    }
+
+    func testBatchCacheHitsSkipStore() {
+        let fake = FakeContactStore()
+        fake.names["4155550010"] = "Dana"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        // Warm the cache with a serial lookup.
+        _ = resolver.name(for: "+14155550010")
+        let callsAfterWarm = fake.lookupCallCount
+
+        // Batch of the same handle must not call the store again.
+        let result = resolver.resolveAll(handles: ["+14155550010"])
+        XCTAssertEqual(result["+14155550010"], "Dana")
+        XCTAssertEqual(fake.lookupCallCount, callsAfterWarm,
+                       "resolveAll must serve cached handles without a store trip")
+    }
+
+    func testBatchMixedHitMiss() {
+        let fake = FakeContactStore()
+        fake.names["4155550020"] = "Eve"
+        fake.names["4155550021"] = "Frank"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        // Pre-cache one of the two handles.
+        _ = resolver.name(for: "+14155550020")
+        let callsAfterWarm = fake.lookupCallCount  // 1
+
+        let result = resolver.resolveAll(handles: ["+14155550020", "+14155550021"])
+        XCTAssertEqual(result["+14155550020"], "Eve", "cached handle must resolve correctly")
+        XCTAssertEqual(result["+14155550021"], "Frank", "uncached handle must be fetched from store")
+        // Only the miss should have hit the store.
+        XCTAssertEqual(fake.lookupCallCount, callsAfterWarm + 1,
+                       "exactly one store call for the one cache miss")
+    }
+
     // MARK: - REP-019: E.164 phone normalization
 
     func testNormalizedHandleStripsPlus() {

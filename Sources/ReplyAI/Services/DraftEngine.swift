@@ -81,6 +81,23 @@ final class DraftEngine {
         }
     }
 
+    /// Resets all (threadID, tone) draft states back to idle without removing
+    /// the cache keys. In-flight streams are cancelled so stale content stops
+    /// accumulating. A follow-up prime() can restart generation; the existing
+    /// key slots mean no extra allocation on first access after invalidation.
+    /// Called by InboxViewModel when the watcher delivers new messages to the
+    /// currently selected thread — the draft was built without those messages
+    /// and is now out of context.
+    func invalidate(threadID: String) {
+        let keys = drafts.keys.filter { $0.threadID == threadID }
+        for key in keys {
+            tasks[key]?.cancel()
+            tasks[key] = nil
+            primingTasks["\(key.threadID):\(key.tone.rawValue)"] = nil
+            drafts[key] = DraftState()
+        }
+    }
+
     /// Clears the in-flight task + state for a specific key (⌘.).
     func dismiss(threadID: String, tone: Tone) {
         let key = Key(threadID: threadID, tone: tone)

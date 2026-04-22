@@ -107,6 +107,55 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertEqual(state.text, Fixtures.seedDraft(threadID: thread.id, tone: .playful))
     }
 
+    // MARK: - Draft invalidation (REP-054)
+
+    func testInvalidateResetsToIdle() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).text.isEmpty,
+                       "draft must have content before invalidation")
+
+        engine.invalidate(threadID: thread.id)
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertEqual(state.text, "", "invalidated draft must have empty text")
+        XCTAssertFalse(state.isStreaming, "invalidated draft must not be streaming")
+        XCTAssertFalse(state.isDone, "invalidated draft must not be marked done")
+        XCTAssertNil(state.error, "invalidated draft must not have an error")
+        // Cache entry is kept (not evicted), so cacheSize is unchanged.
+        XCTAssertGreaterThan(engine.cacheSize, 0,
+                             "invalidate must preserve the cache slot for follow-up re-prime")
+    }
+
+    func testInvalidateSkipsNonSelectedThread() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let threadA = Fixtures.threads[0]
+        let threadB = Fixtures.threads[1]
+
+        engine.prime(thread: threadA, tone: .warm, history: [])
+        engine.prime(thread: threadB, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: threadA.id, tone: .warm).isDone &&
+            engine.state(threadID: threadB.id, tone: .warm).isDone
+        }
+
+        // Only invalidate threadA (the "selected" thread).
+        engine.invalidate(threadID: threadA.id)
+
+        let stateA = engine.state(threadID: threadA.id, tone: .warm)
+        XCTAssertEqual(stateA.text, "", "threadA's draft must be cleared by invalidation")
+        XCTAssertFalse(stateA.isDone, "threadA must be reset to idle")
+
+        let stateB = engine.state(threadID: threadB.id, tone: .warm)
+        XCTAssertFalse(stateB.text.isEmpty, "threadB's draft must survive threadA's invalidation")
+        XCTAssertTrue(stateB.isDone, "threadB must remain done")
+    }
+
     // MARK: - Cache eviction (REP-034)
 
     func testEvictClearsSingleThread() async throws {

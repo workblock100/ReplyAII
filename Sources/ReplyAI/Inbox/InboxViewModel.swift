@@ -94,6 +94,11 @@ final class InboxViewModel {
     /// Production wires the DraftEngine here; tests inject a recording closure.
     var primeHandler: ((MessageThread, Tone, [Message]) -> Void)?
 
+    /// Called from `syncFromIMessage` when the selected thread gains new incoming
+    /// messages, making any cached draft stale. Production wires DraftEngine.invalidate;
+    /// tests inject a recording closure.
+    var invalidateHandler: ((String) -> Void)?
+
     /// `true` once we've done the initial full rebuild of the FTS index.
     /// Subsequent syncs only upsert the threads that actually have
     /// updated message payloads, which is O(k) instead of O(n).
@@ -331,12 +336,26 @@ final class InboxViewModel {
                 return
             }
             let currentSelection = selectedThreadID
+            // Snapshot the selected thread's preview before we swap in live data.
+            // A changed preview means a new incoming message arrived and any
+            // cached draft is now out of context.
+            let previousPreview = threads.first(where: { $0.id == currentSelection })?.preview
             threads = live
 
             // Preserve the user's current selection if still present;
             // otherwise fall back to the top thread.
             if live.contains(where: { $0.id == currentSelection }) == false {
                 selectedThreadID = live.first?.id ?? selectedThreadID
+            }
+
+            // Invalidate the draft for the selected thread when the watcher
+            // delivers new messages (detected via preview change). Non-selected
+            // threads are not invalidated — they aren't visible and will be
+            // evicted on next thread switch anyway.
+            if let handler = invalidateHandler,
+               let newPreview = live.first(where: { $0.id == selectedThreadID })?.preview,
+               newPreview != previousPreview {
+                handler(selectedThreadID)
             }
             if defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync) {
                 applyRules(for: selectedThread)
