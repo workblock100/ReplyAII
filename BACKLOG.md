@@ -121,8 +121,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-055650
 - files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Sources/ReplyAI/Services/PromptBuilder.swift` (new), `Tests/ReplyAITests/PromptBuilderTests.swift` (new)
 - scope: The prompt template is currently assembled inline inside `DraftEngine`. Extracting it into a `PromptBuilder` struct makes it testable, easy to tune, and visible for review without wading through async streaming logic. `PromptBuilder.build(thread: MessageThread, tone: Tone) -> String` produces the full prompt string. Unit tests assert: thread context (sender, channel, recent messages) is included; tone label appears in the prompt; long message histories are truncated to fit a token budget (estimate at 1 char ≈ 0.25 tokens; cap at 2000 chars of history); the prompt never includes raw newlines that would break a single-line instruction format.
 - success_criteria:
