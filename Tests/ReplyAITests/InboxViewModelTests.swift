@@ -302,3 +302,191 @@ final class InboxViewModelNotificationReplyTests: XCTestCase {
             "other thread unread must be unaffected")
     }
 }
+
+// MARK: - Thread selection model (REP-071)
+
+@MainActor
+final class InboxViewModelThreadSelectionTests: XCTestCase {
+
+    private func makeDefaults() -> UserDefaults {
+        let suite = "test.ReplyAI.selection.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        return d
+    }
+
+    private func makeChannel() -> BlockingMockChannel {
+        let ch = BlockingMockChannel()
+        ch.blocking = false
+        return ch
+    }
+
+    func testSelectThreadUpdatesSelectedID() {
+        let t1 = MessageThread(id: "t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts())
+        vm.selectThread("t2")
+        XCTAssertEqual(vm.selectedThreadID, "t2", "selectThread must update selectedThreadID")
+    }
+
+    func testSelectThreadCallsPrime() {
+        let d = makeDefaults()
+        // autoPrime defaults to true after registerReplyAIDefaults
+        let t1 = MessageThread(id: "t1-prime", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "t2-prime", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+
+        var primeCallCount = 0
+        vm.primeHandler = { _, _, _ in primeCallCount += 1 }
+
+        vm.selectThread("t2-prime")
+        XCTAssertEqual(primeCallCount, 1, "selectThread must invoke primeHandler when autoPrime is true")
+    }
+
+    func testSelectSameThreadTwiceCallsPrimeOnce() {
+        let d = makeDefaults()
+        let t1 = MessageThread(id: "t1-idem", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "t2-idem", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+
+        var primeCallCount = 0
+        vm.primeHandler = { _, _, _ in primeCallCount += 1 }
+
+        vm.selectThread("t2-idem")
+        vm.selectThread("t2-idem") // same thread again
+        XCTAssertEqual(primeCallCount, 1,
+            "selecting the same thread twice must only call primeHandler once")
+    }
+}
+
+// MARK: - autoPrime preference (REP-039)
+
+@MainActor
+final class InboxViewModelAutoPrimeTests: XCTestCase {
+
+    private func makeChannel() -> BlockingMockChannel {
+        let ch = BlockingMockChannel()
+        ch.blocking = false
+        return ch
+    }
+
+    func testAutoPrimeTrueCallsPrime() {
+        let suite = "test.ReplyAI.autoprime.true.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        // default is true after register
+
+        let t1 = MessageThread(id: "ap-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "ap-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+
+        var primeCalled = false
+        vm.primeHandler = { _, _, _ in primeCalled = true }
+
+        vm.selectThread("ap-t2")
+        XCTAssertTrue(primeCalled, "primeHandler must fire when autoPrime is true")
+    }
+
+    func testAutoPrimeFalseSkipsPrime() {
+        let suite = "test.ReplyAI.autoprime.false.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        d.set(false, forKey: PreferenceKey.autoPrime)
+
+        let t1 = MessageThread(id: "ap2-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "ap2-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+
+        var primeCalled = false
+        vm.primeHandler = { _, _, _ in primeCalled = true }
+
+        vm.selectThread("ap2-t2")
+        XCTAssertFalse(primeCalled, "primeHandler must NOT fire when autoPrime is false")
+    }
+}
+
+// MARK: - autoApplyRulesOnSync preference (REP-081)
+
+/// A channel that immediately returns a fixed list of threads and no messages.
+private final class StaticMockChannel: ChannelService, @unchecked Sendable {
+    let threads: [MessageThread]
+    init(threads: [MessageThread]) { self.threads = threads }
+    func recentThreads(limit: Int) async throws -> [MessageThread] { threads }
+    func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+}
+
+@MainActor
+final class InboxViewModelAutoApplyRulesTests: XCTestCase {
+
+    private func tempRulesURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMRulesTests-\(UUID())/rules.json")
+    }
+
+    /// When `autoApplyRulesOnSync` is false, a sync must not apply rules
+    /// (i.e. `activeTone` stays at its pre-sync value even if a matching
+    /// setDefaultTone rule exists).
+    func testAutoApplyRulesFalseSkipsRulesOnSync() async throws {
+        let suite = "test.ReplyAI.autoApplySync.false.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        d.set(false, forKey: PreferenceKey.autoApplyRulesOnSync)
+
+        let rulesURL = tempRulesURL()
+        try FileManager.default.createDirectory(
+            at: rulesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let rulesStore = RulesStore(fileURL: rulesURL)
+        rulesStore.resetToSeeds()
+        rulesStore.rules.forEach { rulesStore.remove($0.id) }
+
+        let thread = MessageThread(
+            id: "sync-t1", channel: .imessage, name: "Alice Smith",
+            avatar: "A", preview: "hello", time: "now", unread: 1)
+        let rule = SmartRule(
+            name: "alice→direct", when: .senderIs("Alice Smith"), then: .setDefaultTone(.direct))
+        try rulesStore.add(rule)
+
+        let vm = InboxViewModel(
+            threads: [thread], imessage: StaticMockChannel(threads: [thread]),
+            contacts: fastContacts(), rules: rulesStore, defaults: d)
+        vm.selectedThreadID = "sync-t1"
+        let beforeTone = vm.activeTone
+
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(vm.activeTone, beforeTone,
+            "rules must not fire during sync when autoApplyRulesOnSync is false")
+    }
+
+    /// Default (true) must preserve existing behaviour — rules still fire.
+    func testAutoApplyRulesOnSyncDefaultAppliesRules() async throws {
+        let suite = "test.ReplyAI.autoApplySync.true.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        // default is true — no override needed
+
+        let rulesURL = tempRulesURL()
+        try FileManager.default.createDirectory(
+            at: rulesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let rulesStore = RulesStore(fileURL: rulesURL)
+        rulesStore.resetToSeeds()
+        rulesStore.rules.forEach { rulesStore.remove($0.id) }
+
+        let thread = MessageThread(
+            id: "sync-t2", channel: .imessage, name: "Bob Jones",
+            avatar: "B", preview: "hey", time: "now", unread: 1)
+        let rule = SmartRule(
+            name: "bob→direct", when: .senderIs("Bob Jones"), then: .setDefaultTone(.direct))
+        try rulesStore.add(rule)
+
+        let vm = InboxViewModel(
+            threads: [thread], imessage: StaticMockChannel(threads: [thread]),
+            contacts: fastContacts(), rules: rulesStore, defaults: d)
+        vm.selectedThreadID = "sync-t2"
+
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(vm.activeTone, .direct,
+            "rules must fire during sync when autoApplyRulesOnSync is true (default)")
+    }
+}

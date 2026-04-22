@@ -87,6 +87,13 @@ final class InboxViewModel {
     let searchIndex = SearchIndex()
     let stats: Stats
 
+    /// Injected at init time for test isolation; production uses `.standard`.
+    private let defaults: UserDefaults
+
+    /// Called from `selectThread` when `pref.drafts.autoPrime` is true.
+    /// Production wires the DraftEngine here; tests inject a recording closure.
+    var primeHandler: ((MessageThread, Tone, [Message]) -> Void)?
+
     /// `true` once we've done the initial full rebuild of the FTS index.
     /// Subsequent syncs only upsert the threads that actually have
     /// updated message payloads, which is O(k) instead of O(n).
@@ -104,8 +111,10 @@ final class InboxViewModel {
         imessage: ChannelService? = nil,
         contacts: ContactsResolver? = nil,
         rules: RulesStore? = nil,
-        stats: Stats? = nil
+        stats: Stats? = nil,
+        defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
         self.stats = stats ?? Stats()
         self.threads = threads
         self.folders = folders
@@ -133,9 +142,15 @@ final class InboxViewModel {
     }
 
     func selectThread(_ id: String) {
+        let isNewSelection = id != selectedThreadID
         selectedThreadID = id
         markUnreadZero(id)
         applyRules(for: selectedThread)
+        // Only prime on a genuine thread switch; DraftEngine handles tone
+        // changes via ComposerView's .task(id:).
+        if isNewSelection && defaults.bool(forKey: PreferenceKey.autoPrime) {
+            primeHandler?(selectedThread, activeTone, messages(for: selectedThread))
+        }
     }
 
     /// Evaluate every active rule against the selected thread and apply
@@ -309,7 +324,7 @@ final class InboxViewModel {
         syncStatus = .syncing
         await contacts.ensureAccess()   // prompts once, if .notDetermined
         do {
-            let threadLimit = UserDefaults.standard.integer(forKey: PreferenceKey.inboxThreadLimit)
+            let threadLimit = defaults.integer(forKey: PreferenceKey.inboxThreadLimit)
             let live = try await imessage.recentThreads(limit: max(1, threadLimit == 0 ? PreferenceDefaults.inboxThreadLimit : threadLimit))
             guard !live.isEmpty else {
                 syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
@@ -323,7 +338,9 @@ final class InboxViewModel {
             if live.contains(where: { $0.id == currentSelection }) == false {
                 selectedThreadID = live.first?.id ?? selectedThreadID
             }
-            applyRules(for: selectedThread)
+            if defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync) {
+                applyRules(for: selectedThread)
+            }
 
             // Drop cached messages for threads that no longer exist.
             liveMessages = liveMessages.filter { key, _ in live.contains(where: { $0.id == key }) }
@@ -359,7 +376,9 @@ final class InboxViewModel {
             // This covers first-run (every existing message is "new" to
             // ReplyAI; rules fire against each) and every watcher refire
             // after it.
-            await processIncomingForRules(live)
+            if defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync) {
+                await processIncomingForRules(live)
+            }
 
             startWatchingIfNeeded()
         } catch let err as ChannelError {

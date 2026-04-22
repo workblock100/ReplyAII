@@ -133,4 +133,26 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoPrime),
                       "re-register must restore default true")
     }
+
+    // MARK: - autoApplyRulesOnSync (REP-081)
+
+    func testAutoApplyRulesOnSyncDefaultTrue() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync),
+                      "autoApplyRulesOnSync must default to true so existing behaviour is unchanged")
+    }
+
+    func testAutoApplyRulesOnSyncWipedAndRestored() {
+        defaults.set(false, forKey: PreferenceKey.autoApplyRulesOnSync)
+        XCTAssertFalse(defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync))
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertNil(
+            defaults.persistentDomain(forName: suiteName)?[PreferenceKey.autoApplyRulesOnSync],
+            "wipe must remove autoApplyRulesOnSync from the persistent domain")
+
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync),
+                      "re-register must restore default true")
+    }
 }

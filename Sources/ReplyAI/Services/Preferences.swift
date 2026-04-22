@@ -11,6 +11,8 @@ enum PreferenceKey {
     static let useMLX         = "pref.model.useMLX"
     static let inboxThreadLimit = "pref.inbox.threadLimit"
     static let autoPrime        = "pref.drafts.autoPrime"
+    /// When false, rules skip the bulk-sync path; only fire on thread select.
+    static let autoApplyRulesOnSync = "pref.rules.autoApplyOnSync"
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
@@ -25,6 +27,8 @@ enum PreferenceDefaults {
     static let inboxThreadLimit = 50
     /// When true, ReplyAI generates a draft as soon as the user selects a thread.
     static let autoPrime        = true
+    /// When true, rules run during every `syncFromIMessage` pass.
+    static let autoApplyRulesOnSync = true
 }
 
 extension UserDefaults {
@@ -41,7 +45,8 @@ extension UserDefaults {
             PreferenceKey.defaultTone:      PreferenceDefaults.defaultTone,
             PreferenceKey.useMLX:           PreferenceDefaults.useMLX,
             PreferenceKey.inboxThreadLimit: PreferenceDefaults.inboxThreadLimit,
-            PreferenceKey.autoPrime:        PreferenceDefaults.autoPrime,
+            PreferenceKey.autoPrime:            PreferenceDefaults.autoPrime,
+            PreferenceKey.autoApplyRulesOnSync: PreferenceDefaults.autoApplyRulesOnSync,
         ])
     }
 
