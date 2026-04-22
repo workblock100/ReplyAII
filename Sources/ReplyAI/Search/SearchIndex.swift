@@ -38,11 +38,12 @@ actor SearchIndex {
         sqlite3_exec(db, "BEGIN", nil, nil, nil)
         sqlite3_exec(db, "DELETE FROM messages_fts", nil, nil, nil)
 
-        let namesByID = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.name) })
+        let namesByID    = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.name) })
+        let channelsByID = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.channel.rawValue) })
 
         let insertSQL = """
-        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time)
-        VALUES (?1, ?2, ?3, ?4, ?5);
+        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
@@ -53,6 +54,7 @@ actor SearchIndex {
 
         for (threadID, messages) in messagesByThread {
             let threadName = namesByID[threadID] ?? threadID
+            let channel    = channelsByID[threadID] ?? ""
             for m in messages {
                 sqlite3_reset(stmt)
                 sqlite3_bind_text(stmt, 1, threadID,   -1, Self.SQLITE_TRANSIENT)
@@ -61,6 +63,7 @@ actor SearchIndex {
                 sqlite3_bind_text(stmt, 3, sender,     -1, Self.SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 4, m.text,     -1, Self.SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 5, m.time,     -1, Self.SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 6, channel,    -1, Self.SQLITE_TRANSIENT)
                 sqlite3_step(stmt)
             }
         }
@@ -97,8 +100,8 @@ actor SearchIndex {
         sqlite3_finalize(del)
 
         let insertSQL = """
-        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time)
-        VALUES (?1, ?2, ?3, ?4, ?5);
+        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
@@ -107,6 +110,7 @@ actor SearchIndex {
         }
         defer { sqlite3_finalize(stmt) }
 
+        let channelVal = thread.channel.rawValue
         for m in messages {
             sqlite3_reset(stmt)
             sqlite3_bind_text(stmt, 1, thread.id,   -1, Self.SQLITE_TRANSIENT)
@@ -115,6 +119,7 @@ actor SearchIndex {
             sqlite3_bind_text(stmt, 3, sender,      -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 4, m.text,      -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 5, m.time,      -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 6, channelVal,  -1, Self.SQLITE_TRANSIENT)
             sqlite3_step(stmt)
         }
 
@@ -128,24 +133,51 @@ actor SearchIndex {
     /// FTS5 match query. Empty input returns an empty array. The caller
     /// is expected to debounce UI input.
     func search(_ query: String, limit: Int = 20) -> [Result] {
+        search(query: query, channel: nil, limit: limit)
+    }
+
+    /// FTS5 match query with optional per-channel filter (REP-080).
+    /// When `channel` is non-nil, only rows indexed for that channel are returned.
+    /// The `channel` column is UNINDEXED so the filter is a post-MATCH WHERE clause,
+    /// not a full-text search — this is safe and efficient for small result sets.
+    func search(query: String, channel: Channel?, limit: Int = 20) -> [Result] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let db else { return [] }
 
         let fts = Self.ftsQuery(from: trimmed)
-        let sql = """
-        SELECT thread_id, thread_name, sender, text, time
-        FROM messages_fts
-        WHERE messages_fts MATCH ?1
-        ORDER BY rank
-        LIMIT ?2;
-        """
+        guard !fts.isEmpty else { return [] }
+
+        let sql: String
+        if channel != nil {
+            sql = """
+            SELECT thread_id, thread_name, sender, text, time
+            FROM messages_fts
+            WHERE messages_fts MATCH ?1
+            AND channel = ?2
+            ORDER BY rank
+            LIMIT ?3;
+            """
+        } else {
+            sql = """
+            SELECT thread_id, thread_name, sender, text, time
+            FROM messages_fts
+            WHERE messages_fts MATCH ?1
+            ORDER BY rank
+            LIMIT ?2;
+            """
+        }
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_text(stmt, 1, fts, -1, Self.SQLITE_TRANSIENT)
-        sqlite3_bind_int(stmt, 2, Int32(limit))
+        if let ch = channel {
+            sqlite3_bind_text(stmt, 2, ch.rawValue, -1, Self.SQLITE_TRANSIENT)
+            sqlite3_bind_int(stmt, 3, Int32(limit))
+        } else {
+            sqlite3_bind_int(stmt, 2, Int32(limit))
+        }
 
         var results: [Result] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -180,6 +212,7 @@ actor SearchIndex {
             sender,
             text,
             time        UNINDEXED,
+            channel     UNINDEXED,
             tokenize = 'unicode61 remove_diacritics 2'
         );
         """
@@ -188,24 +221,31 @@ actor SearchIndex {
 
     // MARK: - Query translation
 
-    /// Translate a user's free-form input into an FTS5 MATCH expression:
-    /// - Split on whitespace
-    /// - Append `*` to each token for prefix matching ("dinner" → "dinner*")
-    /// - Quote any token with FTS-reserved characters
-    /// - Join 2+ tokens with explicit `AND` so multi-word queries match
-    ///   both words anywhere in the document, not as an adjacent phrase
+    /// Translate a user's free-form input into an FTS5 MATCH expression.
+    ///
+    /// Sanitization (REP-092):
+    ///   - Strip double-quotes (prevent unclosed phrase literals)
+    ///   - Strip hyphens (bare `-` confuses FTS5's phrase-boundary parser)
+    ///   - Skip tokens that collapse to empty after stripping
+    ///   - Wrap remaining FTS5 syntax characters `()*:` in phrase quotes
+    ///   - Otherwise append `*` for prefix matching
+    ///
+    /// Multi-word queries join tokens with explicit `AND` so both words must
+    /// appear somewhere in the document (not as an adjacent phrase), giving
+    /// better recall for inbox search.
     static func ftsQuery(from input: String) -> String {
         let raw = input.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         guard !raw.isEmpty else { return "" }
-        let tokens = raw.map { token -> String in
-            let safe = token.replacingOccurrences(of: "\"", with: "")
-            // Quote if it contains anything an FTS5 tokenizer would
-            // gag on; otherwise append `*` for prefix search.
-            let specialSet = CharacterSet(charactersIn: "()\"*:")
+        let tokens: [String] = raw.compactMap { token in
+            var safe = token.replacingOccurrences(of: "\"", with: "")
+            safe = safe.replacingOccurrences(of: "-", with: "")
+            guard !safe.isEmpty else { return nil }
+            let specialSet = CharacterSet(charactersIn: "()*:")
             let hasSpecial = safe.rangeOfCharacter(from: specialSet) != nil
             if hasSpecial { return "\"\(safe)\"" }
             return "\(safe)*"
         }
+        guard !tokens.isEmpty else { return "" }
         return tokens.count == 1 ? tokens[0] : tokens.joined(separator: " AND ")
     }
 

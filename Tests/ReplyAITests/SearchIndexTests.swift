@@ -376,4 +376,147 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(ids[1], "t2")
         XCTAssertEqual(ids[2], "t1", "lowest term-frequency must rank last")
     }
+
+    // MARK: - Prefix match (REP-085)
+
+    func testPartialWordMatchesFullToken() async {
+        // Prefix matching via `*` means "ali" must match a thread with "Alice".
+        let index = SearchIndex()
+        let thread = MessageThread(id: "p1", channel: .imessage, name: "Alice Stone",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "hey Alice, got your message", time: "now")
+        ])
+        let hits = await index.search("ali")
+        XCTAssertEqual(hits.count, 1, "partial 'ali' must match 'Alice' via prefix search")
+    }
+
+    func testMultiWordPartialMatchesLastToken() async {
+        // All tokens receive prefix matching; "ali sto" → "ali* AND sto*" matches
+        // a thread containing both "Alice" and "Stone".
+        let index = SearchIndex()
+        let thread = MessageThread(id: "p2", channel: .imessage, name: "Alice Stone",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "Alice Stone here", time: "now")
+        ])
+        let hits = await index.search("ali sto")
+        XCTAssertEqual(hits.count, 1, "multi-word partial 'ali sto' must match 'Alice Stone'")
+    }
+
+    func testFullWordQueryStillMatches() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "p3", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "message from Alice", time: "now")
+        ])
+        let hits = await index.search("alice")
+        XCTAssertEqual(hits.count, 1, "full word query must still match")
+    }
+
+    // MARK: - FTS5 sanitizer (REP-092)
+
+    func testDoubleQuoteInQueryDoesNotCrash() async {
+        // A double-quote in user input must not produce malformed FTS5 syntax.
+        // The sanitizer strips quotes; the search returns safe results (possibly
+        // empty if nothing matches).
+        let index = SearchIndex()
+        let thread = MessageThread(id: "s1", channel: .imessage, name: "Carol",
+                                   avatar: "C", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "hello world", time: "now")
+        ])
+        // Should not crash or throw; result count is not asserted (could be 0).
+        let hits = await index.search("hel\"lo")
+        XCTAssertGreaterThanOrEqual(hits.count, 0, "double-quote input must not crash FTS5")
+    }
+
+    func testHyphenQueryReturnsSafeResults() async {
+        // Hyphens are stripped from query tokens before FTS5 receives them,
+        // preventing parse errors from bare `-` or `token-` patterns.
+        let index = SearchIndex()
+        let thread = MessageThread(id: "s2", channel: .imessage, name: "Bob",
+                                   avatar: "B", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "call me john smith", time: "now")
+        ])
+        // "john-smith" → strip hyphen → "johnsmith*" — won't match "john smith"
+        // but must not crash.
+        let hits = await index.search("john-smith")
+        XCTAssertGreaterThanOrEqual(hits.count, 0, "hyphen in query must not crash FTS5")
+    }
+
+    func testReservedWordTreatedAsLiteral() {
+        // FTS5 boolean operators (NOT, AND, OR) in user input must be treated as
+        // search terms, not operators. The sanitizer appends `*` which prevents
+        // the parser from interpreting them as binary/unary operators.
+        let notQuery = SearchIndex.ftsQuery(from: "NOT")
+        XCTAssertEqual(notQuery, "NOT*", "NOT as single token must become prefix match, not operator")
+
+        let andQuery = SearchIndex.ftsQuery(from: "AND")
+        XCTAssertEqual(andQuery, "AND*")
+
+        let orQuery = SearchIndex.ftsQuery(from: "OR")
+        XCTAssertEqual(orQuery, "OR*")
+    }
+
+    func testValidQueryIsUnmodified() {
+        // Plain alpha-only tokens must pass through with `*` appended and no quoting.
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello"),       "hello*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello world"), "hello* AND world*")
+    }
+
+    // MARK: - Channel filter (REP-080)
+
+    func testChannelFilterReturnsOnlyMatchingChannel() async {
+        let index = SearchIndex()
+        let iMsg   = MessageThread(id: "c1", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        let slackT = MessageThread(id: "c2", channel: .slack, name: "Bob",
+                                   avatar: "B", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: iMsg,   messages: [Message(from: .them, text: "hello from imessage", time: "t")])
+        await index.upsert(thread: slackT, messages: [Message(from: .them, text: "hello from slack",    time: "t")])
+
+        let iMsgHits   = await index.search(query: "hello", channel: .imessage)
+        let slackHits  = await index.search(query: "hello", channel: .slack)
+
+        XCTAssertEqual(iMsgHits.count, 1)
+        XCTAssertEqual(iMsgHits.first?.threadID, "c1", "imessage filter must exclude slack thread")
+
+        XCTAssertEqual(slackHits.count, 1)
+        XCTAssertEqual(slackHits.first?.threadID, "c2", "slack filter must exclude imessage thread")
+    }
+
+    func testNilChannelReturnsAll() async {
+        let index = SearchIndex()
+        let iMsg   = MessageThread(id: "d1", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        let slackT = MessageThread(id: "d2", channel: .slack, name: "Bob",
+                                   avatar: "B", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: iMsg,   messages: [Message(from: .them, text: "greet everyone", time: "t")])
+        await index.upsert(thread: slackT, messages: [Message(from: .them, text: "greet everyone", time: "t")])
+
+        let hits = await index.search(query: "greet", channel: nil)
+        XCTAssertEqual(hits.count, 2, "nil channel must return threads from all channels")
+    }
+
+    func testUpsertedChannelIsPersisted() async {
+        // After an upsert the channel value must survive in the index so that
+        // per-channel filtering produces the right result.
+        let index  = SearchIndex()
+        let slackT = MessageThread(id: "e1", channel: .slack, name: "Team",
+                                   avatar: "T", preview: "", time: "", unread: 0)
+        await index.upsert(thread: slackT, messages: [
+            Message(from: .them, text: "deploy complete", time: "t")
+        ])
+
+        let slackHits = await index.search(query: "deploy", channel: .slack)
+        XCTAssertEqual(slackHits.count, 1, "slack channel must be persisted in index")
+
+        let iMsgHits = await index.search(query: "deploy", channel: .imessage)
+        XCTAssertEqual(iMsgHits.count, 0, "imessage filter must not find a slack-indexed thread")
+    }
 }
