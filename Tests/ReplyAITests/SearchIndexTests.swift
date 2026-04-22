@@ -6,8 +6,23 @@ final class SearchIndexTests: XCTestCase {
 
     func testFTSQueryAppendsPrefix() {
         XCTAssertEqual(SearchIndex.ftsQuery(from: "dinner"),       "dinner*")
-        XCTAssertEqual(SearchIndex.ftsQuery(from: "dinner mom"),   "dinner* mom*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "dinner mom"),   "dinner* AND mom*")
         XCTAssertEqual(SearchIndex.ftsQuery(from: "   dinner   "), "dinner*")
+    }
+
+    func testSingleWordUnchanged() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello"), "hello*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "world"), "world*")
+    }
+
+    func testMultiWordUsesExplicitAND() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello world"), "hello* AND world*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "a b c"), "a* AND b* AND c*")
+    }
+
+    func testEmptyQueryReturnsEmpty() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: ""), "")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "  "), "")
     }
 
     func testFTSQueryQuotesSpecialChars() {
@@ -196,6 +211,29 @@ final class SearchIndexTests: XCTestCase {
                        "rebuild after upsert should clear stale rows")
         let postRebuildBravo = await index.search("bravo")
         XCTAssertEqual(postRebuildBravo.count, 1)
+    }
+
+    func testMultiWordAndSemantics() async {
+        // "hello" and "world" appear in the same message but are not adjacent.
+        // AND semantics must match; phrase semantics ("hello world") would not.
+        let index = SearchIndex()
+        let threads = [
+            MessageThread(id: "t1", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "t2", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "", time: "", unread: 0),
+        ]
+        let messages: [String: [Message]] = [
+            // "hello" and "world" separated by several words — not adjacent
+            "t1": [Message(from: .them, text: "hello everyone in the whole wide world", time: "now")],
+            // only "hello", no "world"
+            "t2": [Message(from: .them, text: "hello there", time: "now")],
+        ]
+        await index.rebuild(from: messages, threads: threads)
+
+        let hits = await index.search("hello world")
+        XCTAssertEqual(hits.count, 1, "AND query must match both words anywhere, not as a phrase")
+        XCTAssertEqual(hits.first?.threadID, "t1")
     }
 
     func testIndexMatchesDiacriticsFolded() async {

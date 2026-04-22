@@ -176,10 +176,12 @@ actor SearchIndex {
     /// - Split on whitespace
     /// - Append `*` to each token for prefix matching ("dinner" → "dinner*")
     /// - Quote any token with FTS-reserved characters
-    /// - AND them together implicitly
+    /// - Join 2+ tokens with explicit `AND` so multi-word queries match
+    ///   both words anywhere in the document, not as an adjacent phrase
     static func ftsQuery(from input: String) -> String {
         let raw = input.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-        return raw.map { token -> String in
+        guard !raw.isEmpty else { return "" }
+        let tokens = raw.map { token -> String in
             let safe = token.replacingOccurrences(of: "\"", with: "")
             // Quote if it contains anything an FTS5 tokenizer would
             // gag on; otherwise append `*` for prefix search.
@@ -187,7 +189,8 @@ actor SearchIndex {
             let hasSpecial = safe.rangeOfCharacter(from: specialSet) != nil
             if hasSpecial { return "\"\(safe)\"" }
             return "\(safe)*"
-        }.joined(separator: " ")
+        }
+        return tokens.count == 1 ? tokens[0] : tokens.joined(separator: " AND ")
     }
 
     private static func text(_ stmt: OpaquePointer?, _ col: Int32) -> String? {
