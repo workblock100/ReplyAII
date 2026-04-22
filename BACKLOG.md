@@ -637,6 +637,20 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testFuzzRandomBlobsNeverCrash`
 - test_plan: Single test function in `AttributedBodyDecoderTests.swift`; no new source files needed.
 
+### REP-062 — human: product-copy pass on IMessagePreview sidebar sentinel strings
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Channels/IMessagePreview.swift`
+- scope: When REP-008 shipped the link + attachment preview feature, the worker chose `🔗 <host>` and `📎 Attachment` as the sentinel strings for link and attachment previews in `IMessagePreview`. These glyphs were explicitly flagged by the worker for human review (not asserted as final copy). Human should decide: (1) whether `🔗` and `📎` are the right glyphs vs alternatives (`↗`, `⊞`, `📸`, plain text); (2) whether `"Attachment"` is the right noun vs `"Media"` / `"Photo"` / `"File"`; (3) whether the space before the host name in `🔗 example.com` should be an en-space for visual rhythm. This is a product-copy decision, not a code question — update the two sentinel constants in `IMessagePreview.swift` once decided.
+- success_criteria:
+  - `linkPreviewSentinel` and `attachmentPreviewSentinel` constants reflect the decided copy
+  - Existing tests updated if the sentinel strings change
+  - Reviewer no longer flags this as an open human-review item
+- test_plan: Human updates the constants; worker updates the 3 test assertions in `IMessageChannelPreviewTests.swift` that match against the sentinel strings.
+
 ---
 
 ## Done / archived
