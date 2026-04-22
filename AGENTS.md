@@ -110,7 +110,7 @@ Tests/ReplyAITests/                340 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `TBD` concurrent-add stress test, PromptBuilder large-payload, date-boundary, stats-invariant, pinned-sort fix + test (REP-120, REP-121, REP-122, REP-123, REP-124, worker-2026-04-22-191500)
+- `f5ae41d` concurrent-add stress test, PromptBuilder large-payload, date-boundary, stats-invariant, pinned-sort fix + test (REP-120, REP-121, REP-122, REP-123, REP-124, worker-2026-04-22-191500)
 - `05e7035` cache isolation, delete-reinsert, channel-filter, error-path, ordering, pref-unrecognized, AGENTS.md count (REP-098, REP-099, REP-101, REP-103, REP-104, REP-109, REP-114, worker-2026-04-22-174500)
 - `80035e18d6f16e8197320222262df7771182e31b` messageAgeOlderThan predicate, not/or/dismiss/concurrent/tone-distinctness tests (REP-097, REP-100, REP-106, REP-107, REP-112, REP-113, worker-2026-04-22-163000)
 - `9879312` ContactsResolver TTL, IMessageChannel message cap, send-state tests, SearchIndex empty-query test (REP-074, REP-095, REP-096, REP-102, worker-2026-04-22-150000)
