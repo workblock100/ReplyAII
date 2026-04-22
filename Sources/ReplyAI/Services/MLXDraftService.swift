@@ -63,8 +63,8 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
                         kind: .loadProgress(fraction: 1, message: "Warming weights…")
                     ))
 
-                    let session = ChatSession(container, instructions: Self.systemPrompt(tone: tone))
-                    let prompt  = Self.buildPrompt(thread: thread, tone: tone, history: history)
+                    let session = ChatSession(container, instructions: PromptBuilder.systemPrompt(tone: tone))
+                    let prompt  = PromptBuilder.build(thread: thread, tone: tone, history: history)
 
                     for try await chunk in session.streamResponse(to: prompt, role: .user, images: [], videos: []) {
                         if Task.isCancelled { break }
@@ -127,36 +127,4 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
         }
     }
 
-    // MARK: - Prompt construction
-
-    private static func systemPrompt(tone: Tone) -> String {
-        let base = """
-        You are ReplyAI, a drafting assistant embedded in the user's messaging inbox. \
-        You write the user's next reply in their own voice. Output ONLY the reply text \
-        itself — no preamble, no apology, no meta-commentary. Keep replies concise and \
-        conversational; these are text messages, not essays.
-        """
-        switch tone {
-        case .warm:
-            return base + " Use a warm, friendly tone. Light emoji are fine. Avoid sounding corporate."
-        case .direct:
-            return base + " Be direct. Short. Lowercase. Get to the point. No filler."
-        case .playful:
-            return base + " Be playful and witty with dry humor; occasional emoji are welcome."
-        }
-    }
-
-    private static func buildPrompt(thread: MessageThread, tone: Tone, history: [Message]) -> String {
-        var lines: [String] = []
-        lines.append("Conversation with \(thread.name) via \(thread.channel.label).")
-        lines.append("")
-        lines.append("Recent messages (oldest first):")
-        for m in history.suffix(20) {
-            let speaker = m.from == .me ? "me" : thread.name
-            lines.append("\(speaker): \(m.text)")
-        }
-        lines.append("")
-        lines.append("Write my next reply in a \(tone.rawValue.lowercased()) tone. Reply text only.")
-        return lines.joined(separator: "\n")
-    }
 }
