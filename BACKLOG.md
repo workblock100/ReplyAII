@@ -76,8 +76,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-064413
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-028 registered the `UNTextInputNotificationAction` ("REPLY" category) and wired `NotificationCoordinator` to set `InboxViewModel.pendingNotificationReply`. The consumption side is still stubbed: `InboxViewModel` must observe `pendingNotificationReply`, look up the thread by ID, call `send(text:toChatGUID:)` via `IMessageSender`, then clear the pending reply. Handle the case where the thread is not in the loaded list (log and discard). Tests use a mock sender and verify the round-trip: set `pendingNotificationReply`, trigger observation, assert `IMessageSender.lastSent` received the correct text and GUID.
 - success_criteria:
