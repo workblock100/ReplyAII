@@ -341,8 +341,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-042232
 - files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine` stores one `DraftState` per `(threadID, tone)` pair in a dictionary. This grows unboundedly as the user browses threads. Add `evict(threadID: String)` (called when a thread is deselected in `InboxViewModel`) that removes all tone entries for that thread from the cache. Add a `cacheSize: Int` computed property for testability. Tests: prime a draft for thread A, evict A, verify cache is empty; prime drafts for threads A and B, evict A, verify B remains.
 - success_criteria:
@@ -570,8 +570,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-042232
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: Add `Stats.writeWeeklyLog(to url: URL) throws` that serializes current counter values into a Markdown file formatted as `# Stats week of YYYY-MM-DD\n\n- rulesEvaluated: N\n- draftsSent: N\n...`. This method will be called by planner/reviewer scripts to produce `.automation/logs/stats-YYYY-WW.md` snapshots. Keep it simple: a point-in-time dump with no retention or rolling-window logic. Tests: output string contains all expected counter keys; zero-value counters are not omitted; method writes to the given file URL.
 - success_criteria:
@@ -584,8 +584,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-042232
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex` wraps a SQLite FTS5 connection. Verify thread-safety by running 100 concurrent `upsert` + `search` calls via `DispatchQueue.concurrentPerform`. The test must not crash or corrupt the index. If `SearchIndex` is not currently thread-safe, add an `NSLock`-guarded wrapper around the sqlite handle as the fix (document why in a comment). Final search after all concurrent operations should return the expected result count.
 - success_criteria:
