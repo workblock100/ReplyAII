@@ -32,6 +32,9 @@ final class Stats: @unchecked Sendable {
         /// load because they failed to decode. Non-zero means the file was
         /// partially corrupt; the app kept the valid portion.
         var ruleLoadSkips: Int = 0
+        /// Cumulative evaluation calls where at least one rule matched.
+        /// Match rate = rulesMatchedCount / total rule evaluations.
+        var rulesMatchedCount: Int = 0
 
         // MARK: - Codable with forward/backward compatibility
 
@@ -39,6 +42,7 @@ final class Stats: @unchecked Sendable {
             case rulesFiredByAction, draftsGenerated, draftsSent
             case draftsGeneratedByTone, draftsSentByTone
             case messagesIndexed, messagesIndexedByChannel, ruleLoadSkips
+            case rulesMatchedCount
         }
 
         init(from decoder: Decoder) throws {
@@ -51,6 +55,7 @@ final class Stats: @unchecked Sendable {
             messagesIndexed = try c.decodeIfPresent(Int.self, forKey: .messagesIndexed) ?? 0
             messagesIndexedByChannel = try c.decodeIfPresent([String: Int].self, forKey: .messagesIndexedByChannel) ?? [:]
             ruleLoadSkips = try c.decodeIfPresent(Int.self, forKey: .ruleLoadSkips) ?? 0
+            rulesMatchedCount = try c.decodeIfPresent(Int.self, forKey: .rulesMatchedCount) ?? 0
         }
 
         init(
@@ -61,7 +66,8 @@ final class Stats: @unchecked Sendable {
             draftsSentByTone: [String: Int] = [:],
             messagesIndexed: Int = 0,
             messagesIndexedByChannel: [String: Int] = [:],
-            ruleLoadSkips: Int = 0
+            ruleLoadSkips: Int = 0,
+            rulesMatchedCount: Int = 0
         ) {
             self.rulesFiredByAction = rulesFiredByAction
             self.draftsGenerated = draftsGenerated
@@ -71,6 +77,7 @@ final class Stats: @unchecked Sendable {
             self.messagesIndexed = messagesIndexed
             self.messagesIndexedByChannel = messagesIndexedByChannel
             self.ruleLoadSkips = ruleLoadSkips
+            self.rulesMatchedCount = rulesMatchedCount
         }
     }
 
@@ -174,6 +181,14 @@ final class Stats: @unchecked Sendable {
     func recordRuleLoadSkips(_ count: Int) {
         guard count > 0 else { return }
         state.withLock { $0.ruleLoadSkips += count }
+        persist()
+    }
+
+    /// Increment the matched-rules counter. Call after `RuleEvaluator.matching`
+    /// returns a non-empty array — i.e., at least one rule fired for this context.
+    /// Does nothing when no rules matched, keeping the counter meaningful.
+    func incrementRulesMatched() {
+        state.withLock { $0.rulesMatchedCount += 1 }
         persist()
     }
 

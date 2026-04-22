@@ -260,4 +260,34 @@ final class StatsTests: XCTestCase {
         // Tone never touched → nil
         XCTAssertNil(stats.acceptanceRate(for: .playful))
     }
+
+    // MARK: - rulesMatchedCount (REP-094)
+
+    func testMatchedCountIncrementsOnMatch() {
+        let stats = Stats(fileURL: tempURL())
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0)
+        stats.incrementRulesMatched()
+        stats.incrementRulesMatched()
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 2,
+                       "rulesMatchedCount must increment once per matching evaluation")
+    }
+
+    func testMatchedCountNotIncrementedOnNoMatch() {
+        let stats = Stats(fileURL: tempURL())
+        // Simulate two evaluations with no matches — incrementRulesMatched is never called.
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0,
+                       "rulesMatchedCount must remain zero when no rules matched")
+    }
+
+    func testMatchedCountRoundTrip() throws {
+        let url = tempURL()
+        let first = Stats(fileURL: url)
+        first.incrementRulesMatched()
+        first.incrementRulesMatched()
+        first.incrementRulesMatched()
+
+        let second = Stats(fileURL: url)
+        XCTAssertEqual(second.snapshot().rulesMatchedCount, 3,
+                       "rulesMatchedCount must survive JSON persistence round-trip")
+    }
 }

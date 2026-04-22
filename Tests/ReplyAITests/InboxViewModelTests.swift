@@ -489,4 +489,61 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
         XCTAssertEqual(vm.activeTone, .direct,
             "rules must fire during sync when autoApplyRulesOnSync is true (default)")
     }
+
+    // MARK: - Archive / unarchive round-trip (REP-053)
+
+    private func makeIsolatedDefaults(suffix: String = "") -> UserDefaults {
+        let suite = "test.ReplyAI.archive.\(UUID())\(suffix)"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        return d
+    }
+
+    func testArchiveRemovesFromList() {
+        let d = makeIsolatedDefaults()
+        let t1 = MessageThread(id: "a1", channel: .imessage, name: "Alice", avatar: "A", preview: "hi", time: "now")
+        let t2 = MessageThread(id: "a2", channel: .imessage, name: "Bob",   avatar: "B", preview: "yo", time: "now")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.archive("a1")
+
+        XCTAssertTrue(vm.archivedThreadIDs.contains("a1"),
+                      "archived thread ID must be in archivedThreadIDs")
+        XCTAssertFalse(vm.archivedThreadIDs.contains("a2"),
+                       "non-archived thread must not appear in archivedThreadIDs")
+        // ThreadListView filters: threads not in archivedThreadIDs remain visible.
+        let visible = vm.threads.filter { !vm.archivedThreadIDs.contains($0.id) }
+        XCTAssertFalse(visible.contains(where: { $0.id == "a1" }),
+                       "archived thread must not appear in the visible list")
+        XCTAssertTrue(visible.contains(where: { $0.id == "a2" }),
+                      "non-archived thread must remain in the visible list")
+    }
+
+    func testUnarchiveRestoresThread() {
+        let d = makeIsolatedDefaults()
+        let t1 = MessageThread(id: "u1", channel: .imessage, name: "Carol", avatar: "C", preview: "hey", time: "now")
+        let vm = InboxViewModel(threads: [t1], contacts: fastContacts(), defaults: d)
+
+        vm.archive("u1")
+        XCTAssertTrue(vm.archivedThreadIDs.contains("u1"))
+
+        vm.unarchive("u1")
+        XCTAssertFalse(vm.archivedThreadIDs.contains("u1"),
+                       "unarchived thread must be removed from archivedThreadIDs")
+        let visible = vm.threads.filter { !vm.archivedThreadIDs.contains($0.id) }
+        XCTAssertTrue(visible.contains(where: { $0.id == "u1" }),
+                      "unarchived thread must reappear in the visible list")
+    }
+
+    func testArchivedIDsPersist() {
+        let d = makeIsolatedDefaults()
+        let t1 = MessageThread(id: "p1", channel: .imessage, name: "Dave", avatar: "D", preview: "sup", time: "now")
+        let vm1 = InboxViewModel(threads: [t1], contacts: fastContacts(), defaults: d)
+        vm1.archive("p1")
+
+        // Simulate relaunch: new VM with the same isolated UserDefaults.
+        let vm2 = InboxViewModel(threads: [t1], contacts: fastContacts(), defaults: d)
+        XCTAssertTrue(vm2.archivedThreadIDs.contains("p1"),
+                      "archivedThreadIDs must survive a simulated relaunch via UserDefaults")
+    }
 }

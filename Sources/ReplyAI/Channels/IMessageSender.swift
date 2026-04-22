@@ -43,10 +43,10 @@ enum IMessageSender {
     /// background thread; may throw a SendError to simulate script failures.
     nonisolated(unsafe) static var executeHook: ((String) throws -> Void)? = nil
 
-    /// When true, `send` returns immediately without executing AppleScript.
-    /// Never set this in production code; it exists purely for test harnesses
-    /// that need to exercise the send path without messaging anyone.
-    nonisolated(unsafe) static var isDryRun: Bool = false
+    /// Returns a no-op hook that succeeds immediately without executing AppleScript.
+    /// Set `IMessageSender.executeHook = IMessageSender.dryRunHook()` in tests that
+    /// need to exercise the send path without messaging anyone.
+    static func dryRunHook() -> (String) throws -> Void { { _ in } }
 
     /// Send `text` to the given thread. Blocks the calling thread until
     /// AppleScript returns (or the timeout fires); call from a background task.
@@ -86,7 +86,6 @@ enum IMessageSender {
         guard text.count <= maxMessageLength else {
             throw SendError.messageTooLong(text.count)
         }
-        if isDryRun { return }
         let escapedText = escape(text)
         let escapedGUID = escape(chatGUID)
 

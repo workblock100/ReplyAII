@@ -27,14 +27,14 @@ final class InboxViewModel {
     /// are new since the last rule evaluation pass. Advances strictly upward.
     /// Persisted to UserDefaults so rule actions don't re-fire on relaunch.
     private var lastSeenRowID: [String: Int64] = [:] {
-        didSet { InboxViewModel.saveLastSeenRowID(lastSeenRowID) }
+        didSet { InboxViewModel.saveLastSeenRowID(lastSeenRowID, to: defaults) }
     }
 
     /// Threads the user or a rule has hidden from the main list. Persisted
     /// to UserDefaults so the effect survives relaunches. Filtering lives
     /// in ThreadListView.
     var archivedThreadIDs: Set<String> = [] {
-        didSet { InboxViewModel.saveArchivedIDs(archivedThreadIDs) }
+        didSet { InboxViewModel.saveArchivedIDs(archivedThreadIDs, to: defaults) }
     }
 
     /// Threads silently suppressed by a `silentlyIgnore` rule action.
@@ -43,7 +43,7 @@ final class InboxViewModel {
     /// archived threads still appear in the menu-bar count; silently-ignored
     /// ones do not. Persisted to UserDefaults.
     var silentlyIgnoredThreadIDs: Set<String> = [] {
-        didSet { InboxViewModel.saveSilentlyIgnoredIDs(silentlyIgnoredThreadIDs) }
+        didSet { InboxViewModel.saveSilentlyIgnoredIDs(silentlyIgnoredThreadIDs, to: defaults) }
     }
 
     /// Threads eligible for the menu-bar waiting list: unread and not
@@ -126,9 +126,9 @@ final class InboxViewModel {
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
         self.rules = rules ?? RulesStore()
-        self.archivedThreadIDs = InboxViewModel.loadArchivedIDs()
-        self.silentlyIgnoredThreadIDs = InboxViewModel.loadSilentlyIgnoredIDs()
-        self.lastSeenRowID = InboxViewModel.loadLastSeenRowID()
+        self.archivedThreadIDs = InboxViewModel.loadArchivedIDs(from: defaults)
+        self.silentlyIgnoredThreadIDs = InboxViewModel.loadSilentlyIgnoredIDs(from: defaults)
+        self.lastSeenRowID = InboxViewModel.loadLastSeenRowID(from: defaults)
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
         // needing MainActor.assumeIsolated (which would crash on the
@@ -170,6 +170,7 @@ final class InboxViewModel {
     func applyRules(for thread: MessageThread) {
         let ctx = RuleContext.from(thread: thread)
         let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+        if !matched.isEmpty { stats.incrementRulesMatched() }
 
         for rule in matched {
             switch rule.then {
@@ -198,6 +199,7 @@ final class InboxViewModel {
         for thread in threads {
             let ctx = RuleContext.from(thread: thread)
             let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+            if !matched.isEmpty { stats.incrementRulesMatched() }
             for rule in matched {
                 switch rule.then {
                 case .setDefaultTone(let tone):
@@ -441,6 +443,7 @@ final class InboxViewModel {
             if let latest = newMessages.last { ctx.lastMessageText = latest.text }
 
             let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+            if !matched.isEmpty { stats.incrementRulesMatched() }
             for rule in matched {
                 switch rule.then {
                 case .archive:
@@ -488,51 +491,51 @@ final class InboxViewModel {
 
     private static let archivedKey = "pref.inbox.archivedThreadIDs"
 
-    private static func loadArchivedIDs() -> Set<String> {
-        guard let data = UserDefaults.standard.data(forKey: archivedKey),
+    private static func loadArchivedIDs(from defaults: UserDefaults) -> Set<String> {
+        guard let data = defaults.data(forKey: archivedKey),
               let decoded = try? JSONDecoder().decode([String].self, from: data) else {
             return []
         }
         return Set(decoded)
     }
 
-    private static func saveArchivedIDs(_ ids: Set<String>) {
+    private static func saveArchivedIDs(_ ids: Set<String>, to defaults: UserDefaults) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
-        UserDefaults.standard.set(data, forKey: archivedKey)
+        defaults.set(data, forKey: archivedKey)
     }
 
     // MARK: - silentlyIgnored persistence
 
     private static let silentlyIgnoredKey = "pref.inbox.silentlyIgnoredThreadIDs"
 
-    private static func loadSilentlyIgnoredIDs() -> Set<String> {
-        guard let data = UserDefaults.standard.data(forKey: silentlyIgnoredKey),
+    private static func loadSilentlyIgnoredIDs(from defaults: UserDefaults) -> Set<String> {
+        guard let data = defaults.data(forKey: silentlyIgnoredKey),
               let decoded = try? JSONDecoder().decode([String].self, from: data) else {
             return []
         }
         return Set(decoded)
     }
 
-    private static func saveSilentlyIgnoredIDs(_ ids: Set<String>) {
+    private static func saveSilentlyIgnoredIDs(_ ids: Set<String>, to defaults: UserDefaults) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
-        UserDefaults.standard.set(data, forKey: silentlyIgnoredKey)
+        defaults.set(data, forKey: silentlyIgnoredKey)
     }
 
     // MARK: - lastSeenRowID persistence
 
     private static let lastSeenRowIDKey = "pref.inbox.lastSeenRowID"
 
-    private static func loadLastSeenRowID() -> [String: Int64] {
-        guard let data = UserDefaults.standard.data(forKey: lastSeenRowIDKey),
+    private static func loadLastSeenRowID(from defaults: UserDefaults) -> [String: Int64] {
+        guard let data = defaults.data(forKey: lastSeenRowIDKey),
               let decoded = try? JSONDecoder().decode([String: Int64].self, from: data) else {
             return [:]
         }
         return decoded
     }
 
-    private static func saveLastSeenRowID(_ watermarks: [String: Int64]) {
+    private static func saveLastSeenRowID(_ watermarks: [String: Int64], to defaults: UserDefaults) {
         let data = (try? JSONEncoder().encode(watermarks)) ?? Data()
-        UserDefaults.standard.set(data, forKey: lastSeenRowIDKey)
+        defaults.set(data, forKey: lastSeenRowIDKey)
     }
 
     /// Hides a thread from the inbox and removes it from the search index.

@@ -219,18 +219,12 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertNoThrow(try IMessageSender.send("hello", to: thread))
     }
 
-    // MARK: - Dry-run mode (REP-040)
+    // MARK: - Dry-run hook (REP-093)
 
-    func testDryRunReturnsSuccessWithoutScript() {
-        let prevDryRun = IMessageSender.isDryRun
+    func testDryRunHookReturnsSuccessWithoutScript() {
         let prevHook = IMessageSender.executeHook
-        defer {
-            IMessageSender.isDryRun = prevDryRun
-            IMessageSender.executeHook = prevHook
-        }
-        var scriptExecuted = false
-        IMessageSender.executeHook = { _ in scriptExecuted = true }
-        IMessageSender.isDryRun = true
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
 
         let thread = MessageThread(
             id: "+15551234567", channel: .imessage, name: "Test",
@@ -238,19 +232,13 @@ final class IMessageSenderTests: XCTestCase {
             chatGUID: "iMessage;-;+15551234567"
         )
         XCTAssertNoThrow(try IMessageSender.send("hello dry-run", to: thread))
-        XCTAssertFalse(scriptExecuted, "isDryRun must bypass AppleScript execution")
     }
 
-    func testDryRunOffInvokesScript() {
-        let prevDryRun = IMessageSender.isDryRun
+    func testCustomHookIsInvokedOnSend() {
         let prevHook = IMessageSender.executeHook
-        defer {
-            IMessageSender.isDryRun = prevDryRun
-            IMessageSender.executeHook = prevHook
-        }
+        defer { IMessageSender.executeHook = prevHook }
         var scriptExecuted = false
         IMessageSender.executeHook = { _ in scriptExecuted = true }
-        IMessageSender.isDryRun = false
 
         let thread = MessageThread(
             id: "+15551234567", channel: .imessage, name: "Test",
@@ -258,7 +246,7 @@ final class IMessageSenderTests: XCTestCase {
             chatGUID: "iMessage;-;+15551234567"
         )
         XCTAssertNoThrow(try IMessageSender.send("hello live", to: thread))
-        XCTAssertTrue(scriptExecuted, "isDryRun=false must reach the AppleScript executor")
+        XCTAssertTrue(scriptExecuted, "custom executeHook must be invoked on send")
     }
 
     // MARK: - Message length guard (REP-064)
@@ -286,9 +274,9 @@ final class IMessageSenderTests: XCTestCase {
     }
 
     func testExactLimitMessageProceeds() {
-        let prevDryRun = IMessageSender.isDryRun
-        defer { IMessageSender.isDryRun = prevDryRun }
-        IMessageSender.isDryRun = true
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
 
         let atLimit = String(repeating: "a", count: IMessageSender.maxMessageLength)
         let thread = MessageThread(
@@ -296,7 +284,7 @@ final class IMessageSenderTests: XCTestCase {
             avatar: "T", preview: "", time: "",
             chatGUID: "iMessage;-;+15551234567"
         )
-        // Exactly at the limit must succeed (dry-run so no real AppleScript).
+        // Exactly at the limit must succeed (dryRunHook so no real AppleScript).
         XCTAssertNoThrow(try IMessageSender.send(atLimit, to: thread))
     }
 

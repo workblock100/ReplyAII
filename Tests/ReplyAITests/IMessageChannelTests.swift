@@ -82,6 +82,23 @@ final class IMessageChannelTests: XCTestCase {
                        "NULL text should fall back to AttributedBodyDecoder")
     }
 
+    func testBothNullProducesEmptyMessage() async throws {
+        try buildSchema()
+        try insertChat(rowid: 1, identifier: "nullboth", display: "", service: "iMessage", guid: "iMessage;-;nullboth")
+        // A real message to anchor the thread, plus a both-NULL delivery-receipt style row.
+        try insertMessage(rowid: 20, chatRowID: 1, text: "real msg", fromMe: false, date: 700_000_000)
+        try insertMessageBothNull(rowid: 21, chatRowID: 1, fromMe: false, date: 700_000_001)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        // The channel's last-message subquery filters (m.text IS NOT NULL OR m.attributedBody IS NOT NULL),
+        // so the both-NULL row is excluded and the real message wins preview. No crash is the
+        // primary invariant; the thread must still appear.
+        XCTAssertEqual(threads.count, 1, "thread must appear via the real message, not crash on both-NULL row")
+        XCTAssertEqual(threads[0].preview, "real msg",
+                       "preview must fall back to the real message when the latest row is both-NULL")
+    }
+
     func testGroupChatGUIDProjection() async throws {
         try buildSchema()
         try insertChat(
@@ -298,6 +315,25 @@ final class IMessageChannelTests: XCTestCase {
         XCTAssertEqual(sqlite3_step(m), SQLITE_DONE)
         sqlite3_finalize(m)
 
+        try linkMessage(db: db, chatRowID: chatRowID, messageRowID: rowid)
+    }
+
+    private func insertMessageBothNull(
+        rowid: Int64, chatRowID: Int64, fromMe: Bool, date: Int64
+    ) throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let msgSQL = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date, associated_message_type)
+        VALUES (?1, NULL, NULL, ?2, 0, ?3, 0);
+        """
+        var m: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(db, msgSQL, -1, &m, nil), SQLITE_OK)
+        sqlite3_bind_int64(m, 1, rowid)
+        sqlite3_bind_int(m, 2, fromMe ? 1 : 0)
+        sqlite3_bind_int64(m, 3, date)
+        XCTAssertEqual(sqlite3_step(m), SQLITE_DONE)
+        sqlite3_finalize(m)
         try linkMessage(db: db, chatRowID: chatRowID, messageRowID: rowid)
     }
 

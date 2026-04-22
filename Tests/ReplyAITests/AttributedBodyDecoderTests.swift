@@ -219,4 +219,29 @@ final class AttributedBodyDecoderTests: XCTestCase {
         let bytes: [UInt8] = [0x81, 0xFF]
         XCTAssertNil(AttributedBodyDecoder.readLength(bytes: bytes, at: 0))
     }
+
+    // MARK: - Fuzz: random blob resilience (REP-061)
+
+    func testFuzzRandomBlobsNeverCrash() {
+        // Verify that no randomly-constructed blob causes a trap, assertion
+        // failure, or invalid UTF-8 in the returned string. Uses the default
+        // Swift PRNG so results are not reproducible across runs by design —
+        // this is a crash-coverage test, not a deterministic fixture.
+        var rng = SystemRandomNumberGenerator()
+        let iterations = 10_000
+        for _ in 0 ..< iterations {
+            let length = Int.random(in: 0 ... 4096, using: &rng)
+            var bytes = [UInt8](repeating: 0, count: length)
+            for i in 0 ..< length {
+                bytes[i] = UInt8.random(in: 0 ... 255, using: &rng)
+            }
+            let data = Data(bytes)
+            // Must return without crashing; nil is an acceptable result.
+            guard let text = AttributedBodyDecoder.extractText(from: data) else { continue }
+            // Any returned string must be valid UTF-8 (String is always UTF-8 in Swift,
+            // but verify the roundtrip to catch any internal encoding anomaly).
+            XCTAssertNotNil(text.data(using: .utf8),
+                            "extractText returned a String that is not valid UTF-8")
+        }
+    }
 }
