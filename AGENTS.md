@@ -110,7 +110,7 @@ Tests/ReplyAITests/                304 tests
 
 Commits (newest first; run `git log` for detail):
 
-- *(pending)* ContactsResolver TTL, IMessageChannel message cap, send-state tests, SearchIndex empty-query test (REP-074, REP-095, REP-096, REP-102, worker-2026-04-22-150000)
+- `9879312` ContactsResolver TTL, IMessageChannel message cap, send-state tests, SearchIndex empty-query test (REP-074, REP-095, REP-096, REP-102, worker-2026-04-22-150000)
 - `7196e9d` SearchIndex disk persistence + PromptBuilder truncate invariants (REP-041, REP-073, worker-2026-04-22-144200)
 - `a5bd7a4` RulesStore: export/import rules via JSON file URL; AGENTS.md sync (REP-035, REP-042, worker-2026-04-22-142600)
 - `eaa0b39` fuzz coverage, archive persistence, isDryRun→executeHook, rulesMatchedCount counter (REP-053, REP-061, REP-084, REP-093, REP-094, worker-2026-04-22-130300)
