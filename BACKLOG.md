@@ -362,8 +362,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `errOSAScriptError (-1708)` is `errAEEventNotHandled` — Messages.app accepted the send but couldn't dispatch the Apple Event, typically during app startup or iCloud sync. It's transient and distinct from SQLITE_BUSY. Add a single retry: if `NSAppleScript.executeAndReturnError` returns an error with code `-1708`, wait 500ms and retry once. If the retry also fails, surface the original error. Non-retriable error codes fail immediately without retry. Depends on REP-025 (sendTimeout injection) for testability — use a short injected timeout when testing retry path.
 - success_criteria:
@@ -405,8 +405,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: AppleScript `tell application "Messages" to send "text"` may fail silently or truncate for very long message strings. Add a pre-flight guard: if the message text exceeds 4096 characters, return `ChannelError.sendFailed("message too long (\(text.count) chars, max 4096)")` before executing the AppleScript. This ensures the user sees a clear error rather than a silent truncation or AppleScript hang. Tests: a 4097-char message returns `sendFailed`; a 4096-char message proceeds to the AppleScript path (or dry-run if REP-040 landed).
 - success_criteria:
@@ -451,8 +451,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore.add()` has no upper bound. With many rules, `RuleEvaluator` scans all rules on every thread select (O(n) per thread × per thread in inbox). Add a 100-rule hard cap: if `rules.count >= maxRules`, `add()` throws `RuleValidationError.tooManyRules`. Expose as `static let maxRules = 100`. This prevents unbounded O(n) growth from programmatic imports (REP-035). Tests: add 100 rules succeeds; adding the 101st throws; `maxRules` constant is 100.
 - success_criteria:
@@ -543,8 +543,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `Message.isRead` is now projected from `chat.db` (REP-036). `MessageThread.unread` count is computed from actual `is_read` values. When `InboxViewModel.selectThread(_:)` is called, optimistically mark the selected thread's `unread` count as 0 in the local model — the real `is_read` flip happens in Messages.app when the user reads it; this is UI-only local state. No DB write needed. Tests: select a thread with `unread > 0`, verify the local model shows `unread == 0`; a different thread's unread count is unaffected.
 - success_criteria:
@@ -558,8 +558,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `SQLITE_NOTADB (26)` is returned by `sqlite3_open_v2` when the file exists but is not a valid SQLite database (rare but possible after a macOS crash during iCloud sync). Currently this falls through as a generic `ChannelError.databaseError`. Add explicit detection: if the result code is `SQLITE_NOTADB`, surface `ChannelError.databaseCorrupted` (a new enum case). This gives `InboxScreen` a hook for a "database corrupted — re-sync from iCloud" recovery path. Tests: mock opener returning `SQLITE_NOTADB` → `databaseCorrupted` error; mock opener returning any other error code → generic `databaseError`.
 - success_criteria:
@@ -574,8 +574,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-065225
 - files_to_touch: `Tests/ReplyAITests/NotificationCoordinatorTests.swift` (new)
 - scope: REP-028 shipped `NotificationCoordinator` with `UNTextInputNotificationAction` registration, but test coverage is limited to category registration. The `handleNotificationResponse` path — extracting `threadID` from the notification `userInfo`, pulling the reply text from `UNTextInputNotificationResponse.userText`, and setting `InboxViewModel.pendingNotificationReply` — has no tests. Add `NotificationCoordinatorTests.swift`: mock a `UNNotificationResponse` subclass with controlled `userInfo` and text; verify `pendingNotificationReply` is set with the expected `(threadID, text)` tuple; verify an unknown threadID or missing `userInfo` keys result in a no-op (no crash).
 - success_criteria:
