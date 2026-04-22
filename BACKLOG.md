@@ -226,8 +226,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-041448
 - files_to_touch: `Sources/ReplyAI/Channels/ChatDBWatcher.swift`, `Tests/ReplyAITests/ChatDBWatcherTests.swift`
 - scope: `DispatchSource.makeFileSystemObjectSource` can be cancelled by the system (e.g., if `chat.db` is moved or the file descriptor becomes invalid). Currently the `cancel` handler is not set — the source silently stops delivering events and the sync chip freezes. Add a `cancel` handler that schedules a restart via `DispatchQueue.main.asyncAfter(deadline: .now() + restartDelay)` where `restartDelay` starts at 5s and doubles on repeated cancellations (capped at 60s). Add a `stopWatching()` public method that cancels without restart (for clean shutdown). Expose `restartDelay: TimeInterval` as injectable for tests. Test: inject a mock source that fires the cancel handler; verify restart is scheduled; `stopWatching()` cancels without scheduling restart.
 - success_criteria:
