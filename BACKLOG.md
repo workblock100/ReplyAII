@@ -102,8 +102,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-22-144200
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex` uses an in-memory SQLite FTS5 database. Every app launch rebuilds it from `IMessageChannel`. For large inboxes, this rebuild is slow and blocks the first search. Persist the FTS5 database to `~/Library/Application Support/ReplyAI/search.db`. On launch, open the persisted file instead of `:memory:`. Rebuild is still triggered on first launch (if file missing) or explicit settings wipe. Add a `SearchIndex(databaseURL: URL?)` initializer: nil = in-memory (tests), non-nil = file-backed (production). Tests: create an index, insert threads, close, reopen with same URL, verify threads are still searchable.
 - success_criteria:
@@ -217,8 +217,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-22-144200
 - files_to_touch: `Sources/ReplyAI/Services/PromptBuilder.swift` (access-level change only), `Tests/ReplyAITests/PromptBuilderTests.swift` (extend)
 - scope: REP-026 (commit 9717756) already implemented `PromptBuilder.truncate` (private) with a `historyCharBudget = 2_000` constant and shipped `testLongHistoryIsTruncatedToCharBudget`. Two invariants are untested: (1) a short history (well under budget) passes through unchanged — no messages are dropped; (2) when truncation does occur, the most-recent message (last in the array) is always retained, never the first. Change `truncate` visibility from `private` to `internal` so tests can call it directly with a custom budget. Add `testShortHistoryPassesThroughUnchanged` and `testMostRecentMessageAlwaysRetained`. No structural code changes — access-level bump + 2 test cases.
 - success_criteria:
