@@ -319,7 +319,7 @@ struct IMessageChannel: ChannelService {
                     System Settings → Privacy & Security → Full Disk Access, then try again.
                     """)
             }
-            throw ChannelError.unavailable("Can't open chat.db: \(msg)")
+            throw ChannelError.databaseError(code: rc, message: "Can't open chat.db: \(msg)")
         }
         return db!
     }

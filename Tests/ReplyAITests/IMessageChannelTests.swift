@@ -355,3 +355,48 @@ final class IMessageChannelTests: XCTestCase {
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
     )
 }
+
+// MARK: - ChannelError result-code preservation (REP-051)
+
+final class ChannelErrorResultCodeTests: XCTestCase {
+    /// databaseError(code:message:) exposes the sqlite result code so callers
+    /// can branch on it (e.g. SQLITE_BUSY = 5) without string-matching.
+    func testDatabaseErrorPreservesCode() {
+        let err = ChannelError.databaseError(code: Int32(SQLITE_BUSY), message: "database is locked")
+        guard case .databaseError(let code, let message) = err else {
+            XCTFail("expected databaseError"); return
+        }
+        XCTAssertEqual(code, Int32(SQLITE_BUSY))
+        XCTAssertEqual(message, "database is locked")
+        XCTAssertEqual(err.errorDescription, "database is locked")
+    }
+
+    /// Opening a directory as a db reaches sqlite3_open_v2 (fileExists returns
+    /// true for directories) and produces either databaseError or permissionDenied
+    /// — never unavailable — because we passed the fileExists guard.
+    func testOpenFailureSurfacesDatabaseOrPermissionError() async {
+        let dirURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("replyai-dbtest-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dirURL) }
+
+        let channel = IMessageChannel(dbPathOverride: dirURL.path)
+        do {
+            _ = try await channel.recentThreads(limit: 1)
+            XCTFail("expected throw")
+        } catch let err as ChannelError {
+            switch err {
+            case .databaseError(let code, _):
+                XCTAssertGreaterThan(code, 0)
+            case .permissionDenied:
+                break  // sqlite3 mapped dir-open to "unable to open"
+            case .unavailable(let msg):
+                XCTFail("should not reach unavailable for existing directory path: \(msg)")
+            default:
+                XCTFail("unexpected ChannelError: \(err)")
+            }
+        } catch {
+            XCTFail("unexpected non-ChannelError: \(error)")
+        }
+    }
+}

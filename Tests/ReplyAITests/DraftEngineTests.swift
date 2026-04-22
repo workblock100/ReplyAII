@@ -64,6 +64,49 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertEqual(Set(seen).count, Tone.allCases.count)
     }
 
+    // MARK: - Concurrent prime guard (REP-049)
+
+    func testDoublePrimeCancelsFirst() async throws {
+        // Both prime() calls happen synchronously — the second cancels the
+        // first task via primingTasks before it emits any text.
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        engine.prime(thread: thread, tone: .warm, history: [])
+
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertTrue(state.isDone)
+        XCTAssertFalse(state.isStreaming)
+        // No error from the cancelled first task's CancellationError propagating.
+        XCTAssertNil(state.error)
+        // Text equals exactly one draft — no doubling from two concurrent streams.
+        XCTAssertEqual(state.text, Fixtures.seedDraft(threadID: thread.id, tone: .warm))
+    }
+
+    func testDoublePrimeResultReflectsSecond() async throws {
+        // After rapid double-prime, the engine settles on a single coherent
+        // draft — no partial text from the cancelled first task bleeds in.
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .playful, history: [])
+        engine.prime(thread: thread, tone: .playful, history: [])
+
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .playful).isDone
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .playful)
+        XCTAssertFalse(state.isStreaming)
+        XCTAssertNil(state.error)
+        XCTAssertEqual(state.text, Fixtures.seedDraft(threadID: thread.id, tone: .playful))
+    }
+
     // MARK: - helper
 
     private func waitUntil(

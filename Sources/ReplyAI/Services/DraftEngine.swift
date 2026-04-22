@@ -32,6 +32,10 @@ final class DraftEngine {
 
     private let service: LLMService
     private var tasks: [Key: Task<Void, Never>] = [:]
+    /// Tracks the most-recently-started prime task per (threadID, tone) so
+    /// rapid re-selection cancels the stale in-flight stream instead of
+    /// silently accumulating dangling tasks.
+    private var primingTasks: [String: Task<Void, Never>] = [:]
     private let stats: Stats?
 
     init(service: LLMService = StubLLMService(), stats: Stats? = nil) {
@@ -43,11 +47,17 @@ final class DraftEngine {
         drafts[Key(threadID: threadID, tone: tone)] ?? .init()
     }
 
-    /// Kicks off generation if we don't already have a cached draft for the key.
+    /// Kicks off generation if we don't already have a completed draft for
+    /// the key. A second call for the same (threadID, tone) before the first
+    /// completes cancels the prior in-flight stream and restarts — at most
+    /// one stream is ever live per key.
     func prime(thread: MessageThread, tone: Tone, history: [Message]) {
         let key = Key(threadID: thread.id, tone: tone)
-        if let existing = drafts[key], existing.isDone || existing.isStreaming { return }
+        if let existing = drafts[key], existing.isDone || !existing.text.isEmpty { return }
+        let primingKey = "\(thread.id):\(tone.rawValue)"
+        primingTasks[primingKey]?.cancel()
         generate(thread: thread, tone: tone, history: history)
+        primingTasks[primingKey] = tasks[key]
     }
 
     /// Force-reruns generation, busting the cache for this (thread, tone).
@@ -60,6 +70,7 @@ final class DraftEngine {
         let key = Key(threadID: threadID, tone: tone)
         tasks[key]?.cancel()
         tasks[key] = nil
+        primingTasks["\(threadID):\(tone.rawValue)"] = nil
         drafts[key] = nil
     }
 
@@ -81,6 +92,9 @@ final class DraftEngine {
                 }
             } catch {
                 guard let self else { return }
+                // Suppress errors thrown because *this* task was cancelled —
+                // another prime() has already reset state for this key.
+                if Task.isCancelled { return }
                 self.fail(key: key, message: error.localizedDescription)
             }
         }
