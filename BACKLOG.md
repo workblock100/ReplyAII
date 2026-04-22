@@ -76,8 +76,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-22-043231
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift` (extend or new)
 - scope: Rules currently fire on thread-select and on incoming watcher events. If the user adds/edits a rule while threads are visible, the change has no immediate effect — the user has to re-select a thread or wait for the watcher. Add a `withObservationTracking` or explicit subscription to `RulesStore.rules` in `InboxViewModel`. When the rule list changes, re-evaluate all currently loaded threads and apply any new rule actions (pin, archive, setDefaultTone). This is pure in-memory re-evaluation — no SQLite re-query needed. Test: add a rule after threads are loaded; verify the action fires on the existing thread list without a sync.
 - success_criteria:
