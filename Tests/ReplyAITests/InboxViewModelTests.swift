@@ -617,3 +617,29 @@ final class InboxViewModelSendTests: XCTestCase {
                        "userEdits must be preserved on failure so the user can retry")
     }
 }
+
+// MARK: - Thread ordering (REP-103)
+
+@MainActor
+final class InboxViewModelOrderingTests: XCTestCase {
+
+    func testThreadsAreSortedByRecencyAfterSync() async throws {
+        // StaticMockChannel returns threads in the order given. The real
+        // IMessageChannel sorts by date DESC in SQL. This test guards against
+        // InboxViewModel accidentally scrambling the channel's ordering.
+        let newest = MessageThread(id: "t-newest", channel: .imessage, name: "Newest",
+                                   avatar: "N", preview: "just now", time: "12:00")
+        let middle = MessageThread(id: "t-middle", channel: .imessage, name: "Middle",
+                                   avatar: "M", preview: "earlier", time: "11:00")
+        let oldest = MessageThread(id: "t-oldest", channel: .imessage, name: "Oldest",
+                                   avatar: "O", preview: "long ago", time: "10:00")
+
+        let channel = StaticMockChannel(threads: [newest, middle, oldest])
+        let vm = InboxViewModel(imessage: channel,
+                                contacts: ContactsResolver(store: DeniedContactStore()))
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(vm.threads.map(\.id), ["t-newest", "t-middle", "t-oldest"],
+                       "ViewModel must preserve the channel's newest-first ordering")
+    }
+}

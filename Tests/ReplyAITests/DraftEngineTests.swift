@@ -290,6 +290,91 @@ final class DraftEngineTests: XCTestCase {
                        "other entry must retain its draft text")
     }
 
+    // MARK: - Cache isolation (REP-098)
+
+    func testCacheIsolationAcrossThreadIDs() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let tA = Fixtures.threads[0]
+        let tB = Fixtures.threads[1]
+
+        engine.prime(thread: tA, tone: .warm, history: [])
+        engine.prime(thread: tB, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: tA.id, tone: .warm).isDone &&
+            engine.state(threadID: tB.id, tone: .warm).isDone
+        }
+
+        let draftA = engine.state(threadID: tA.id, tone: .warm).text
+        let draftB = engine.state(threadID: tB.id, tone: .warm).text
+        XCTAssertFalse(draftA.isEmpty, "thread A must have a draft")
+        XCTAssertFalse(draftB.isEmpty, "thread B must have a draft")
+        XCTAssertNotEqual(draftA, draftB, "thread A and B must have independent cache entries")
+        XCTAssertEqual(draftA, Fixtures.seedDraft(threadID: tA.id, tone: .warm))
+        XCTAssertEqual(draftB, Fixtures.seedDraft(threadID: tB.id, tone: .warm))
+    }
+
+    func testCacheIsolationAcrossTones() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        engine.prime(thread: thread, tone: .direct, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone &&
+            engine.state(threadID: thread.id, tone: .direct).isDone
+        }
+
+        let warmText = engine.state(threadID: thread.id, tone: .warm).text
+        let directText = engine.state(threadID: thread.id, tone: .direct).text
+        XCTAssertFalse(warmText.isEmpty, "warm tone must have a draft")
+        XCTAssertFalse(directText.isEmpty, "direct tone must have a draft")
+        XCTAssertNotEqual(warmText, directText, "different tones must have independent cache entries")
+        XCTAssertEqual(warmText, Fixtures.seedDraft(threadID: thread.id, tone: .warm))
+        XCTAssertEqual(directText, Fixtures.seedDraft(threadID: thread.id, tone: .direct))
+    }
+
+    // MARK: - LLM error path (REP-114)
+
+    func testLLMErrorTransitionsToDraftStateError() async throws {
+        let engine = DraftEngine(service: ThrowingStubLLMService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).error != nil
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertNotNil(state.error, "LLM throw must transition state to error")
+        XCTAssertFalse(state.isStreaming, "error state must not be streaming")
+        XCTAssertFalse(state.isDone, "error state must not be done")
+        XCTAssertEqual(state.text, "", "error state must have no text")
+    }
+
+    func testRegenerateAfterErrorRetries() async throws {
+        let engine = DraftEngine(service: FailOnceThenSucceedService())
+        let thread = Fixtures.threads[0]
+
+        // First prime — service throws.
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).error != nil
+        }
+        XCTAssertNotNil(engine.state(threadID: thread.id, tone: .warm).error)
+
+        // Regenerate — service succeeds on second call.
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+        // State resets to streaming immediately; error must be cleared.
+        try await waitUntil(timeout: 2.0) {
+            let s = engine.state(threadID: thread.id, tone: .warm)
+            return s.isDone || s.error != nil
+        }
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertTrue(state.isDone, "regenerate must eventually produce a ready draft")
+        XCTAssertNil(state.error, "recovered draft must have no error")
+        XCTAssertFalse(state.text.isEmpty, "recovered draft must have text")
+    }
+
     // MARK: - helper
 
     private func waitUntil(
@@ -364,6 +449,50 @@ private struct CancellableLongService: LLMService {
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+// MARK: - Error-path test doubles (REP-114)
+
+/// Always throws immediately — lets tests verify the error state transition.
+private struct ThrowingStubLLMService: LLMService {
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(throwing: NSError(domain: "test.llm", code: -1,
+                                                  userInfo: [NSLocalizedDescriptionKey: "stub error"]))
+        }
+    }
+}
+
+/// Throws on the first call, succeeds on the second — lets tests verify that
+/// regenerate() after an error eventually reaches the ready state.
+private final class FailOnceThenSucceedService: LLMService, @unchecked Sendable {
+    private let lock = NSLock()
+    private var callCount = 0
+
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        lock.lock()
+        let n = callCount
+        callCount += 1
+        lock.unlock()
+        return AsyncThrowingStream { continuation in
+            if n == 0 {
+                continuation.finish(throwing: NSError(domain: "test.llm", code: -1,
+                                                      userInfo: [NSLocalizedDescriptionKey: "first call fails"]))
+            } else {
+                continuation.yield(DraftChunk(kind: .text("retry-ok")))
+                continuation.yield(DraftChunk(kind: .done))
+                continuation.finish()
+            }
         }
     }
 }

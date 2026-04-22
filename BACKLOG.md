@@ -255,7 +255,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine` caches drafts keyed by `(threadID, tone)`. The isolation invariant — that priming thread A does not affect thread B, and that tone X does not affect tone Y — is implicit but untested. Add a test that primes two different `(threadID, tone)` pairs with distinct draft texts, then verifies each pair retrieves its own text and the other pair's state is unaffected. Use the existing `StubLLMService` fixture.
@@ -269,7 +269,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 deletes leave "tombstone" entries that are cleaned up by `optimize` or `rebuild`. If `SearchIndex.delete(threadID:)` is followed by an `upsert` for the same threadID, the re-inserted thread should be fully searchable (no phantom tombstone interference). Add a test: insert thread, verify searchable, delete thread, verify not searchable, re-insert with same threadID but different preview text, verify the new preview text is searchable and the old text is not. Tests the full delete-reinsert lifecycle.
@@ -283,7 +283,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `AGENTS.md`
 - scope: AGENTS.md Testing expectations section still reads "60 tests today. swift test from repo root." — a line that has been stale since the first automation run (now at 290 tests). Replace with the grep command so future readers can get the live count. Also verify the repo-layout header test count is current. Docs-only — no Swift source changes.
@@ -297,7 +297,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `InboxViewModel.threads` should be sorted by most-recent message date (newest first) after a sync. The sort is done inside `syncFromIMessage`, but no test verifies the order. Using the mock channel from existing `InboxViewModelTests`, return 3 threads with different `lastMessageDate` values in non-sorted order, trigger a sync, and assert `viewModel.threads` is sorted newest-first. This catches any regression where the sort is accidentally dropped.
@@ -310,7 +310,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: `Preferences.register(defaults:)` writes known keys, and `wipe()` removes them. If a future Preferences version removes a key that was persisted by an older app version, the stale value will sit in UserDefaults indefinitely. Add a test that manually writes an unrecognized key directly to the injectable `UserDefaults` suite, then calls `Preferences.wipe()` and verifies the unrecognized key is NOT removed (wipe is key-specific, not a full reset). Also verify that reading any known Preferences key after wipe returns the registered default, not the stale unrecognized value. Confirms the wipe scope is bounded and doesn't clobber unrelated keys.
@@ -355,7 +355,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: REP-080 added a `channel` TEXT column and per-channel filter support to `SearchIndex`, but no test exercises the filter with mixed-channel data. Add a test: insert 5 threads tagged `channel: "iMessage"` and 3 threads tagged `channel: "Slack"`, all with the same preview text. Assert that `search(query:channel:"iMessage")` returns exactly 5 results; `search(query:channel:"Slack")` returns exactly 3; unfiltered `search(query:)` returns all 8. Tests guard against the channel filter silently matching all rows or none.
@@ -401,7 +401,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-174500
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: When `LLMService.draft(...)` throws, `DraftEngine` should transition to `.error(Error)` (or equivalent) rather than leaving the state as `.loading`. This path is documented in `DraftState` but its test coverage is thin — only the eviction tests touch error scenarios indirectly. Add explicit tests using a `ThrowingStubLLMService` (a simple struct returning an `AsyncThrowingStream` that immediately throws): `testLLMErrorTransitionsToDraftStateError` — verify state is `.error` after failed prime; `testRegenerateAfterErrorRetries` — after an error, calling regenerate kicks off a new prime attempt and eventually reaches `.ready`.

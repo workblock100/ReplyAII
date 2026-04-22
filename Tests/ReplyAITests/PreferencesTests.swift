@@ -155,4 +155,35 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PreferenceKey.autoApplyRulesOnSync),
                       "re-register must restore default true")
     }
+
+    // MARK: - Unrecognized keys (REP-104)
+
+    func testWipeDoesNotRemoveUnrecognizedKeys() {
+        // A key set by another subsystem or with a different prefix must survive wipe.
+        // Wipe is scoped to `pref.` keys; anything else is untouched.
+        let foreignKey = "app.unrecognized.feature.setting"
+        defaults.set("do-not-delete", forKey: foreignKey)
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+
+        let domain = defaults.persistentDomain(forName: suiteName)
+        XCTAssertEqual(domain?[foreignKey] as? String, "do-not-delete",
+                       "wipe must not remove keys without the pref. prefix")
+    }
+
+    func testKnownKeyFallsBackToDefaultAfterWipe() {
+        // Write a non-default value, wipe, register defaults, then verify the
+        // registered default is returned — confirming wipe + register restores clean state.
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        // Flip crashReports to the opposite of its default.
+        let originalDefault = PreferenceDefaults.crashReports
+        defaults.set(!originalDefault, forKey: PreferenceKey.crashReports)
+        XCTAssertEqual(defaults.bool(forKey: PreferenceKey.crashReports), !originalDefault)
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+
+        XCTAssertEqual(defaults.bool(forKey: PreferenceKey.crashReports), originalDefault,
+                       "known key must return registered default after wipe + re-register")
+    }
 }

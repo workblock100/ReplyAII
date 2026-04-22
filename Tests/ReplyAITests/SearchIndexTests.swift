@@ -587,4 +587,94 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(results.count, 0,
                        "whitespace-only query must return [] (trimmed to empty)")
     }
+
+    // MARK: - REP-099: delete then re-insert round-trip (FTS5 tombstone check)
+
+    func testDeleteThenReinsertIsSearchable() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "dr1", channel: .imessage, name: "Delta",
+                                   avatar: "D", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "original content", time: "t")
+        ])
+        var hits = await index.search("original")
+        XCTAssertEqual(hits.count, 1, "thread must be searchable after insert")
+
+        await index.delete(threadID: thread.id)
+        hits = await index.search("original")
+        XCTAssertEqual(hits.count, 0, "thread must not be searchable after delete")
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "refreshed content", time: "t2")
+        ])
+        hits = await index.search("refreshed")
+        XCTAssertEqual(hits.count, 1, "re-inserted thread must be searchable by new text")
+        XCTAssertEqual(hits.first?.threadID, thread.id)
+    }
+
+    func testDeleteThenReinsertOldTextGone() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "dr2", channel: .imessage, name: "Echo",
+                                   avatar: "E", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "staleword hello", time: "t")
+        ])
+        await index.delete(threadID: thread.id)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "freshword hello", time: "t2")
+        ])
+
+        let staleHits = await index.search("staleword")
+        XCTAssertEqual(staleHits.count, 0,
+                       "old text must be gone after delete + re-insert (no FTS5 tombstone leak)")
+
+        let freshHits = await index.search("freshword")
+        XCTAssertEqual(freshHits.count, 1, "new text must be searchable after re-insert")
+    }
+
+    // MARK: - REP-109: channel-filter integration with two-channel data
+
+    func testChannelFilterIsolatesResults() async {
+        let index = SearchIndex(databaseURL: nil)
+        let sharedText = "sharedtopic"
+
+        for i in 1...5 {
+            let t = MessageThread(id: "imsg-\(i)", channel: .imessage, name: "iMsg\(i)",
+                                  avatar: "I", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [Message(from: .them, text: sharedText, time: "t")])
+        }
+        for i in 1...3 {
+            let t = MessageThread(id: "slk-\(i)", channel: .slack, name: "Slack\(i)",
+                                  avatar: "S", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [Message(from: .them, text: sharedText, time: "t")])
+        }
+
+        let iMsgHits  = await index.search(query: "sharedtopic", channel: .imessage)
+        let slackHits = await index.search(query: "sharedtopic", channel: .slack)
+        XCTAssertEqual(iMsgHits.count,  5, "iMessage filter must return exactly 5 results")
+        XCTAssertEqual(slackHits.count, 3, "Slack filter must return exactly 3 results")
+        XCTAssertTrue(iMsgHits.allSatisfy { $0.threadID.hasPrefix("imsg-") },
+                      "iMessage hits must all have imsg- prefix")
+        XCTAssertTrue(slackHits.allSatisfy { $0.threadID.hasPrefix("slk-") },
+                      "Slack hits must all have slk- prefix")
+    }
+
+    func testUnfilteredSearchReturnsAllChannels() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...5 {
+            let t = MessageThread(id: "uf-imsg-\(i)", channel: .imessage, name: "A\(i)",
+                                  avatar: "A", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [Message(from: .them, text: "multichannel", time: "t")])
+        }
+        for i in 1...3 {
+            let t = MessageThread(id: "uf-slk-\(i)", channel: .slack, name: "B\(i)",
+                                  avatar: "B", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [Message(from: .them, text: "multichannel", time: "t")])
+        }
+
+        let hits = await index.search(query: "multichannel", channel: nil)
+        XCTAssertEqual(hits.count, 8, "unfiltered search must return all 8 threads across channels")
+    }
 }
