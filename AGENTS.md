@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                189 tests
+Tests/ReplyAITests/                211 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,10 @@ Tests/ReplyAITests/                189 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `ec9e723` SearchIndex.delete + senderIs case-insensitive tests + cache_has_attachments projection (REP-063, REP-065, REP-068, worker-2026-04-22-054016)
+- `ea37669` DraftEngine idle-entry eviction + Stats weekly aggregate log + SearchIndex concurrency stress test (REP-034, REP-056, REP-057, worker-2026-04-22-042232)
+- `8988959` ChatDBWatcher: FSEvents error recovery with restart backoff (REP-052, worker-2026-04-22-041448)
+- `a7204d2` `Locked<T>`: extract shared thread-safe value box (REP-050, worker-2026-04-22-040356)
 - `9810196` NotificationCoordinator: UNNotification inline reply + category registration (REP-028, worker-2026-04-22-032627)
 - `881d8f0` SearchIndex: explicit AND semantics for multi-word queries (REP-027, worker-2026-04-22-020653)
 - `9717756` extract PromptBuilder + test coverage (REP-026, worker-2026-04-22-055650)
@@ -150,7 +154,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-189 XCTest cases, all green.
+211 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.

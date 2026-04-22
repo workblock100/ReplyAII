@@ -6,6 +6,62 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-22 04:03 – 2026-04-22 10:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Exceptional window. Worker drained a huge slice of the P1 backlog — **11 substantive commits closing ~15 REP tickets** against 11 protocol-compliant claim chores. Test suite grew **158 → 211 (+53 tests)**, with tests file delta of **+1,126 lines vs. +580 source lines** (ratio ≈ 1.9:1, well above the proportional bar). Zero banned actions in the cumulative diff: no `#Preview` macros, no sandbox entitlement changes, no test-file shrinkage, no history rewrites. The prior review's stall concern (REP-022 / REP-024 claimed but still `in_progress`) was closed in the first commit of this window (`76850a9`) — worker cleared the stall on its own. Commit messages remain honest and explanatory (e.g. `9810196` explains why UNNotification category registration is entitlement-free; `ec9e723` breaks out three distinct root causes for REP-063/65/68 in separate paragraphs).
+
+### Shipped this window (substantive worker commits, newest first)
+
+- **REP-063 / REP-065 / REP-068** (`ec9e723`) — `SearchIndex.delete(threadID:)` purges FTS5 on archive; archive wired through new `InboxViewModel.archive(_:)`. Added 2 `senderIs` case-insensitivity tests. `cache_has_attachments` now projected from SQL into `Message.hasAttachment` + `MessageThread.hasAttachment`, replacing the fragile `📎 Attachment` sentinel scan in `RuleContext.hasAttachment`.
+- **REP-034 / REP-056 / REP-057** (`ea37669`) — DraftEngine idle-entry eviction; Stats weekly-aggregate file writer; SearchIndex concurrent search+upsert stress test.
+- **REP-052** (`8988959`) — ChatDBWatcher FSEvents error recovery with restart backoff.
+- **REP-050** (`a7204d2`) — Extracted `Locked<T>` generic wrapper consolidating the `@unchecked Sendable + NSLock + synced{}` pattern across `ContactsResolver`, `Stats`. Net +32 lines in a new `Sources/ReplyAI/Utilities/Locked.swift` offset by -47 deleted duplicated lines elsewhere. +91 test lines in `LockedTests.swift`.
+- **REP-028** (`9810196`) — NotificationCoordinator: UNNotification inline reply via `UNTextInputNotificationAction`, routes to `InboxViewModel.pendingNotificationReply`. `NotificationCenterProtocol` inserted for testability. +142 test lines.
+- **REP-027** (`881d8f0`) — SearchIndex: explicit AND semantics for multi-word FTS5 queries (prior behavior was OR-leaning, leading to noisy results).
+- **REP-026** (`9717756`) — PromptBuilder extracted from MLXDraftService with token-budget truncation (2000-char budget, oldest-first drop). +92 test lines.
+- **REP-025** (`aa34006`) — IMessageSender AppleScript send timeout + injectable executor for tests. +49 test lines.
+- **REP-049 / REP-051** (`1df1fce`) — DraftEngine concurrent prime guard + SQLite `databaseError` result-code propagation.
+- **REP-023** (`5fedafc`) — InboxViewModel re-evaluates rules when RulesStore changes (matches the initial-sync rule behavior). +194 test lines (new `InboxViewModelTests.swift`).
+- **REP-022 / REP-024** (`76850a9`) — InboxViewModel concurrent sync guard + RulesStore malformed-rule skipping on load. Closes the prior window's stall concern.
+
+### Test coverage delta
+
+- **+53 tests (158 → 211).** Largest single-window jump recorded so far.
+- 4 new test files: `LockedTests.swift` (+91), `NotificationCoordinatorTests.swift` (+142), `PromptBuilderTests.swift` (+92), `InboxViewModelTests.swift` (+194).
+- 7 existing test files expanded; **zero test files shrunk**.
+- Source delta: +580 insertions / -128 deletions across 19 files. Test delta: +1,126 insertions / -3 deletions across 11 files. Test-to-source ratio ≈ 1.9:1.
+- `swift test` not runnable in reviewer sandbox — audit count is from `grep -r "func test" Tests/` (211).
+
+### Concerns
+
+- **Claim-commit noise.** Ratio is still ~1:1 (11 claim vs. 11 substantive). Not rating-affecting, but the planner could plausibly batch claims per cycle — the main-branch history reads as 22 items where 11 would do.
+- **REP-063 / notification-reply terminology drift.** AGENTS.md "What's still stubbed" says the reply-consumption follow-up is tracked as REP-063, but REP-063 as shipped this window was `SearchIndex.delete` for archived threads — unrelated. The actual InboxViewModel consumption of `pendingNotificationReply` still appears unfinished; planner should file a dedicated ticket with a correct ID rather than letting the stubbed-section reference rot.
+- **wip/quality-* branches still unmerged.** Prior review flagged 7 of these from 2026-04-21; they're still sitting. REP-016 (senderKnown operator-precedence bug fix) in particular is a real correctness issue blocked on human review. No progress this window.
+- **REP-008 sentinel copy decision** (`🔗 <host>` / `📎 Attachment`) still drifting. REP-062 was filed by the planner at the start of this window to capture it — good — but it's `claimed_by: human` so the worker won't touch it.
+
+### Suggestions for next planner cycle
+
+1. **Fix the stubbed-section REP-063 reference in AGENTS.md.** Either file a new ticket for InboxViewModel inline-reply consumption (I'd call it REP-069 given current numbering) and update the reference, or rewrite the stubbed entry to say "pending follow-up" without a ticket ID. The current state is misleading.
+2. **Archive pass.** 15 REP items closed this window but only a subset of tickets flipped to `status: done` in BACKLOG.md in time for this review. Planner's next archive-verification sweep should walk commits `aa0d184..HEAD` and confirm every REP-id in a commit message has `status: done` set.
+3. **Resist further task queueing.** P1 queue has been drawn down sharply — worker is catching up fast. Next planner run should emphasize archival + sharpening existing tickets over net-new adds, especially while human-owned wip/* branches pile up.
+4. **Human-review nudge.** Four items remain blocked on human (REP-008 → REP-062 product-copy, REP-016 senderKnown precedence, REP-017 wip consolidation, REP-009/010 UI-sensitive). The bug fix is the only correctness-critical one; everything else is polish. Worth surfacing in tomorrow's standup digest.
+
+### Rolling-window pattern
+
+Last four windows (oldest → newest):
+
+- `review-2026-04-21.md` — 5/5
+- `review-2026-04-21-addendum.md` — 5/5
+- `review-2026-04-21-2343.md` — 5/5
+- `review-2026-04-22-0403.md` — 5/5
+- `review-2026-04-22-1003.md` (this) — 5/5
+
+Zero consecutive sub-par windows. STOP AUTO-MERGE trigger remains disarmed.
+
+---
+
 ## Window 2026-04-21 22:03 – 2026-04-22 04:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
