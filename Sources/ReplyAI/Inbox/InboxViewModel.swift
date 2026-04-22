@@ -120,6 +120,7 @@ final class InboxViewModel {
         self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
             resolver.name(for: handle)
         })
+        startObservingRules()
     }
 
     var selectedThread: MessageThread {
@@ -157,6 +158,45 @@ final class InboxViewModel {
                 // incoming-message pipeline to fire them at the right
                 // moment.
                 continue
+            }
+        }
+    }
+
+    // MARK: - Rule re-evaluation on RulesStore change (REP-023)
+
+    /// Re-applies in-memory rule actions (pin, setDefaultTone) for every
+    /// currently loaded thread. Called by `startObservingRules` whenever
+    /// `RulesStore.rules` changes so the thread list reflects new rules
+    /// without requiring a re-select or watcher refire.
+    func reEvaluateRulesForAllThreads() {
+        for thread in threads {
+            let ctx = RuleContext.from(thread: thread)
+            let matched = RuleEvaluator.matching(rules.rules, in: ctx)
+            for rule in matched {
+                switch rule.then {
+                case .setDefaultTone(let tone):
+                    if thread.id == selectedThreadID { activeTone = tone }
+                    stats.recordRuleFired(action: "setDefaultTone")
+                case .pin:
+                    markPinned(thread.id)
+                    stats.recordRuleFired(action: "pin")
+                case .archive, .markDone, .silentlyIgnore:
+                    continue
+                }
+            }
+        }
+    }
+
+    /// Arms a single-shot `withObservationTracking` listener on
+    /// `rules.rules`. Re-arms itself after each change so changes continue
+    /// to be observed for the lifetime of this view model.
+    private func startObservingRules() {
+        withObservationTracking {
+            _ = rules.rules
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.reEvaluateRulesForAllThreads()
+                self?.startObservingRules()
             }
         }
     }

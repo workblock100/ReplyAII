@@ -109,3 +109,86 @@ final class InboxViewModelTests: XCTestCase {
             "guard must reset to false after normal completion")
     }
 }
+
+// MARK: - Rule re-evaluation when RulesStore changes (REP-023)
+
+@MainActor
+final class InboxViewModelRuleObservationTests: XCTestCase {
+
+    private func tempRulesURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMTests-\(UUID())/rules.json")
+    }
+
+    /// Adding a pin rule while threads are loaded must immediately pin the
+    /// matching thread — no re-select or watcher refire required.
+    func testRuleAdditionTriggersReEvaluation() async throws {
+        let rulesURL = tempRulesURL()
+        try FileManager.default.createDirectory(
+            at: rulesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let rules = RulesStore(fileURL: rulesURL)
+        // Start with no rules so the initial observation baseline is clean.
+        rules.resetToSeeds()
+        rules.rules.forEach { rules.remove($0.id) }
+
+        let thread = MessageThread(
+            id: "t1", channel: .imessage, name: "Alice Smith",
+            avatar: "A", preview: "hey", time: "12:00", unread: 1, pinned: false)
+        let noopChannel = BlockingMockChannel()
+        noopChannel.blocking = false
+        let vm = InboxViewModel(
+            threads: [thread], imessage: noopChannel,
+            contacts: fastContacts(), rules: rules)
+        vm.selectedThreadID = "t1"
+
+        XCTAssertFalse(vm.threads.first!.pinned, "pre-condition: thread starts unpinned")
+
+        let pinRule = SmartRule(name: "pin alice", when: .senderIs("Alice Smith"), then: .pin)
+        rules.add(pinRule)
+
+        // onChange fires on the next run-loop iteration; two yields are
+        // sufficient for the Task to dispatch and complete on @MainActor.
+        await Task.yield()
+        await Task.yield()
+
+        XCTAssertTrue(vm.threads.first?.pinned ?? false,
+            "adding a matching pin rule must pin the thread without re-select")
+    }
+
+    /// Updating an existing rule (e.g. activating a previously disabled pin
+    /// rule) must also trigger re-evaluation and pin the matching thread.
+    func testRuleChangeUpdatesPinnedThreads() async throws {
+        let rulesURL = tempRulesURL()
+        try FileManager.default.createDirectory(
+            at: rulesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let rules = RulesStore(fileURL: rulesURL)
+        rules.resetToSeeds()
+        rules.rules.forEach { rules.remove($0.id) }
+
+        let thread = MessageThread(
+            id: "t2", channel: .imessage, name: "Bob Jones",
+            avatar: "B", preview: "hello", time: "12:01", unread: 0, pinned: false)
+        let noopChannel = BlockingMockChannel()
+        noopChannel.blocking = false
+        let vm = InboxViewModel(
+            threads: [thread], imessage: noopChannel,
+            contacts: fastContacts(), rules: rules)
+        vm.selectedThreadID = "t2"
+
+        // Add the rule in a disabled state — should NOT pin yet.
+        let disabledRule = SmartRule(
+            name: "pin bob", when: .senderIs("Bob Jones"), then: .pin, active: false)
+        rules.add(disabledRule)
+        await Task.yield()
+        await Task.yield()
+        XCTAssertFalse(vm.threads.first!.pinned, "disabled rule must not pin")
+
+        // Enable the rule — re-evaluation fires, thread should be pinned.
+        rules.toggle(disabledRule.id)
+        await Task.yield()
+        await Task.yield()
+
+        XCTAssertTrue(vm.threads.first?.pinned ?? false,
+            "enabling a pin rule must immediately pin the matching thread")
+    }
+}
