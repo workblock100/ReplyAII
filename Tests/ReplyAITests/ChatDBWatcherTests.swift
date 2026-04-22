@@ -63,6 +63,39 @@ final class ChatDBWatcherTests: XCTestCase {
         // about (pending-at-stop is cancelled) without over-constraining.
     }
 
+    /// A system-triggered cancel (e.g. chat.db moved during iCloud sync) must
+    /// schedule a restart. `simulateSystemCancel` drives the same code path as
+    /// the real cancel handler without needing real FS objects.
+    func testCancellationSchedulesRestart() {
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            restartDelay: 0.05,
+            onChange: {}
+        )
+        XCTAssertEqual(watcher.restartCount.withLock { $0 }, 0)
+        watcher.simulateSystemCancel()
+        // simulateSystemCancel is synchronous (queue.sync), so restartCount
+        // is already incremented when the call returns.
+        XCTAssertEqual(watcher.restartCount.withLock { $0 }, 1,
+            "system cancel should schedule exactly one restart attempt")
+    }
+
+    /// After `stopWatching()` a simulated system cancel must NOT schedule a
+    /// restart — intentional shutdown is permanent.
+    func testStopWatchingDoesNotRestart() {
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            restartDelay: 0.05,
+            onChange: {}
+        )
+        watcher.stopWatching()
+        watcher.simulateSystemCancel()
+        XCTAssertEqual(watcher.restartCount.withLock { $0 }, 0,
+            "stopWatching should prevent restart scheduling")
+    }
+
     /// Second `start()` is documented as idempotent — it must not
     /// crash and must not double-fire.
     func testStartIsIdempotent() {

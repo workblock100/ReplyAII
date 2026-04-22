@@ -8,14 +8,28 @@ import Foundation
 /// The Messages app uses SQLite WAL journaling, so most new-message
 /// writes land in `chat.db-wal` before being checkpointed into
 /// `chat.db`. We watch both paths and fire once.
+///
+/// When the system cancels a DispatchSource (e.g. `chat.db` is moved
+/// or the FD becomes invalid during iCloud sync), the watcher
+/// schedules a restart with exponential backoff starting at
+/// `restartDelay`, doubling each attempt up to 60 s. Call
+/// `stopWatching()` for intentional shutdown — that prevents restart.
 final class ChatDBWatcher: @unchecked Sendable {
     private let paths: [String]
     private let debounce: TimeInterval
+    /// Initial delay before first restart attempt; doubles on each retry, capped at 60 s.
+    let restartDelay: TimeInterval
     private let queue = DispatchQueue(label: "co.replyai.chatdb-watcher", qos: .utility)
     private var sources: [DispatchSourceFileSystemObject] = []
     private var fds: [Int32] = []
     private var pending: DispatchWorkItem?
     private let onChange: @Sendable () -> Void
+
+    // Thread-safe stopped flag — set on intentional shutdown to block restart.
+    private let stopped = Locked<Bool>(false)
+    // Tracks restart attempts to compute exponential backoff.
+    // Package-internal so tests can verify scheduling without waiting for the delay.
+    let restartCount = Locked<Int>(0)
 
     init(
         paths: [String] = [
@@ -23,14 +37,16 @@ final class ChatDBWatcher: @unchecked Sendable {
             (NSString(string: "~/Library/Messages/chat.db-wal").expandingTildeInPath as String),
         ],
         debounce: TimeInterval = 0.6,
+        restartDelay: TimeInterval = 5.0,
         onChange: @escaping @Sendable () -> Void
     ) {
         self.paths = paths
         self.debounce = debounce
+        self.restartDelay = restartDelay
         self.onChange = onChange
     }
 
-    deinit { stop() }
+    deinit { stopWatching() }
 
     /// Begin watching. Safe to call multiple times — second call is a
     /// no-op while already running.
@@ -43,7 +59,10 @@ final class ChatDBWatcher: @unchecked Sendable {
         }
     }
 
-    func stop() {
+    /// Cancel all FS sources and prevent any pending restart from firing.
+    /// Use this for intentional shutdown (e.g. FDA revoked, app teardown).
+    func stopWatching() {
+        stopped.withLock { $0 = true }
         for s in sources { s.cancel() }
         for fd in fds where fd >= 0 { close(fd) }
         sources.removeAll()
@@ -51,6 +70,9 @@ final class ChatDBWatcher: @unchecked Sendable {
         pending?.cancel()
         pending = nil
     }
+
+    /// Alias kept for call sites that pre-date `stopWatching()`.
+    func stop() { stopWatching() }
 
     // MARK: - Private
 
@@ -68,8 +90,10 @@ final class ChatDBWatcher: @unchecked Sendable {
             self?.scheduleFire()
         }
 
-        src.setCancelHandler {
+        src.setCancelHandler { [weak self] in
             close(fd)
+            guard let self = self, !self.stopped.withLock({ $0 }) else { return }
+            self.scheduleRestart()
         }
 
         return src
@@ -85,5 +109,30 @@ final class ChatDBWatcher: @unchecked Sendable {
         }
         pending = work
         queue.asyncAfter(deadline: .now() + debounce, execute: work)
+    }
+
+    /// Schedule a restart with exponential backoff via DispatchQueue.main.
+    private func scheduleRestart() {
+        let count = restartCount.withLock { n -> Int in
+            let c = n
+            n += 1
+            return c
+        }
+        let delay = min(restartDelay * pow(2.0, Double(count)), 60.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self, !self.stopped.withLock({ $0 }) else { return }
+            self.sources.removeAll()
+            self.fds.removeAll()
+            self.start()
+        }
+    }
+
+    /// Exposed at package level so tests can trigger the same recovery path
+    /// as a system-initiated cancel without real DispatchSource objects.
+    func simulateSystemCancel() {
+        queue.sync { [weak self] in
+            guard let self = self, !self.stopped.withLock({ $0 }) else { return }
+            self.scheduleRestart()
+        }
     }
 }
