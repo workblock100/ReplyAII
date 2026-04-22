@@ -21,6 +21,10 @@ final class Stats: @unchecked Sendable {
         var rulesFiredByAction: [String: Int] = [:]
         var draftsGenerated: Int = 0
         var draftsSent: Int = 0
+        /// Per-tone breakdown of `draftsGenerated`. Key is `Tone.rawValue`.
+        var draftsGeneratedByTone: [String: Int] = [:]
+        /// Per-tone breakdown of `draftsSent`. Key is `Tone.rawValue`.
+        var draftsSentByTone: [String: Int] = [:]
         var messagesIndexed: Int = 0
         /// Per-channel breakdown of `messagesIndexed`. Key is `Channel.rawValue`.
         var messagesIndexedByChannel: [String: Int] = [:]
@@ -28,6 +32,46 @@ final class Stats: @unchecked Sendable {
         /// load because they failed to decode. Non-zero means the file was
         /// partially corrupt; the app kept the valid portion.
         var ruleLoadSkips: Int = 0
+
+        // MARK: - Codable with forward/backward compatibility
+
+        enum CodingKeys: String, CodingKey {
+            case rulesFiredByAction, draftsGenerated, draftsSent
+            case draftsGeneratedByTone, draftsSentByTone
+            case messagesIndexed, messagesIndexedByChannel, ruleLoadSkips
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            rulesFiredByAction = try c.decodeIfPresent([String: Int].self, forKey: .rulesFiredByAction) ?? [:]
+            draftsGenerated = try c.decodeIfPresent(Int.self, forKey: .draftsGenerated) ?? 0
+            draftsSent = try c.decodeIfPresent(Int.self, forKey: .draftsSent) ?? 0
+            draftsGeneratedByTone = try c.decodeIfPresent([String: Int].self, forKey: .draftsGeneratedByTone) ?? [:]
+            draftsSentByTone = try c.decodeIfPresent([String: Int].self, forKey: .draftsSentByTone) ?? [:]
+            messagesIndexed = try c.decodeIfPresent(Int.self, forKey: .messagesIndexed) ?? 0
+            messagesIndexedByChannel = try c.decodeIfPresent([String: Int].self, forKey: .messagesIndexedByChannel) ?? [:]
+            ruleLoadSkips = try c.decodeIfPresent(Int.self, forKey: .ruleLoadSkips) ?? 0
+        }
+
+        init(
+            rulesFiredByAction: [String: Int] = [:],
+            draftsGenerated: Int = 0,
+            draftsSent: Int = 0,
+            draftsGeneratedByTone: [String: Int] = [:],
+            draftsSentByTone: [String: Int] = [:],
+            messagesIndexed: Int = 0,
+            messagesIndexedByChannel: [String: Int] = [:],
+            ruleLoadSkips: Int = 0
+        ) {
+            self.rulesFiredByAction = rulesFiredByAction
+            self.draftsGenerated = draftsGenerated
+            self.draftsSent = draftsSent
+            self.draftsGeneratedByTone = draftsGeneratedByTone
+            self.draftsSentByTone = draftsSentByTone
+            self.messagesIndexed = messagesIndexed
+            self.messagesIndexedByChannel = messagesIndexedByChannel
+            self.ruleLoadSkips = ruleLoadSkips
+        }
     }
 
     private let state: Locked<Snapshot>
@@ -72,6 +116,37 @@ final class Stats: @unchecked Sendable {
     func recordDraftSent() {
         state.withLock { $0.draftsSent += 1 }
         persist()
+    }
+
+    /// A new draft stream started for a specific tone. Increments both the
+    /// aggregate `draftsGenerated` counter and the per-tone breakdown.
+    func recordDraftGenerated(tone: Tone) {
+        state.withLock {
+            $0.draftsGenerated += 1
+            $0.draftsGeneratedByTone[tone.rawValue, default: 0] += 1
+        }
+        persist()
+    }
+
+    /// A staged draft dispatched for a specific tone. Increments both the
+    /// aggregate `draftsSent` counter and the per-tone breakdown.
+    func recordDraftSent(tone: Tone) {
+        state.withLock {
+            $0.draftsSent += 1
+            $0.draftsSentByTone[tone.rawValue, default: 0] += 1
+        }
+        persist()
+    }
+
+    /// Fraction of generated drafts that were sent for a given tone.
+    /// Returns nil when no drafts have been generated for that tone yet —
+    /// avoids divide-by-zero and signals "no data" to callers.
+    func acceptanceRate(for tone: Tone) -> Double? {
+        let snap = snapshot()
+        let generated = snap.draftsGeneratedByTone[tone.rawValue] ?? 0
+        guard generated > 0 else { return nil }
+        let sent = snap.draftsSentByTone[tone.rawValue] ?? 0
+        return Double(sent) / Double(generated)
     }
 
     /// Bump the indexed-message counter by the size of a fresh rebuild

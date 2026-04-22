@@ -194,4 +194,70 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(snap.messagesIndexedByChannel["imessage"], 10)
         XCTAssertEqual(snap.messagesIndexedByChannel["teams"], 4)
     }
+
+    // MARK: - Per-tone draft counters (REP-032)
+
+    func testPerToneCountersIncrement() {
+        let stats = Stats(fileURL: tempURL())
+
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .direct)
+        stats.recordDraftSent(tone: .warm)
+
+        let snap = stats.snapshot()
+        // Aggregate counters must also advance
+        XCTAssertEqual(snap.draftsGenerated, 3)
+        XCTAssertEqual(snap.draftsSent, 1)
+        // Per-tone breakdown
+        XCTAssertEqual(snap.draftsGeneratedByTone["Warm"], 2)
+        XCTAssertEqual(snap.draftsGeneratedByTone["Direct"], 1)
+        XCTAssertNil(snap.draftsGeneratedByTone["Playful"])
+        XCTAssertEqual(snap.draftsSentByTone["Warm"], 1)
+        XCTAssertNil(snap.draftsSentByTone["Direct"])
+    }
+
+    func testPerToneCountersRoundTrip() throws {
+        let url = tempURL()
+        let first = Stats(fileURL: url)
+        first.recordDraftGenerated(tone: .playful)
+        first.recordDraftGenerated(tone: .playful)
+        first.recordDraftSent(tone: .playful)
+        first.recordDraftGenerated(tone: .direct)
+
+        let second = Stats(fileURL: url)
+        let snap = second.snapshot()
+        XCTAssertEqual(snap.draftsGeneratedByTone["Playful"], 2)
+        XCTAssertEqual(snap.draftsSentByTone["Playful"], 1)
+        XCTAssertEqual(snap.draftsGeneratedByTone["Direct"], 1)
+        XCTAssertNil(snap.draftsSentByTone["Direct"])
+        // Aggregate counters survive the round-trip
+        XCTAssertEqual(snap.draftsGenerated, 3)
+        XCTAssertEqual(snap.draftsSent, 1)
+    }
+
+    func testAcceptanceRateCalculation() {
+        let stats = Stats(fileURL: tempURL())
+
+        // No data yet → nil
+        XCTAssertNil(stats.acceptanceRate(for: .warm))
+
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftSent(tone: .warm)
+
+        // 1 sent / 4 generated = 0.25
+        let rate = stats.acceptanceRate(for: .warm)
+        XCTAssertNotNil(rate)
+        XCTAssertEqual(rate!, 0.25, accuracy: 1e-9)
+
+        // Tone with generates but no sends
+        stats.recordDraftGenerated(tone: .direct)
+        XCTAssertEqual(stats.acceptanceRate(for: .direct)!, 0.0, accuracy: 1e-9)
+
+        // Tone never touched → nil
+        XCTAssertNil(stats.acceptanceRate(for: .playful))
+    }
 }

@@ -96,7 +96,7 @@ final class DraftEngine {
 
         tasks[key]?.cancel()
         drafts[key] = DraftState(text: "", confidence: 1.0, isStreaming: true, isDone: false, error: nil)
-        stats?.recordDraftGenerated()
+        stats?.recordDraftGenerated(tone: tone)
 
         let stream = service.draft(thread: thread, tone: tone, history: history)
         tasks[key] = Task { [weak self] in

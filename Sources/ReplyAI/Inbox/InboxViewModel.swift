@@ -591,7 +591,7 @@ final class InboxViewModel {
             try await Task.detached(priority: .userInitiated) {
                 try IMessageSender.send(pending.text, to: threadForSend)
             }.value
-            stats.recordDraftSent()
+            stats.recordDraftSent(tone: pending.tone)
             sendToast = "Sent to \(pending.recipient)"
             advanceToNextThread()
         } catch let err as IMessageSender.SendError {
