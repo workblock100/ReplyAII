@@ -5,11 +5,10 @@ import Foundation
 /// how many messages have been indexed for search. Surfacing lives in
 /// a follow-up — this service just persists.
 ///
-/// Thread-safety mirrors `ContactsResolver`: `@unchecked Sendable` +
-/// `NSLock`-guarded state so it's callable from the SQLite worker
-/// thread, the DraftEngine's cooperative-queue stream task, and the
-/// main actor without bridging. The JSON write happens under the lock
-/// with atomic replace so a crash mid-write can't corrupt the file.
+/// Thread-safety: state is wrapped in `Locked<Snapshot>` so it's callable
+/// from the SQLite worker thread, the DraftEngine's cooperative-queue stream
+/// task, and the main actor without bridging. The JSON write happens after
+/// releasing the lock so a slow write never blocks short reads.
 final class Stats: @unchecked Sendable {
     /// Process-wide shared instance used by production code paths that
     /// don't have an injected Stats (e.g. RulesStore on load). Tests
@@ -29,8 +28,7 @@ final class Stats: @unchecked Sendable {
         var ruleLoadSkips: Int = 0
     }
 
-    private let lock = NSLock()
-    private var state: Snapshot
+    private let state: Locked<Snapshot>
     private let fileURL: URL
 
     /// - Parameter fileURL: Override the persistence path. Nil picks
@@ -39,14 +37,14 @@ final class Stats: @unchecked Sendable {
     init(fileURL: URL? = nil) {
         let url = fileURL ?? Self.defaultFileURL()
         self.fileURL = url
-        self.state = Self.load(from: url) ?? Snapshot()
+        self.state = Locked(Self.load(from: url) ?? Snapshot())
     }
 
     // MARK: - Reads
 
     /// Current counter values. Safe to call from any thread.
     func snapshot() -> Snapshot {
-        synced { state }
+        state.withLock { $0 }
     }
 
     // MARK: - Writes
@@ -56,23 +54,21 @@ final class Stats: @unchecked Sendable {
     /// `pin`). Unknown strings are tracked verbatim — a typo shows up
     /// in the stats rather than silently disappearing.
     func recordRuleFired(action: String) {
-        synced {
-            state.rulesFiredByAction[action, default: 0] += 1
-        }
+        state.withLock { $0.rulesFiredByAction[action, default: 0] += 1 }
         persist()
     }
 
     /// A new draft stream started. Called once per
     /// `DraftEngine.generate`, before any tokens arrive.
     func recordDraftGenerated() {
-        synced { state.draftsGenerated += 1 }
+        state.withLock { $0.draftsGenerated += 1 }
         persist()
     }
 
     /// A staged draft dispatched through IMessageSender successfully.
     /// Called from `InboxViewModel.confirmSend`.
     func recordDraftSent() {
-        synced { state.draftsSent += 1 }
+        state.withLock { $0.draftsSent += 1 }
         persist()
     }
 
@@ -81,7 +77,7 @@ final class Stats: @unchecked Sendable {
     /// current index size.
     func recordMessagesIndexed(_ count: Int) {
         guard count > 0 else { return }
-        synced { state.messagesIndexed += count }
+        state.withLock { $0.messagesIndexed += count }
         persist()
     }
 
@@ -89,7 +85,7 @@ final class Stats: @unchecked Sendable {
     /// rules.json load due to decode failures.
     func recordRuleLoadSkips(_ count: Int) {
         guard count > 0 else { return }
-        synced { state.ruleLoadSkips += count }
+        state.withLock { $0.ruleLoadSkips += count }
         persist()
     }
 
@@ -110,20 +106,13 @@ final class Stats: @unchecked Sendable {
     }
 
     /// Atomic write. Errors are swallowed — an observability failure
-    /// must never break the caller. Runs under the lock so the on-disk
-    /// shape always reflects a single consistent in-memory state.
+    /// must never break the caller. Snapshot is copied out of the lock
+    /// first so the encode doesn't hold the lock across I/O.
     private func persist() {
-        let data: Data? = synced {
-            try? JSONEncoder().encode(state)
-        }
-        guard let data else { return }
+        let snap = snapshot()
+        guard let data = try? JSONEncoder().encode(snap) else { return }
         let dir = fileURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
-    }
-
-    private func synced<T>(_ body: () -> T) -> T {
-        lock.lock(); defer { lock.unlock() }
-        return body()
     }
 }

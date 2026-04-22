@@ -27,7 +27,7 @@ protocol ContactsStoring: Sendable {
 /// Thread-safety: `name(for:)` is called from the SQLite worker thread
 /// inside IMessageChannel.recentThreads, so the resolver must not be
 /// actor-isolated. CNContactStore reads are safe from any thread; we
-/// wrap the cache in an NSLock.
+/// wrap the mutable state in a `Locked<ResolverState>`.
 final class ContactsResolver: @unchecked Sendable {
     enum Access: Sendable {
         case unknown
@@ -35,17 +35,20 @@ final class ContactsResolver: @unchecked Sendable {
         case denied
     }
 
+    private struct ResolverState {
+        var cache: [String: String] = [:]
+        var access: Access = .unknown
+    }
+
     private let store: ContactsStoring
-    private let lock = NSLock()
-    private var cache: [String: String] = [:]
-    private var _access: Access = .unknown
+    private let locked = Locked<ResolverState>(ResolverState())
 
     init(store: ContactsStoring? = nil) {
         self.store = store ?? CNContactStoreBackedStoring()
     }
 
     var access: Access {
-        synced { _access }
+        locked.withLock { $0.access }
     }
 
     /// Kick off the permission prompt if we haven't asked yet. Safe to
@@ -65,14 +68,14 @@ final class ContactsResolver: @unchecked Sendable {
     /// thread.
     func name(for handle: String) -> String? {
         let key = normalizedHandle(handle)
-        let (hit, gate) = synced { () -> (String?, Access) in
-            (cache[key], _access)
+        let (hit, gate) = locked.withLock { state -> (String?, Access) in
+            (state.cache[key], state.access)
         }
         if let hit { return hit.isEmpty ? nil : hit }
         if gate != .granted { return nil }
 
         let resolved = store.lookup(handle: key) ?? ""
-        synced { cache[key] = resolved }
+        locked.withLock { $0.cache[key] = resolved }
         return resolved.isEmpty ? nil : resolved
     }
 
@@ -87,18 +90,8 @@ final class ContactsResolver: @unchecked Sendable {
         return digits.count == 10 ? digits : handle
     }
 
-    // MARK: - Synchronous lock helpers
-
-    /// Wraps NSLock usage in a sync method so callers from `async`
-    /// contexts don't trip Swift 6's "NSLock unavailable in async
-    /// contexts" diagnostic — the lock is never held across an await.
-    private func synced<T>(_ body: () -> T) -> T {
-        lock.lock(); defer { lock.unlock() }
-        return body()
-    }
-
     private func setAccess(_ a: Access) {
-        synced { _access = a }
+        locked.withLock { $0.access = a }
     }
 
     #if DEBUG

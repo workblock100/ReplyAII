@@ -196,7 +196,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-040356
 - files_to_touch: `Sources/ReplyAI/Utilities/Locked.swift` (new), `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/LockedTests.swift` (new)
 - scope: `ContactsResolver` and `Stats` both use the `@unchecked Sendable + NSLock` pattern with a private `synced { }` wrapper. AGENTS.md calls this a consolidation candidate when 3+ sites use it. Extract `struct Locked<T>: @unchecked Sendable` with `withLock<U>(_ block: (inout T) throws -> U) rethrows -> U`. Update `ContactsResolver.cache` and `Stats.counters` to use `Locked`. Scan the codebase for additional `@unchecked Sendable + NSLock` pairs and update those too. Behavior is identical — this is a pure refactor with tests verifying thread-safety semantics.
