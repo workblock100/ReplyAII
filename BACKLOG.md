@@ -61,8 +61,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-21-222600
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add two new `RulePredicate` cases to the DSL. `isGroupChat` is true when `thread.channel == .iMessage` and the chat identifier contains a non-E.164 pattern (group chats use `chat<number>` identifiers, not phone numbers). `hasAttachment` is true when the thread preview is "📎 Attachment" — a lightweight proxy using the already-decoded preview string. Both predicates need `case` entries in the `kind` discriminator for Codable round-trips, entries in `RuleEvaluator.matches`, entries in `RuleContext` if new context fields are needed, and XCTest coverage.
 - success_criteria:
@@ -77,8 +77,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-21-222600
 - files_to_touch: `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: `ContactsResolver.name(for:)` uses the raw handle string as the cache key. `+14155551234` and `14155551234` and `4155551234` are the same contact but produce three separate cache entries and three `CNContactStore` queries. Add a private `normalizedHandle(_:) -> String` that strips leading `+` and country-code prefix (US: leading `1` + 10 digits) so all three map to the same canonical key. Apply normalization before every cache read + write. Test the normalization logic in isolation (no `CNContactStore` mock needed for the normalization tests; existing mock covers the cache path).
 - success_criteria:
@@ -92,8 +92,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-21-222600
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: chat.db contains two kinds of non-message rows that pollute thread previews: (1) tapback reactions (`message.associated_message_type IN (2000, 2001, 2002, 2003, 2004, 2005)`) — these are "❤️ to …" rows; (2) delivery/read receipts (is_delivered=1, text=NULL, associated_message_type=0, cache_has_attachments=0) which produce `[non-text message]`. Filter both from the SQL query used in `recentThreads` so the last message shown is always a real user-typed message. Add `WHERE (m.associated_message_type = 0 OR m.associated_message_type IS NULL) AND (m.text IS NOT NULL OR m.attributedBody IS NOT NULL)` to the inner query. Add in-memory SQLite test fixtures for both row types confirming they're excluded.
 - success_criteria:
