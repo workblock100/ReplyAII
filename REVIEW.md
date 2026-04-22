@@ -6,6 +6,55 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-22 10:03 – 2026-04-22 16:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Clean continuation of the prior window. **4 substantive worker commits closing 12 REP tickets** (REP-030/031/040/059/064/069/072/076/077/078/039/071/081), **5 claim chores**, and **3 planner refreshes**. Test suite grew **211 → 254 (+43 tests)** with a test-to-source line ratio of **~3.3:1** (740 test lines vs. 224 source lines across 6 test files and 8 source files). Zero banned-action violations: no `#Preview`, no sandbox flip, no `Info.plist`/`Package.swift`/`project.yml`/`scripts/*` touches, no test-file shrinkage, no history rewrites. Commit messages name every REP closed and explain the *why* — length-guard rationale in `7667f22`, observation-pattern reuse in `bbedd1a`, the explicit "UI wiring deferred to human" note in `3169995`.
+
+### Shipped this window (substantive worker commits, newest first)
+
+- **REP-039 / REP-071 / REP-081** (`874f483`) — `pref.rules.autoApplyOnSync` + `pref.drafts.autoPrime` feature flags gating `InboxViewModel.syncFromIMessage`'s rule application and `selectThread`'s draft prime. `primeHandler` closure injection lets tests record prime calls without standing up a real `DraftEngine`. New `StaticMockChannel` test double + 9 new test cases (3 thread-selection, 2 auto-prime, 2 auto-apply-rules, 2 preference round-trips).
+- **REP-059 / REP-064 / REP-069 / REP-076 / REP-077 / REP-078** (`7667f22`) — the window's largest commit. 4096-char message length guard in `IMessageSender` before any AppleScript touch (REP-064). Single transient-retry on `-1708 errAEEventNotHandled` during Messages.app cold start / iCloud sync (REP-059). 100-rule hard cap on `RulesStore.add()` with new `tooManyRules` error (REP-069). Optimistic local unread-count clear on `selectThread`, plus `markUnreadZero` fixed to preserve `chatGUID` + `hasAttachment` (REP-076). New `ChannelService.databaseCorrupted` case + `SQLITE_NOTADB` (26) detection in `openReadOnly` so the UI can route to a re-sync recovery path distinct from generic DB failure (REP-077). +3 `handleReply` test cases in `NotificationCoordinatorTests` (REP-078).
+- **REP-072** (`bbedd1a`) — `InboxViewModel` now observes its own `pendingNotificationReply` via `withObservationTracking` (same pattern as rules observation) and dispatches `IMessageSender.send` on arrival. Uses `chatGUID` from the loaded thread — correctly avoids synthesizing a 1:1-shaped GUID for group chats. Unknown thread IDs are logged and discarded without crash. Closes the "UNNotification inline reply consumption" gap from the prior window's concerns.
+- **REP-030 / REP-031 / REP-040** (`3169995`) — `pref.inbox.threadLimit` + `pref.drafts.autoPrime` preference keys (REP-030 + partial REP-039). `RuleValidationError` + `SmartRule.validateRegex` + `RulesStore.addValidating` surface invalid regex patterns at creation time rather than silently failing eval (REP-031). `IMessageSender.isDryRun` flag with injectable executor exercises the full send path in tests without AppleScript side-effects (REP-040). "ComposerView wiring deferred to human review" for the UI-sensitive remainder of REP-039 — honest scope call.
+
+### Test coverage delta
+
+- **+43 tests (211 → 254).** Grep-based count; sandbox can't run `swift test`.
+- Source: +224 lines across 8 files. Tests: +740 lines across 6 files. Ratio ≈ **3.3:1**.
+- Existing test files expanded: `InboxViewModelTests` (+302), `IMessageSenderTests` (+137), `RulesTests` (+137), `PreferencesTests` (+68), `NotificationCoordinatorTests` (+53), `IMessageChannelTests` (+43). **Zero test files shrunk.**
+- Per-commit test-count claims (232 → 245 in `7667f22`, "24 targeted / 9 new" in `874f483`) line up with the grep delta.
+
+### Concerns
+
+- **Claim/substantive ratio slightly worse than ideal.** 5 claim commits vs. 4 substantive this window. Not rating-affecting, but main-branch history reads as 9 worker items where 4 would suffice. Worth a planner nudge to batch the claim and work into one commit where it doesn't break claim-visibility.
+- **Stall-reset race in `run6`.** Planner reset REP-039/071/081 as a stalled claim, and the same worker shipped all three 33 minutes later in `874f483`. Not a correctness bug (worker didn't re-claim between reset and push) but the planner's stall rule could factor in worker-log mtime before resetting. Low probability of a real collision at current fire cadence, but a cheap tuning win.
+- **AGENTS.md test-count line drift.** Top-of-file repo layout said "245 tests" at review start — one version behind after `874f483`. Updated in this review.
+- **AGENTS.md narrative stale copy.** "60 tests today" in the testing-expectations section is off by ~200. Non-structural, but the planner should scrub it.
+
+### Suggestions for next planner cycle
+
+1. **Run7 archive pass on all 12 tickets closed this window** — REP-030, -031, -039, -040, -059, -064, -069, -071, -072, -076, -077, -078, -081. Confirm every one is `status: done` in BACKLOG before the next planner refresh.
+2. **Augment stall detection with worker-log mtime.** If `.automation/logs/worker-<id>.md` has been written to within the last ~30 min, don't reset the claim even if it's been open for >2 planner cycles. Prevents the REP-039 race pattern.
+3. **Encourage claim+work batching.** One combined commit per substantive unit — body notes the claim-id, diff shows the work — halves the main-branch noise without weakening the substantiveness gate.
+4. **Clean the AGENTS.md narrative test count.** Line 216 "60 tests today" should either drop the number or become a planner-refreshed counter like line 97.
+5. **Queue balance.** 45 open tasks after three planner runs this window. Healthy. Next cycle can keep additions and closures roughly in balance — no need for a fresh burst of P2 ideation while the worker is draining this pool cleanly.
+
+### Rolling-window pattern
+
+Last five windows (oldest → newest):
+
+- `review-2026-04-21.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-21-addendum.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-0403.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1003.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1603.md` (this) — ⭐⭐⭐⭐⭐
+
+Zero consecutive sub-par windows. STOP AUTO-MERGE trigger remains disarmed.
+
+---
+
 ## Window 2026-04-22 04:03 – 2026-04-22 10:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**

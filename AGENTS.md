@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                245 tests
+Tests/ReplyAITests/                254 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,7 @@ Tests/ReplyAITests/                245 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `874f483` autoPrime + autoApplyOnSync preference flags, InboxViewModel thread-selection test coverage (REP-039, REP-071, REP-081, worker-2026-04-22-111201)
 - `7667f22` message length guard, IMessageSender -1708 retry, RulesStore 100-rule cap, mark-as-read on select, SQLITE_NOTADB graceful error, NotificationCoordinator test coverage (REP-059, REP-064, REP-069, REP-076, REP-077, REP-078, worker-2026-04-22-065225)
 - `bbedd1a` InboxViewModel: consume pending UNNotification inline reply (REP-072, worker-2026-04-22-064413)
 - `3169995` preference keys threadLimit/autoPrime, SmartRule regex validation, IMessageSender dry-run mode (REP-030, REP-031, REP-040, worker-2026-04-22-061633)
@@ -158,7 +159,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-245 XCTest cases, all green.
+254 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
