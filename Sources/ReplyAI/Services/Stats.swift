@@ -22,6 +22,8 @@ final class Stats: @unchecked Sendable {
         var draftsGenerated: Int = 0
         var draftsSent: Int = 0
         var messagesIndexed: Int = 0
+        /// Per-channel breakdown of `messagesIndexed`. Key is `Channel.rawValue`.
+        var messagesIndexedByChannel: [String: Int] = [:]
         /// Cumulative count of SmartRule entries skipped during rules.json
         /// load because they failed to decode. Non-zero means the file was
         /// partially corrupt; the app kept the valid portion.
@@ -78,6 +80,17 @@ final class Stats: @unchecked Sendable {
     func recordMessagesIndexed(_ count: Int) {
         guard count > 0 else { return }
         state.withLock { $0.messagesIndexed += count }
+        persist()
+    }
+
+    /// Bump the per-channel indexed-message counter. Called from
+    /// `SearchIndex.upsert` so automation logs can see which channel
+    /// drives index growth. `count` defaults to 1 for per-message callers.
+    func incrementIndexed(channel: Channel, count: Int = 1) {
+        guard count > 0 else { return }
+        state.withLock {
+            $0.messagesIndexedByChannel[channel.rawValue, default: 0] += count
+        }
         persist()
     }
 

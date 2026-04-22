@@ -16,6 +16,11 @@ final class RulesStore {
 
     private(set) var rules: [SmartRule] = []
 
+    /// Most-recent batch of (ruleID, action) pairs that fired during rule
+    /// evaluation. In-memory only — not persisted. Reset to empty before
+    /// each new evaluation batch. Intended for the Rules debug surface.
+    private(set) var lastFiredActions: [(ruleID: UUID, action: RuleAction)] = []
+
     private let fileURL: URL
 
     init(fileURL: URL = RulesStore.defaultFileURL(), stats: Stats = Stats.shared) {
@@ -68,6 +73,19 @@ final class RulesStore {
     func resetToSeeds() {
         rules = SmartRule.seedRules
         save()
+    }
+
+    // MARK: - Rule evaluation with debug capture
+
+    /// Evaluates `rules` against `ctx` via `RuleEvaluator`, captures the
+    /// resulting (ruleID, action) pairs into `lastFiredActions`, and returns
+    /// the matched rules. `lastFiredActions` is reset to empty before each
+    /// call so callers always see the result of the most recent batch only.
+    @discardableResult
+    func evaluate(for ctx: RuleContext) -> [SmartRule] {
+        let matched = RuleEvaluator.matching(rules, in: ctx)
+        lastFiredActions = matched.map { (ruleID: $0.id, action: $0.then) }
+        return matched
     }
 
     // MARK: - IO

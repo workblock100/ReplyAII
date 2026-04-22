@@ -168,4 +168,30 @@ final class StatsTests: XCTestCase {
         let size = (try? FileManager.default.attributesOfItem(atPath: logURL.path)[.size] as? Int) ?? 0
         XCTAssertGreaterThan(size, 0, "file must not be empty")
     }
+
+    // MARK: - Per-channel indexed counter (REP-070)
+
+    func testPerChannelCountersIncrement() {
+        let stats = Stats(fileURL: tempURL())
+        stats.incrementIndexed(channel: .imessage, count: 5)
+        stats.incrementIndexed(channel: .slack, count: 3)
+        stats.incrementIndexed(channel: .imessage, count: 2)
+
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.messagesIndexedByChannel["imessage"], 7)
+        XCTAssertEqual(snap.messagesIndexedByChannel["slack"], 3)
+        XCTAssertNil(snap.messagesIndexedByChannel["whatsapp"])
+    }
+
+    func testPerChannelCountersRoundTrip() throws {
+        let url = tempURL()
+        let first = Stats(fileURL: url)
+        first.incrementIndexed(channel: .imessage, count: 10)
+        first.incrementIndexed(channel: .teams, count: 4)
+
+        let second = Stats(fileURL: url)
+        let snap = second.snapshot()
+        XCTAssertEqual(snap.messagesIndexedByChannel["imessage"], 10)
+        XCTAssertEqual(snap.messagesIndexedByChannel["teams"], 4)
+    }
 }

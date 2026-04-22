@@ -1041,4 +1041,62 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(store.rules.count, RulesStore.maxRules,
             "count must not change after a rejected add")
     }
+
+    // MARK: - lastFiredActions debug surface (REP-058)
+
+    @MainActor
+    func testLastFiredActionsPopulatedOnMatch() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+
+        let rule = SmartRule(name: "unread pin", when: .isUnread, then: .pin, active: true)
+        try store.add(rule)
+
+        let ctx = RuleContext(
+            senderName: "Alice",
+            senderHandle: "+14155551234",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: true,
+            senderKnown: true,
+            chatIdentifier: "+14155551234"
+        )
+
+        store.evaluate(for: ctx)
+
+        XCTAssertEqual(store.lastFiredActions.count, 1, "one matching rule must produce one entry")
+        XCTAssertEqual(store.lastFiredActions[0].ruleID, rule.id)
+        if case .pin = store.lastFiredActions[0].action { /* expected */ } else {
+            XCTFail("expected .pin action, got \(store.lastFiredActions[0].action)")
+        }
+    }
+
+    @MainActor
+    func testLastFiredActionsEmptyOnNoMatch() throws {
+        let url = tempRulesURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+
+        // Rule only fires when isUnread; the context below is read.
+        let rule = SmartRule(name: "unread archive", when: .isUnread, then: .archive, active: true)
+        try store.add(rule)
+
+        let ctx = RuleContext(
+            senderName: "Bob",
+            senderHandle: "+15555550101",
+            channel: .imessage,
+            lastMessageText: "hello",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "+15555550101"
+        )
+
+        store.evaluate(for: ctx)
+
+        XCTAssertTrue(store.lastFiredActions.isEmpty,
+                      "no matching rule must leave lastFiredActions empty")
+    }
 }

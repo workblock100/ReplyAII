@@ -144,6 +144,50 @@ final class DraftEngineTests: XCTestCase {
                        "threadB's draft must survive eviction of threadA")
     }
 
+    // MARK: - load-progress state transitions (REP-038)
+
+    func testLoadProgressTransitionsState() async throws {
+        let engine = DraftEngine(service: LoadProgressThenTextService(progressSteps: 3))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+
+        // modelLoadStatus should be set while progress chunks arrive.
+        try await waitUntil(timeout: 2.0) {
+            engine.modelLoadStatus != nil
+        }
+        XCTAssertNotNil(engine.modelLoadStatus)
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).isDone)
+
+        // After text chunk + done, modelLoadStatus must clear.
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertNil(engine.modelLoadStatus, "modelLoadStatus must be nil after streaming completes")
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).text.isEmpty)
+    }
+
+    func testCancellationTransitionsToIdle() async throws {
+        let engine = DraftEngine(service: CancellableLongService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .direct, history: [])
+
+        // Wait for streaming to begin.
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .direct).isStreaming
+        }
+
+        engine.dismiss(threadID: thread.id, tone: .direct)
+
+        // State must return to idle (no text, not streaming, no error).
+        let state = engine.state(threadID: thread.id, tone: .direct)
+        XCTAssertEqual(state.text, "", "dismissed draft must have no text")
+        XCTAssertFalse(state.isStreaming, "dismissed draft must not be streaming")
+        XCTAssertFalse(state.isDone, "dismissed draft must not be marked done")
+        XCTAssertNil(state.error, "dismiss must not produce an error")
+    }
+
     // MARK: - helper
 
     private func waitUntil(
@@ -159,6 +203,65 @@ final class DraftEngineTests: XCTestCase {
                 return
             }
             try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+}
+
+// MARK: - Test-only mock LLM services (REP-038)
+
+/// Emits `progressSteps` loadProgress chunks followed by one text chunk and done.
+/// Lets tests verify that DraftEngine transitions through the loading state correctly.
+private struct LoadProgressThenTextService: LLMService {
+    let progressSteps: Int
+
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                for i in 1...max(1, progressSteps) {
+                    if Task.isCancelled { continuation.finish(); return }
+                    let fraction = Double(i) / Double(progressSteps)
+                    continuation.yield(DraftChunk(kind: .loadProgress(
+                        fraction: fraction,
+                        message: "Loading · \(Int(fraction * 100))%"
+                    )))
+                    try? await Task.sleep(nanoseconds: 5_000_000)
+                }
+                if Task.isCancelled { continuation.finish(); return }
+                continuation.yield(DraftChunk(kind: .text("ok")))
+                continuation.yield(DraftChunk(kind: .done))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+/// Emits text chunks slowly so callers can cancel mid-stream.
+private struct CancellableLongService: LLMService {
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                continuation.yield(DraftChunk(kind: .confidence(0.9)))
+                // Signal streaming has started with a first token.
+                continuation.yield(DraftChunk(kind: .text("word ")))
+                // Then emit slowly so the test has time to call dismiss.
+                for _ in 0..<20 {
+                    if Task.isCancelled { continuation.finish(); return }
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    continuation.yield(DraftChunk(kind: .text("more ")))
+                }
+                continuation.yield(DraftChunk(kind: .done))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

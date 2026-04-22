@@ -119,6 +119,10 @@ actor SearchIndex {
         }
 
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
+
+        if !messages.isEmpty {
+            Stats.shared.incrementIndexed(channel: thread.channel, count: messages.count)
+        }
     }
 
     /// FTS5 match query. Empty input returns an empty array. The caller

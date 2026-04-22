@@ -106,4 +106,11 @@ enum RuleEvaluator {
         }
         return nil
     }
+
+    /// Evaluates `rules` against `ctx` and returns the (ruleID, action) pairs
+    /// that fired — same result as `matching` but shaped for debug surfaces that
+    /// need IDs rather than full `SmartRule` values.
+    static func apply(rules: [SmartRule], to ctx: RuleContext) -> [(ruleID: UUID, action: RuleAction)] {
+        matching(rules, in: ctx).map { (ruleID: $0.id, action: $0.then) }
+    }
 }
