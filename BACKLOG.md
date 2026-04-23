@@ -42,6 +42,22 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing InboxViewModelTests remain green
 - test_plan: 3 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` returning empty threads for first test, non-empty threads for second.
 
+### REP-254 — human: investigate + fix MLX fresh-clone build time exceeding 13-min worker budget
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
+- scope: **Structural blocker for main-branch throughput.** Three consecutive wip branches (wip/130000-thread-name-regex, wip/135355-bundle, wip/145504-demo-mode, wip/161500-demo-mode) are stuck because `swift test` on a fresh clone exceeds the 13-min worker budget. Root cause: mlx-swift-lm, swift-transformers, and swift-syntax macro compilation must re-download and re-compile from scratch on every worker run (no build artifact cache). The automation model costs escalate and pivot deliverables (especially REP-228 demo mode) can't land on main. Human should investigate: (a) GitHub Actions / CI artifact caching for `.build/` directory across worker runs; (b) pre-built `swift test` artifact in a separate GitHub Actions job that the worker can pull before testing; (c) or bump the worker prompt's budget hint so it parks MLX-requiring tasks to background compile while shipping non-MLX tasks. At minimum, the human should locally run `swift test` for each of the 4 stuck wip branches and merge if green. Document the structural fix chosen in AGENTS.md.
+- success_criteria:
+  - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
+  - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
+  - All 4 current stuck wip branches manually reviewed and either merged or closed
+  - Reviewer confirms throughput improved in next 6h window
+- test_plan: Human runs `swift test` locally to baseline build time; implements fix; verifies subsequent worker run can complete `swift test` within budget.
+
+
 ### REP-236 — InboxViewModel: wire AppleScript fallback when chat.db returns authorizationDenied
 - priority: P0
 - effort: M
