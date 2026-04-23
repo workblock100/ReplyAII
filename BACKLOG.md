@@ -86,35 +86,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
-### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
-- priority: P1
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-091326
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: Reviewer-2026-04-23-1012 flagged that `InboxViewModelAutoPrimeTests` and nearby test classes crash non-deterministically under Swift 6 strict-concurrency + macOS 26.3. Worker-2026-04-23-025721 noted this in their log but did not add a backlog item. The crash is likely a data-race or sendability violation surfaced by Swift 6's actor isolation checker at test time. Diagnose the root cause: (1) run `swift test --sanitize=thread` to capture the stack trace; (2) identify which shared mutable state is accessed across concurrency domains; (3) add `@MainActor` isolation or `nonisolated(unsafe)` annotations or migrate to a `Locked<T>`-guarded backing store to satisfy Swift 6 strict sendability; (4) confirm zero crashes across 10 test reruns after the fix. This is a stability and correctness concern — tests that crash non-deterministically produce false negatives in CI.
-- success_criteria:
-  - Root cause of non-deterministic crash identified in code and documented in commit body
-  - `InboxViewModelAutoPrimeTests` (and any other affected test classes) run without crash across 10 consecutive `swift test` invocations
-  - No new Swift concurrency warnings in the affected test files
-  - All existing `InboxViewModelTests` remain green
-- test_plan: (1) Run `swift test --sanitize=thread` to capture the race; (2) fix the isolation issue; (3) run `swift test` 10 times to confirm no non-deterministic failures.
-
-### REP-201 — AGENTS.md: correct stale commit SHA `904b0e7` → `7512321` in done-log
-- priority: P1
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-091326
-- files_to_touch: `AGENTS.md`
-- scope: Reviewer-2026-04-23-1012 flagged that AGENTS.md "What's done" log cites a non-existent SHA `904b0e7` for the contract-tests commit (worker-2026-04-23-020741). The real SHA is `7512321` (verified by `git cat-file -e 7512321`). Also update the test-count line from 465 → 463 (grep-accurate per reviewer). Docs-only change — no Swift source or tooling changes. Worker should `git cat-file -e <sha>` to validate each SHA before citing in AGENTS.md commit log entries.
-- success_criteria:
-  - `904b0e7` replaced with `7512321` in AGENTS.md done-log
-  - Test count in AGENTS.md header updated to grep-accurate value (`grep -c "func test" Tests/ReplyAITests/*.swift`)
-  - No Swift source files touched
-- test_plan: N/A (docs-only). Worker verifies `git cat-file -e 7512321` exits 0 before committing.
-
 ---
 
 ## P2 — stretch / backlog depth
@@ -215,8 +186,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-111853
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5's `snippet()` auxiliary function returns a short excerpt of the matching text with terms marked. Currently `SearchIndex.search(query:)` returns `[String]` (thread IDs). Change the return type to `[SearchResult]` where `SearchResult: Equatable { threadID: String, snippet: String? }`. The snippet SQL: `snippet(thread_search, 1, '«', '»', '…', 8)` (column 1 = preview text, 8 token context window). snippet is nil when the query is empty. ⌘K palette can display the snippet as a secondary row under the thread name. Tests: snippet is non-empty for matching query; snippet contains the matched term; empty query returns empty snippets.
 - success_criteria:
@@ -386,8 +357,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-111853
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: Prime 10 different thread IDs concurrently from a `DispatchQueue.concurrentPerform` loop using `StubLLMService`. After all primes complete (wait using `waitUntil`), verify that every thread is `.ready` and none are stuck in `.priming`. Guards against a task-leak where a concurrent invalidate+prime race leaves an orphaned `Task` whose completion updates are silently discarded, starving the state machine.
 - success_criteria:
@@ -501,8 +472,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-111853
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-143 verified `rules` array insertion order. Extend to cover the on-disk serialization round-trip: add rule A (priority 0) then rule B (priority 5), export to temp URL, import back, assert order is `[A, B]` (insertion order preserved in JSON, not sorted by priority at serialization time). This guards the UI display contract: users see rules in creation order, not priority order.
 - success_criteria:
@@ -514,8 +485,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-111853
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: The existing `ThrowingStubLLMService` verifies error state from REP-114. Extend: after a prime that throws, assert state is `.idle` (error cleared), not `.error(...)` — the error state is transient and the engine should be primeable again. A second `prime()` call after an error should reach `.ready` with the new stub. Guards against a stuck error state that prevents future priming.
 - success_criteria:
@@ -770,6 +741,92 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing InboxViewModelTests remain green
 - test_plan: 2 new tests in `InboxViewModelTests.swift`; seed a thread with `unread: 3` via the mock channel fixture.
 
+### REP-211 — AGENTS.md: correct stale SHA `05e7035` → `4035c5a` in done-log (docs-only)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `AGENTS.md`
+- scope: Reviewer-2026-04-23-1012 flagged `05e7035` as a non-existent commit SHA in the "What's done" log — identified as pre-existing from the 2026-04-22-174500 worker run. The real SHA is `4035c5a` (covers REP-098/099/101/103/104/109/114). Planner has already corrected this in AGENTS.md during the 2026-04-23 run6 refresh; this task is a verification commit — worker must run `git cat-file -e 4035c5a` to confirm validity, verify the AGENTS.md entry now reads `4035c5a`, and commit a one-line confirmation with the validation result in the commit body.
+- success_criteria:
+  - `git cat-file -e 4035c5a` exits 0 (verified)
+  - AGENTS.md done-log entry for worker-2026-04-22-174500 reads `4035c5a` (not `05e7035`)
+  - No other AGENTS.md sections touched
+- test_plan: N/A (docs-only). Worker validates SHA before committing.
+
+### REP-212 — InboxViewModel: `selectThread` seeds `userEdits` from DraftStore when stored draft exists (integration test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: REP-066 ships `DraftStore` and its scope explicitly states "InboxViewModel.selectThread seeds `userEdits` from the store before the LLM re-primes, so the composer is populated immediately on app open." There is no integration test pinning this end-to-end path. Test: write a draft string to an injected temp `DraftStore` for thread ID "T1"; construct an `InboxViewModel` with that DraftStore injected; call `selectThread` with a thread whose ID is "T1"; assert `viewModel.userEdits == <stored string>` before the LLM prime completes. Also: a thread with no stored draft leaves `userEdits` empty on select.
+- success_criteria:
+  - `testSelectThreadSeedsUserEditsFromDraftStore` — stored draft string appears in `userEdits` after selectThread
+  - `testSelectThreadWithNoStoredDraftLeavesUserEditsEmpty` — no stored draft → empty userEdits
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift`; inject `DraftStore(directoryURL: tempDir)` into ViewModel; write draft before constructing ViewModel.
+
+### REP-213 — Stats: `rulesMatchedCount` increments by matched-rule count, not once per evaluation call (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.rulesMatchedCount` is incremented in `InboxViewModel` at rule-evaluation time. Pin the per-match semantics: if 3 rules match a single thread evaluation, `rulesMatchedCount` must grow by 3 (not 1). If 0 rules match, the counter is unchanged. Uses `Stats(statsFileURL: nil)` with injected mock rule evaluator results. Guards against an implementation that calls `increment(.rulesMatchedCount)` once per `matching()` call regardless of match count.
+- success_criteria:
+  - `testRulesMatchedCountIncrementsPerMatchedRule` — 3 matching rules → count +3
+  - `testRulesMatchedCountUnchangedOnZeroMatches` — 0 matching rules → count unchanged
+  - Existing StatsTests remain green
+- test_plan: 2 new tests in `StatsTests.swift`; use isolated `Stats` instance and direct counter manipulation.
+
+### REP-214 — InboxViewModel: failed send preserves `userEdits` and surfaces `sendError` (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: The 2026-04-22-1603 review noted "error surfaced + `userEdits` preserved on failure" as shipped behavior for `InboxViewModel.send()`. Pin this with a regression test: use a throwing mock sender (via injectable `IMessageSender` seam) that always throws `SenderError.messageTooLong`. Call `send(thread:)`. Assert: (1) `viewModel.userEdits` retains its pre-send value; (2) a non-nil `sendError` is surfaced on the ViewModel. Also test the success path: successful send clears userEdits (optimistic clear, REP-046 scope). The throwing path is the regression guard.
+- success_criteria:
+  - `testFailedSendPreservesUserEdits` — `userEdits` unchanged after throwing send
+  - `testFailedSendSurfacesSendError` — `sendError` non-nil after throwing send
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests using injectable `executeHook` seam that throws `messageTooLong`; no real AppleScript.
+
+### REP-215 — SmartRule: `validateRegex` rejects invalid patterns and accepts valid ones (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: REP-031 shipped `SmartRule.validateRegex(_:)` + `RulesStore.addValidating(_:)` + `RuleValidationError.invalidRegex`. These are correctness gates but coverage may be thin. Pin 4 boundary cases: (1) `"[invalid"` throws `.invalidRegex`; (2) `"^hello.*$"` is accepted (no throw); (3) `""` (empty pattern) is accepted — matches everything, which is intentional for "catch-all" rules; (4) `"(?P<name>x)"` (Python named group, unsupported in ICU) throws `.invalidRegex`. Guards the regex validation gate against silent bypass.
+- success_criteria:
+  - `testInvalidRegexThrowsAtCreation` — `"[invalid"` → `.invalidRegex` from `addValidating`
+  - `testValidRegexAccepted` — `"^hello.*$"` → no throw
+  - `testEmptyPatternAccepted` — `""` → no throw
+  - `testUnsupportedRegexSyntaxThrows` — unsupported ICU syntax → `.invalidRegex`
+  - Existing RulesTests remain green
+- test_plan: 4 new tests in `RulesTests.swift` using isolated `RulesStore` with injected `UserDefaults`.
+
+### REP-216 — DraftEngine: `regenerate(threadID:tone:)` for same tone reaches `.ready` again (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: REP-203 tests tone-change eviction on `regenerate`. This is the same-tone complement: prime thread X with `.casual` → wait for `.ready`. Call `regenerate(threadID: X, tone: .casual)`. Assert engine transitions back through `.priming` then reaches `.ready` again (new draft, same tone). A `StubLLMService` with a configurable second chunk set can verify the draft content differs from the first prime. Guards against a shortcut where `regenerate` no-ops when the tone hasn't changed.
+- success_criteria:
+  - `testRegenerateSameToneTransitionsThroughPriming` — engine enters `.priming` on regenerate call
+  - `testRegenerateSameToneReachesReady` — engine reaches `.ready` after regenerate completes
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; configure `StubLLMService` with distinct first/second stream content; use `waitUntil` helper.
+
 ### REP-210 — IMessageSender: combined newline + backslash escaping in AppleScript literal (test-only)
 - priority: P2
 - effort: S
@@ -785,6 +842,26 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `IMessageSenderTests.swift`; use `executeHook` seam to capture AppleScript string for assertion rather than executing.
 
 ## Done / archived
+
+### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-091326
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: `BlockingMockChannel` mutable fields migrated to `Locked<T>` backing stores; `InboxViewModelAutoPrimeTests`, `InboxViewModelThreadSelectionTests`, `InboxViewModelReselectTests` gain isolated `RulesStore` + `SearchIndex` per test. Eliminates TOCTOU data race and cross-test SharedState interference under Swift 6 strict-concurrency.
+- test_plan: Targeted test-class runs confirm 0 crashes; 493 tests total (grep-verified).
+
+### REP-201 — AGENTS.md: correct stale commit SHA `904b0e7` → `7512321` in done-log
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-091326
+- files_to_touch: `AGENTS.md`
+- scope: SHA `904b0e7` (non-existent) replaced with `7512321` (verified valid) for worker-2026-04-23-020741 contract-tests batch. Test count updated 463 → 493 (grep-accurate).
+- test_plan: N/A (docs-only).
 
 ### REP-165 — SearchIndex: `clear()` method to wipe and rebuild
 - priority: P2
