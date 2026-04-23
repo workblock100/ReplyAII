@@ -110,7 +110,7 @@ Tests/ReplyAITests/                409 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `(pending)` timeOfDay predicate, export round-trip test for all predicate kinds (REP-079, REP-133, worker-2026-04-23-000050)
+- `d8c1990` timeOfDay predicate, export round-trip test for all predicate kinds (REP-079, REP-133, worker-2026-04-23-000050)
 - `7132176` chatGUID validation, firstLaunchDate pref, oversized-prompt guard, dismiss→store delete, disk index round-trip, concurrent race tests (REP-126, REP-128, REP-130, REP-134, REP-137, REP-138, REP-140, REP-141, REP-143, REP-144, REP-145, REP-147, worker-2026-04-22-213000)
 - `79fc909` DraftStore: persist completed draft edits to disk between launches (REP-066, worker-2026-04-22-202900)
 - `e33be0d` ContactsResolver cache flush, RulesExport version, launchCount pref, NULL-msg placeholder (REP-108, REP-110, REP-115, REP-117, worker-2026-04-22-201500)
