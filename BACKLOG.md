@@ -280,8 +280,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-085959
+- blocker: MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: Add `sessionStartedAt: Date` (set in `Stats.init` to `Date()`) and a computed `sessionDuration: TimeInterval` (= `Date().timeIntervalSince(sessionStartedAt)`). Include `sessionDuration` in the weekly log JSON written by `writeWeeklyLog()` alongside existing counters. No disk persistence for this field (it resets per session by design). Injectable `nowProvider: () -> Date` (default `{ Date() }`) for deterministic tests. Tests: `testSessionStartedAtApproximatelyNow` — initialized within 1s of `Date()`; `testSessionDurationIsNonNegative` — computed field ≥ 0; `testSessionDurationIncludesInWeeklyLog` — JSON from `writeWeeklyLog()` contains `"sessionDuration"` key.
 - success_criteria:
@@ -550,8 +551,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-085959
+- blocker: MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.acceptanceRate(for tone:)` gives per-tone rates. A UI surface (e.g. set-privacy screen) may want an aggregate across all tones. Add `Stats.overallAcceptanceRate() -> Double?` that returns `nil` if no drafts generated across any tone, or `Double(totalSent) / Double(totalGenerated)` aggregating across all tone counters. Tests: fresh instance → nil; 3 generated across 2 tones, 1 sent → 0.333...; all generated but none sent → 0.0.
 - success_criteria:
@@ -580,8 +582,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-085959
+- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RuleEvaluator.matching(rules:context:)` sorts by priority descending. When two rules have the same priority, the output order should be deterministic (insertion order preserved, not arbitrary). Test: two rules at priority 0, inserted A then B; matching returns `[A, B]` (insertion order). Also test with priority 5 and 5: same result. This guards against a future `sort` → `stableSort` rollback. No production code changes expected if insertion order is already preserved.
 - success_criteria:
@@ -636,8 +639,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-085959
+- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: REP-130 and REP-115 added `firstLaunchDate` and `launchCount` as wipe-exempt keys. Verify the exemption is enforced: call `wipe()` after setting both values; assert both survive. This pins the `wipeExemptions` set as a regression guard — if the exemption list is accidentally cleared, this test fails. Also test: non-exempt keys ARE wiped (e.g. `autoPrimeEnabled` returns default after wipe). No production code changes expected.
 - success_criteria:
@@ -693,8 +697,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-085959
+- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.snapshot()` returns `[String: Any]`. This dictionary is passed to `JSONSerialization.data(withJSONObject:)` by `writeWeeklyLog()`. If any value type is not JSON-serializable (e.g. a `Date` object, a struct), `writeWeeklyLog` will silently fail or crash at the `try?` call site. Pin the contract: `JSONSerialization.isValidJSONObject(snapshot())` returns `true` for a freshly-initialized Stats instance; also for one with non-zero counters. No production code changes expected if the snapshot already uses only numbers/strings.
 - success_criteria:
