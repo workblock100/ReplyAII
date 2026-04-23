@@ -317,7 +317,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-025721
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: When `ChatDBWatcher` fires, `syncFromIMessage` fetches fresh threads and merges them into `threads`. For a thread already in the inbox, if a new message arrived, its `previewText` and `lastMessageDate` should update in place. Add a test using a mutable mock channel: initially returns thread A with preview "hello"; after sync, mutate the channel to return thread A with "world" as preview; sync again. Assert `threads.first?.previewText == "world"` and thread count is unchanged. Guards the upsert/merge behavior.
@@ -349,7 +349,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-025721
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `InboxViewModel.selectThread(_:)` primes a draft via the injected `primeHandler`. Calling it twice with the same thread should invoke the prime handler exactly once, not twice — the second call is a no-op when the thread is already selected. This guards against duplicate draft requests on tap-heavy UI interactions. Tests: set up `InboxViewModel` with a call-counting `primeHandler`; call `selectThread(thread)` twice; assert prime count == 1. Also verify `selectedThread` reflects the correct thread.
@@ -458,7 +458,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-025721
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Duplicate `UserDefaults` key strings silently shadow each other — a future typo (e.g. reusing `"replyai.inbox.threadLimit"` for a new pref) would cause silent data loss. Add a test that explicitly lists all string keys defined in `Preferences` and asserts their uniqueness. The test should enumerate the constants via a hand-maintained array (not reflection) so adding a new key forces the engineer to add it here too. No production code changes.
@@ -472,7 +472,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-025721
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: `InboxViewModel.syncFromIMessage()` has no observable loading state — the UI has no way to know a sync is in progress (useful for showing a spinner or disabling the sync button). Add `isSyncing: Bool` (default false) that is set to true at the top of `syncFromIMessage` and reset to false in the defer block. Tests: `isSyncing` is true while sync is in progress; `isSyncing` is false after success; `isSyncing` is false after a channel throw.
@@ -520,7 +520,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-025721
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.snapshot()` returns a `[String: Any]` summary dictionary used by `writeWeeklyLog()`. No test pins which keys are present. A future rename could silently drop a key and break the weekly log format without a test failure. Add a test asserting that a freshly-initialized Stats instance's snapshot contains all expected top-level keys. Maintain a `knownKeys` array in the test that matches the keys actually written by `snapshot()`.

@@ -423,3 +423,42 @@ final class StatsConcurrentMixedCounterTests: XCTestCase {
                                     "all incrementIndexed calls must be reflected in per-channel count")
     }
 }
+
+// MARK: - Snapshot keys regression guard (REP-171)
+
+extension StatsTests {
+
+    /// Pins every key that snapshot() serialises to JSON. If a CodingKey is
+    /// renamed, this test fails, surfacing the format break before it reaches
+    /// production weekly-log consumers. Update knownKeys whenever a new
+    /// counter is added to Stats.Snapshot.
+    func testSnapshotContainsAllExpectedKeys() throws {
+        let stats = Stats(fileURL: tempURL("rep171.json"))
+        let snap = stats.snapshot()
+        let data = try JSONEncoder().encode(snap)
+        let dict = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+            "encoded snapshot must deserialise as a JSON object")
+
+        let knownKeys: [String] = [
+            "rulesFiredByAction",
+            "draftsGenerated",
+            "draftsSent",
+            "draftsGeneratedByTone",
+            "draftsSentByTone",
+            "messagesIndexed",
+            "messagesIndexedByChannel",
+            "ruleLoadSkips",
+            "rulesMatchedCount",
+        ]
+
+        for key in knownKeys {
+            XCTAssertNotNil(dict[key],
+                "snapshot JSON must contain key '\(key)' — update knownKeys if you rename it")
+        }
+
+        XCTAssertEqual(
+            Set(dict.keys), Set(knownKeys),
+            "snapshot JSON must contain exactly the expected counter keys — update knownKeys when adding a new counter")
+    }
+}

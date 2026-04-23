@@ -114,8 +114,9 @@ final class InboxViewModel {
 
     /// Guards against overlapping `syncFromIMessage` calls. The watcher
     /// and manual refresh can both fire; the second arrival while a sync
-    /// is in flight is silently dropped.
-    private var isSyncing = false
+    /// is in flight is silently dropped. Readable externally so the UI
+    /// can drive a spinner; only InboxViewModel mutates it.
+    private(set) var isSyncing: Bool = false
 
     init(
         threads: [MessageThread] = Fixtures.threads,

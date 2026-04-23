@@ -248,4 +248,29 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(stored, launchDate,
                        "firstLaunchDate must survive factory wipe — it is exempt from reset")
     }
+
+    // MARK: - Key uniqueness (REP-167)
+
+    /// Pins all PreferenceKey string constants and asserts no two share the
+    /// same value. A duplicate key would silently shadow the other one in
+    /// UserDefaults, causing hard-to-diagnose data loss. Update knownKeys
+    /// whenever a new PreferenceKey constant is added.
+    func testAllPreferenceKeysAreUnique() {
+        let knownKeys: [String] = [
+            PreferenceKey.crashReports,
+            PreferenceKey.licenseUpdates,
+            PreferenceKey.iCloudSync,
+            PreferenceKey.defaultTone,
+            PreferenceKey.useMLX,
+            PreferenceKey.inboxThreadLimit,
+            PreferenceKey.autoPrime,
+            PreferenceKey.autoApplyRulesOnSync,
+            PreferenceKey.launchCount,
+            PreferenceKey.firstLaunchDate,
+        ]
+        let uniqueKeys = Set(knownKeys)
+        XCTAssertEqual(
+            uniqueKeys.count, knownKeys.count,
+            "every PreferenceKey constant must be a unique string; update knownKeys when adding a new preference")
+    }
 }

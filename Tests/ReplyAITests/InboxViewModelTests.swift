@@ -719,3 +719,168 @@ final class ArchiveSearchIndexTests: XCTestCase {
         XCTAssertEqual(hitsAfter.count, 0, "archived thread must not be findable in SearchIndex")
     }
 }
+
+// MARK: - Watcher-driven sync updates previewText (REP-142)
+
+/// A ChannelService that returns successive thread batches on each call.
+/// After exhausting the provided batches, repeats the last one.
+private final class MutableMockChannel: ChannelService, @unchecked Sendable {
+    private let lock = NSLock()
+    private var batches: [[MessageThread]]
+    private var callIndex = 0
+
+    init(batches: [[MessageThread]]) { self.batches = batches }
+
+    func recentThreads(limit: Int) async throws -> [MessageThread] {
+        lock.lock(); defer { lock.unlock() }
+        let i = min(callIndex, batches.count - 1)
+        callIndex += 1
+        return batches[i]
+    }
+
+    func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+}
+
+@MainActor
+final class InboxViewModelSyncPreviewTests: XCTestCase {
+
+    func testSyncUpdatesExistingThreadPreviewText() async {
+        let initial = MessageThread(id: "rep142-a", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "hello", time: "now")
+        let updated = MessageThread(id: "rep142-a", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "world", time: "now")
+        let channel = MutableMockChannel(batches: [[initial], [updated]])
+        let vm = InboxViewModel(threads: [initial], imessage: channel, contacts: fastContacts())
+        vm.selectedThreadID = "rep142-a"
+
+        await vm.syncFromIMessage()
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(
+            vm.threads.first(where: { $0.id == "rep142-a" })?.preview, "world",
+            "re-sync must update previewText for an existing thread in place")
+    }
+
+    func testSyncPreservesUnchangedThreadCount() async {
+        let initial = MessageThread(id: "rep142-b", channel: .imessage, name: "Bob",
+                                    avatar: "B", preview: "first", time: "now")
+        let updated = MessageThread(id: "rep142-b", channel: .imessage, name: "Bob",
+                                    avatar: "B", preview: "second", time: "now")
+        let channel = MutableMockChannel(batches: [[initial], [updated]])
+        let vm = InboxViewModel(threads: [initial], imessage: channel, contacts: fastContacts())
+        vm.selectedThreadID = "rep142-b"
+
+        await vm.syncFromIMessage()
+        let countAfterFirst = vm.threads.count
+        await vm.syncFromIMessage()
+
+        XCTAssertEqual(vm.threads.count, countAfterFirst,
+            "re-syncing the same thread IDs must not grow the thread count")
+    }
+}
+
+// MARK: - Re-select same thread does not double-prime (REP-155)
+
+@MainActor
+final class InboxViewModelReselectTests: XCTestCase {
+
+    private func makeDefaults() -> UserDefaults {
+        let d = UserDefaults(suiteName: "test.ReplyAI.reselect.\(UUID())")!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        return d
+    }
+
+    func testReselectSameThreadDoesNotDoublePrime() {
+        let d = makeDefaults()
+        let t1 = MessageThread(id: "rep155-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "rep155-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
+        let ch = BlockingMockChannel(); ch.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(), defaults: d)
+
+        var primeCount = 0
+        vm.primeHandler = { _, _, _ in primeCount += 1 }
+
+        vm.selectThread("rep155-t2")
+        vm.selectThread("rep155-t2")
+
+        XCTAssertEqual(primeCount, 1,
+            "primeHandler must be invoked exactly once for consecutive selects of the same thread")
+    }
+
+    func testSelectedThreadIsCorrectAfterDoubleSelect() {
+        let d = makeDefaults()
+        let t1 = MessageThread(id: "rep155-ta", channel: .imessage, name: "Carol", avatar: "C", preview: "", time: "")
+        let t2 = MessageThread(id: "rep155-tb", channel: .imessage, name: "Dave",  avatar: "D", preview: "", time: "")
+        let ch = BlockingMockChannel(); ch.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(), defaults: d)
+
+        vm.selectThread("rep155-tb")
+        vm.selectThread("rep155-tb")
+
+        XCTAssertEqual(vm.selectedThreadID, "rep155-tb",
+            "selectedThreadID must be the doubly-selected thread")
+        XCTAssertEqual(vm.selectedThread.id, "rep155-tb",
+            "selectedThread must reflect the doubly-selected thread")
+    }
+}
+
+// MARK: - isSyncing flag transitions (REP-168)
+
+@MainActor
+final class InboxViewModelIsSyncingTests: XCTestCase {
+
+    func testIsSyncingTrueWhileSyncing() async throws {
+        let channel = BlockingMockChannel()
+        let vm = InboxViewModel(imessage: channel, contacts: fastContacts())
+
+        XCTAssertFalse(vm.isSyncing, "isSyncing must start false")
+
+        let syncTask = Task { await vm.syncFromIMessage() }
+
+        // Yield until recentThreads has been entered (callCount increments before the
+        // continuation is appended to pending). Both tasks share the MainActor, so
+        // after a yield that sees callCount > 0, syncTask has already suspended inside
+        // withCheckedThrowingContinuation — making it safe to call resumeAll().
+        var count = 0
+        while channel.recentThreadsCallCount == 0 && count < 100 {
+            await Task.yield()
+            count += 1
+        }
+
+        // Safety guard: if the loop timed out before recentThreads was entered,
+        // turn off blocking so syncTask can still complete (avoids deadlock).
+        defer { channel.blocking = false; channel.resumeAll() }
+
+        XCTAssertTrue(vm.isSyncing, "isSyncing must be true while syncFromIMessage is blocked in recentThreads")
+
+        channel.resumeAll()
+        await syncTask.value
+
+        XCTAssertFalse(vm.isSyncing, "isSyncing must be false after sync completes")
+    }
+
+    func testIsSyncingFalseAfterSuccess() async {
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(imessage: channel, contacts: fastContacts())
+
+        await vm.syncFromIMessage()
+
+        XCTAssertFalse(vm.isSyncing, "isSyncing must be false after a successful sync")
+    }
+
+    func testIsSyncingFalseAfterError() async {
+        final class ThrowingChannel168: ChannelService, @unchecked Sendable {
+            func recentThreads(limit: Int) async throws -> [MessageThread] {
+                throw ChannelError.unavailable("forced error for REP-168")
+            }
+            func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+        }
+
+        let vm = InboxViewModel(imessage: ThrowingChannel168(), contacts: fastContacts())
+
+        await vm.syncFromIMessage()
+
+        XCTAssertFalse(vm.isSyncing, "isSyncing must be false after sync throws an error")
+    }
+}
