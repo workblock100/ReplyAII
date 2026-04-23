@@ -6,6 +6,59 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-22 22:10 – 2026-04-23 04:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Best single window of the run so far. **7 substantive worker commits closing 30 REP tickets** (REP-066, -098, -099, -101, -103, -104, -108, -109, -110, -114, -115, -116, -117, -118, -119, -120, -121, -122, -123, -124, -125, -126, -127, -128, -130, -131, -132, -134, -136, -137, -138, -140, -141, -143, -144, -145, -147), **9 claim/AGENTS chores**, **2 hash-fixup commits**, and **3 planner refreshes** (run10 → run12). Test suite grew **320 → 404 (+84 tests)** — verified by `grep -c "func test" Tests/ReplyAITests/*.swift` = 404. One new production file (`Sources/ReplyAI/Services/DraftStore.swift`, +80 LOC, REP-066) with 112 LOC of paired test coverage. Test add ratio ≈ **7:1 tests:source** by line count (heavy because the queue this window was almost entirely S/M test-coverage items). Zero banned-action violations: no `#Preview`, no sandbox flip, no `Info.plist` / `Package.swift` / `project.yml` / `scripts/*` / `design_handoff_replyai/` touches, no test-file shrinkage, no force-pushes or rebases. Commit messages cite every REP ID and explain *why* — REP-066 names cold-start LLM re-prime as the motivation, REP-128 documents iMessage-prefix-only validation scope, REP-117 calls out the silent-row-drop bug it fixes.
+
+### Shipped this window (substantive worker commits, newest first)
+
+- **REP-126 / -128 / -130 / -134 / -137 / -138 / -140 / -141 / -143 / -144 / -145 / -147** (`7132176`) — 12-ticket bundle. `IMessageSender.SendError.invalidChatGUID` + `isValidChatGUID()` pre-flight (rejects malformed iMessage GUIDs at the API boundary, not at AppleScript dispatch). `Preferences.firstLaunchDate` set-once key (added to `wipeExemptions` so privacy reset doesn't reset onboarding age). `ReplyAIApp.init()` writes `firstLaunchDate` once. `PromptBuilder.minHistoryReserve` + `systemPrompt(tone:)` with truncation guard (oversized system instructions can't squeeze message history below the floor). `DraftEngine.dismiss()` now deletes the on-disk `DraftStore` entry (matches the in-memory clear). `InboxViewModel` gets injectable `searchIndex` for archive→index integration tests. New `SearchIndex` disk round-trip + concurrent upsert/delete race tests close the suggestion from the prior review.
+- **REP-127 / -131 / -132 / -136** (`79e02df`) — `DraftEngine` trims leading/trailing whitespace on `.done` so the composer doesn't show LLM-emitted blank prefixes. `ChatDBWatcher.stop()` becomes idempotent under double-call (deinit race + explicit stop) and a callback-not-fired-after-stop test pins the cancel semantics. `regenerate()` already serializes via `tasks[key]?.cancel()` — new tests confirm exactly one `.ready` state under overlapping concurrent calls. AGENTS.md test-count duplication addressed (header now authoritative, parenthetical removed).
+- **REP-066** (`79fc909`) — `DraftStore` persists completed draft text to `~/Library/Application Support/ReplyAI/drafts/<threadID>.md` on the `.done` chunk so user edits survive crashes and intentional quits. `InboxViewModel.selectThread` seeds `userEdits` from the store before the LLM re-primes, so the composer is populated immediately on app open. Files older than 7 days are pruned on `DraftStore.init()`. New file (+80 LOC) plus `DraftStoreTests.swift` (+112 LOC, 5 cases including concurrent write+read race REP-147).
+- **REP-108 / -110 / -115 / -117** (`e33be0d`) — `ContactsResolver` flushes its name cache on `CNContactStoreDidChange` (NotificationCenter is injectable so tests stay isolated from the system center). `RulesStore.export` wraps in `{ "version": 1, "rules": [...] }` envelope; `import` throws `unsupportedExportVersion` for non-1, future schema migration becomes a clear error not silent corruption. `Preferences.launchCount` increments per `ReplyAIApp.init()` and is wipe-exempt. `messages(forThreadID:limit:)` emits a `[deleted]` placeholder for rows where both `text` and `attributedBody` are NULL (deleted/unsent/unsupported-extension messages no longer create silent gaps in the thread view).
+- **REP-116 / -118 / -119 / -125** (`7181beb`) — `SmartRule.hasUnread` predicate, `DraftEngine` archive→dismiss eviction integration test, search result hard-cap of 50, and FTS5 upsert ghost-term coverage (delete-then-reinsert at the same rowid must not leave stale tokens). All four are pure correctness coverage adds.
+- **REP-120 / -121 / -122 / -123 / -124** (`f5ae41d`) — `RulesStore` concurrent-add stress test (200 callers under `Locked<T>` invariant), `PromptBuilder` large-payload truncation behavior pinned, `IMessageChannel` Apple-reference-date autodetect boundary cases (the 2001-seconds vs nanoseconds magnitude split), `Stats` invariants under concurrent increment, and a pinned-thread sort regression guard.
+- **REP-098 / -099 / -101 / -103 / -104 / -109 / -114** (`4035c5a`) — Pure test additions (320 → 331 in this commit alone, no production-code change): `DraftEngine` cache isolation across `(threadID, tone)`; `ThrowingStubLLMService` + `FailOnceThenSucceedService` for LLM error/retry coverage; `SearchIndex` delete-reinsert FTS5 tombstone round-trip; two-channel filter integration; `InboxViewModel` thread recency ordering; `Preferences.wipeReplyAIDefaults` scope bounded to known keys only.
+
+### Test coverage delta
+
+- **+84 tests (320 → 404).** Verified locally by `grep -c "func test" Tests/ReplyAITests/*.swift`. The +84 also matches the worker's own test-count claim in `d8941b6`.
+- Source: ~+260 LOC of production Swift across 6 modified files + 1 new (`DraftStore.swift`, 80 LOC). Tests: ~+1,820 LOC across 12 test files. Add ratio ≈ **7:1**.
+- Test files expanded: `RulesTests` (+263), `SearchIndexTests` (+253), `DraftEngineTests` (+318), `DraftStoreTests` (+112 net), `InboxViewModelTests` (+102), `ContactsResolverTests` (+91), `PreferencesTests` (+93), `PromptBuilderTests` (+75), `IMessageSenderTests` (+43), `IMessageChannelTests` (+45), `ChatDBWatcherTests` (+32), `StatsTests` (+26). **Zero test files shrunk.**
+- One legitimate test rename in REP-128 (`testEmptyGUIDThrowsInvalid` → `testInvalidGUIDThrowsInvalid` because `chatGUID(for:)` synthesizes empty strings away before reaching `sendRaw`). Empty-string coverage moved to direct-call `testEmptyGUIDIsValidationFailed`. Coverage equivalent — not a test deletion.
+
+### Concerns
+
+- **`7132176` is a 12-ticket bundle.** Per-ticket scope is small and per-file diffs are clean, but a wide bundle makes `git bisect` painful if any one of the twelve regresses. Future planner could cap bundles at ≤8 tickets when possible. Not rating-affecting — work is real, tested, and the worker log enumerates per-file changes.
+- **`isValidChatGUID` is iMessage-only.** Worker log notes "SMS GUIDs correctly fail validation" — fine for today since the SMS send path isn't wired, but this guard will need to widen (or move to a per-channel `validateGuid` protocol method) when SMS write lands. Worth a follow-up planner task.
+- **Two more hash-fixup commits this window** (`05ad9b5`, `0d1915e`). Same protocol noise flagged in the prior review. Not a quality issue, but the suggestion stands.
+
+### Suggestions for next planner cycle
+
+1. **Archive sweep next run.** 30 tickets closed this window — confirm REP-066, -098, -099, -101, -103, -104, -108, -109, -110, -114, -115, -116, -117, -118, -119, -120, -121, -122, -123, -124, -125, -126, -127, -128, -130, -131, -132, -134, -136, -137, -138, -140, -141, -143, -144, -145, -147 all move from open → archived in BACKLOG before the next planner cycle.
+2. **Cap bundle size at 8 tickets per worker commit.** Easier bisect, cheaper rollback if any single ticket regresses.
+3. **Open a follow-up for cross-channel GUID validation.** Generalize `IMessageSender.isValidChatGUID` to a `Channel.validateGuid(_:)` (or add a sibling `SmsChannelSender.isValidGuid()`) before SMS send is wired — cheaper to design now than to retrofit later. S-effort, non-ui.
+4. **Hash-fixup protocol tweak.** Standing item — defer worker-log self-referential commit hash to `.automation/logs/worker-<id>-hash.txt` written post-push so main history stops accumulating one-line `fixup` commits.
+5. **Drop "disk-backed SearchIndex smoke test" from next planner.** Closed by REP-126 in `7132176` this window.
+
+### Rolling-window pattern
+
+Last seven windows (oldest → newest):
+
+- `review-2026-04-21.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-21-addendum.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-0403.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1003.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1603.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-2210.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-23-0403.md` (this) — ⭐⭐⭐⭐⭐
+
+Zero consecutive sub-par windows. STOP AUTO-MERGE trigger remains disarmed.
+
+---
+
 ## Window 2026-04-22 16:03 – 2026-04-22 22:10 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
