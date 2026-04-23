@@ -50,10 +50,29 @@ final class ContactsResolver: @unchecked Sendable {
     /// Default 1800 s (30 min). Zero means always re-query (useful in tests).
     let ttl: TimeInterval
     private let locked = Locked<ResolverState>(ResolverState())
+    private let notificationCenter: NotificationCenter
+    private var notificationObserver: NSObjectProtocol?
 
-    init(store: ContactsStoring? = nil, ttl: TimeInterval = 1800) {
+    init(store: ContactsStoring? = nil, ttl: TimeInterval = 1800,
+         notificationCenter: NotificationCenter = .default) {
         self.store = store ?? CNContactStoreBackedStoring()
         self.ttl = ttl
+        self.notificationCenter = notificationCenter
+        // Flush the name cache whenever the user's address book changes so
+        // newly added contacts appear without waiting for TTL expiry.
+        notificationObserver = notificationCenter.addObserver(
+            forName: NSNotification.Name.CNContactStoreDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.locked.withLock { $0.cache.removeAll() }
+        }
+    }
+
+    deinit {
+        if let obs = notificationObserver {
+            notificationCenter.removeObserver(obs)
+        }
     }
 
     var access: Access {

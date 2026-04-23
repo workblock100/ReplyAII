@@ -268,6 +268,43 @@ final class ContactsResolverTests: XCTestCase {
         XCTAssertEqual(fake.lookupCallCount, 2,
                        "resolveAll with ttl=0 must bypass cache on every call")
     }
+
+    // MARK: - CNContactStoreDidChange flush (REP-108)
+
+    func testContactStoreChangeFlushesCache() {
+        let fake = FakeContactStore()
+        fake.names["4155559010"] = "Jane"
+        // Use an isolated NotificationCenter so the test never touches the
+        // global center or triggers real Contacts notifications.
+        let center = NotificationCenter()
+        let resolver = ContactsResolver(store: fake, ttl: 1800, notificationCenter: center)
+        resolver.overrideAccessForTesting(.granted)
+
+        // Warm the cache with one lookup.
+        let first = resolver.name(for: "+14155559010")
+        XCTAssertEqual(first, "Jane")
+        XCTAssertEqual(fake.lookupCallCount, 1, "first call must hit the store")
+
+        // Post the change notification — cache should be flushed.
+        center.post(name: NSNotification.Name.CNContactStoreDidChange, object: nil)
+
+        // Second lookup must re-query the store, not return from cache.
+        _ = resolver.name(for: "+14155559010")
+        XCTAssertEqual(fake.lookupCallCount, 2,
+                       "cache flush on CNContactStoreDidChange must force a re-query")
+    }
+
+    func testFlushDoesNotCrashOnEmptyCache() {
+        let fake = FakeContactStore()
+        let center = NotificationCenter()
+        let resolver = ContactsResolver(store: fake, ttl: 1800, notificationCenter: center)
+        // Post the notification before any lookup has populated the cache.
+        XCTAssertNoThrow(
+            center.post(name: NSNotification.Name.CNContactStoreDidChange, object: nil),
+            "flush on empty cache must not crash"
+        )
+        _ = resolver  // keep alive through the test
+    }
 }
 
 // MARK: - Test double

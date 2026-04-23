@@ -2,7 +2,8 @@ import Foundation
 
 /// Keys for every @AppStorage-persisted user preference. Namespaced so
 /// they don't collide with anything macOS caches under our bundle id.
-/// Factory reset wipes every default whose key starts with `pref.`.
+/// Factory reset wipes every default whose key starts with `pref.` —
+/// EXCEPT keys listed in `PreferenceKey.wipeExemptions`.
 enum PreferenceKey {
     static let crashReports   = "pref.privacy.crashReports"
     static let licenseUpdates = "pref.privacy.licenseUpdates"
@@ -13,6 +14,12 @@ enum PreferenceKey {
     static let autoPrime        = "pref.drafts.autoPrime"
     /// When false, rules skip the bulk-sync path; only fire on thread select.
     static let autoApplyRulesOnSync = "pref.rules.autoApplyOnSync"
+    /// Lifetime launch counter. Intentionally excluded from wipe() so
+    /// first-run hints aren't shown again after a factory reset.
+    static let launchCount = "pref.app.launchCount"
+
+    /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
+    static let wipeExemptions: Set<String> = [launchCount]
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
@@ -51,12 +58,14 @@ extension UserDefaults {
     }
 
     /// Erase every preference ReplyAI owns. Used by "Factory reset" in
-    /// set-privacy.
+    /// set-privacy. Keys listed in `PreferenceKey.wipeExemptions` are
+    /// preserved so lifetime metrics (e.g. launch count) survive resets.
     ///
     /// - Parameter defaults: UserDefaults instance to scrub. Defaults
     ///   to `.standard` in production; tests pass an isolated suite.
     static func wipeReplyAIDefaults(in defaults: UserDefaults = .standard) {
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("pref.") {
+        for key in defaults.dictionaryRepresentation().keys
+            where key.hasPrefix("pref.") && !PreferenceKey.wipeExemptions.contains(key) {
             defaults.removeObject(forKey: key)
         }
     }
