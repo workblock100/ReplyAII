@@ -346,3 +346,31 @@ final class PreferencesTests: XCTestCase {
                      "slackEnabled must be cleared on factory wipe — it is not wipe-exempt")
     }
 }
+
+// MARK: - REP-183: wipe exemption regression guard
+
+extension PreferencesTests {
+
+    func testWipePreservesFirstLaunchDate() {
+        let launchDate = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        defaults.set(launchDate, forKey: PreferenceKey.firstLaunchDate)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        let stored = defaults.object(forKey: PreferenceKey.firstLaunchDate) as? Date
+        XCTAssertEqual(stored, launchDate,
+            "firstLaunchDate must survive wipe — it is exempt from reset")
+    }
+
+    func testWipePreservesLaunchCount() {
+        defaults.set(42, forKey: PreferenceKey.launchCount)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.launchCount), 42,
+            "launchCount must survive wipe — it is exempt from reset")
+    }
+
+    func testWipeClearsNonExemptKey() {
+        defaults.set(false, forKey: PreferenceKey.autoPrime)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertNil(defaults.persistentDomain(forName: suiteName)?[PreferenceKey.autoPrime],
+            "non-exempt key must be removed from persistent domain by wipe")
+    }
+}

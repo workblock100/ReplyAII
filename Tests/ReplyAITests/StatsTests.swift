@@ -617,3 +617,100 @@ final class StatsFlushNowTests: XCTestCase {
                        "in-memory counter must still be correct after no-op flushes")
     }
 }
+
+// MARK: - REP-135: sessionStartedAt and sessionDuration
+
+extension StatsTests {
+
+    func testSessionStartedAtApproximatelyNow() {
+        let before = Date()
+        let stats = Stats(fileURL: tempURL("session-ts.json"))
+        let after = Date()
+        XCTAssertGreaterThanOrEqual(stats.sessionStartedAt, before,
+            "sessionStartedAt must be set at or after the test's start time")
+        XCTAssertLessThanOrEqual(stats.sessionStartedAt, after,
+            "sessionStartedAt must be set at or before the test's end time")
+    }
+
+    func testSessionDurationIsNonNegative() {
+        var tick = Date()
+        let stats = Stats(fileURL: tempURL("session-dur.json"), nowProvider: { tick })
+        tick = tick.addingTimeInterval(5)
+        XCTAssertGreaterThanOrEqual(stats.sessionDuration, 0,
+            "sessionDuration must be non-negative")
+        XCTAssertEqual(stats.sessionDuration, 5, accuracy: 0.001,
+            "sessionDuration must reflect elapsed time from sessionStartedAt")
+    }
+
+    func testSessionDurationIncludesInWeeklyLog() throws {
+        var tick = Date()
+        let stats = Stats(fileURL: tempURL("session-log.json"), nowProvider: { tick })
+        tick = tick.addingTimeInterval(10)
+        let logURL = tempURL("weekly-session.md")
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("sessionDuration:"),
+            "weekly log must include sessionDuration key")
+    }
+}
+
+// MARK: - REP-177: overallAcceptanceRate
+
+extension StatsTests {
+
+    func testOverallAcceptanceRateNilWhenNoData() {
+        let stats = Stats(fileURL: tempURL("overall-nil.json"))
+        XCTAssertNil(stats.overallAcceptanceRate(),
+            "fresh instance with no drafts must return nil — no data yet")
+    }
+
+    func testOverallAcceptanceRateAggregatesAcrossTones() {
+        let stats = Stats(fileURL: tempURL("overall-agg.json"))
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .direct)
+        stats.recordDraftSent(tone: .warm)
+
+        let rate = stats.overallAcceptanceRate()
+        XCTAssertNotNil(rate)
+        XCTAssertEqual(rate!, 1.0 / 3.0, accuracy: 1e-9,
+            "1 sent out of 3 generated across 2 tones must yield 1/3")
+    }
+
+    func testOverallAcceptanceRateZeroWhenGeneratedButNoneSent() {
+        let stats = Stats(fileURL: tempURL("overall-zero.json"))
+        stats.recordDraftGenerated(tone: .playful)
+        stats.recordDraftGenerated(tone: .direct)
+        let rate = stats.overallAcceptanceRate()
+        XCTAssertNotNil(rate, "rate must be non-nil when drafts were generated")
+        XCTAssertEqual(rate!, 0.0, accuracy: 1e-9,
+            "0 sent out of 2 generated must yield 0.0, not nil")
+    }
+}
+
+// MARK: - REP-187: snapshot() JSON-serializable contract
+
+extension StatsTests {
+
+    func testSnapshotIsValidJSONObject() throws {
+        let stats = Stats(fileURL: tempURL("snap-json.json"))
+        let data = try JSONEncoder().encode(stats.snapshot())
+        let obj = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertTrue(JSONSerialization.isValidJSONObject(obj),
+            "encoded snapshot must produce a valid JSON object")
+    }
+
+    func testSnapshotWithCountersIsValidJSON() throws {
+        let stats = Stats(fileURL: tempURL("snap-json-counters.json"))
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftSent(tone: .warm)
+        stats.recordRuleFired(action: "pin")
+        stats.incrementIndexed(channel: .imessage, count: 3)
+        let data = try JSONEncoder().encode(stats.snapshot())
+        let obj = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertTrue(JSONSerialization.isValidJSONObject(obj),
+            "snapshot with non-zero counters must still produce valid JSON")
+    }
+}

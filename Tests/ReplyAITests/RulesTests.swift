@@ -2257,3 +2257,35 @@ final class DoubleNegationTests: XCTestCase {
             "not(not(not(pred))) must equal not(pred) when predicate does not match")
     }
 }
+
+// MARK: - REP-179: RuleEvaluator equal-priority deterministic order
+
+final class RuleEvaluatorDeterministicOrderTests: XCTestCase {
+    private let ctx = RuleContext(
+        senderName: "Alice",
+        senderHandle: "alice",
+        channel: .imessage,
+        lastMessageText: "hello",
+        isUnread: true,
+        senderKnown: true,
+        chatIdentifier: "chat123"
+    )
+
+    func testEqualPriorityRulesPreserveInsertionOrder() {
+        let ruleA = SmartRule(name: "A", when: .senderIs("alice"), then: .pin, priority: 0)
+        let ruleB = SmartRule(name: "B", when: .senderIs("alice"), then: .archive, priority: 0)
+        let result = RuleEvaluator.matching([ruleA, ruleB], in: ctx)
+        XCTAssertEqual(result.map(\.name), ["A", "B"],
+            "equal-priority rules must preserve insertion order (A before B)")
+    }
+
+    func testEqualPriorityDeterministicOnMultipleCalls() {
+        let ruleA = SmartRule(name: "A", when: .senderIs("alice"), then: .pin, priority: 5)
+        let ruleB = SmartRule(name: "B", when: .senderIs("alice"), then: .archive, priority: 5)
+        let rules = [ruleA, ruleB]
+        let first = RuleEvaluator.matching(rules, in: ctx).map(\.name)
+        let second = RuleEvaluator.matching(rules, in: ctx).map(\.name)
+        XCTAssertEqual(first, second,
+            "repeated calls with identical inputs must produce identical order")
+    }
+}

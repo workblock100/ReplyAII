@@ -86,6 +86,16 @@ final class Stats: @unchecked Sendable {
     /// in-memory state and must not touch the real app support directory.
     private let fileURL: URL?
 
+    /// Timestamp recorded at init time. Resets each session; not persisted.
+    let sessionStartedAt: Date
+
+    /// Injectable clock for deterministic tests. Defaults to `Date()`.
+    let nowProvider: () -> Date
+
+    /// Elapsed seconds since `sessionStartedAt`. Uses `nowProvider` for
+    /// deterministic test overrides.
+    var sessionDuration: TimeInterval { nowProvider().timeIntervalSince(sessionStartedAt) }
+
     /// Serializes pending debounced writes. Two locks kept separate:
     /// `state` protects counter mutations; `writeLock` protects the
     /// pending DispatchWorkItem pointer so cancel/replace is race-free.
@@ -97,8 +107,11 @@ final class Stats: @unchecked Sendable {
     ///   (useful for tests that only verify in-memory counters). Non-nil paths
     ///   are seeded from disk on init and written with a 2 s debounce window.
     ///   Pass `Stats.defaultFileURL()` explicitly for the production path.
-    init(fileURL: URL? = nil) {
+    /// - Parameter nowProvider: Override the current-time source for tests.
+    init(fileURL: URL? = nil, nowProvider: @escaping () -> Date = { Date() }) {
         self.fileURL = fileURL
+        self.nowProvider = nowProvider
+        self.sessionStartedAt = nowProvider()
         self.state = Locked(fileURL.flatMap(Self.load(from:)) ?? Snapshot())
     }
 
@@ -163,6 +176,16 @@ final class Stats: @unchecked Sendable {
         guard generated > 0 else { return nil }
         let sent = snap.draftsSentByTone[tone.rawValue] ?? 0
         return Double(sent) / Double(generated)
+    }
+
+    /// Acceptance rate across all tones combined. Returns nil when no drafts
+    /// have been generated at all — distinguishes "no data" from a zero rate.
+    func overallAcceptanceRate() -> Double? {
+        let snap = snapshot()
+        let totalGenerated = snap.draftsGeneratedByTone.values.reduce(0, +)
+        guard totalGenerated > 0 else { return nil }
+        let totalSent = snap.draftsSentByTone.values.reduce(0, +)
+        return Double(totalSent) / Double(totalGenerated)
     }
 
     /// Bump the indexed-message counter by the size of a fresh rebuild
@@ -266,6 +289,7 @@ final class Stats: @unchecked Sendable {
         lines.append("- draftsSent: \(snap.draftsSent)")
         lines.append("- messagesIndexed: \(snap.messagesIndexed)")
         lines.append("- ruleLoadSkips: \(snap.ruleLoadSkips)")
+        lines.append("- sessionDuration: \(sessionDuration)")
         lines.append("")
 
         let content = lines.joined(separator: "\n")
