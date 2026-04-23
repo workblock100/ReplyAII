@@ -88,6 +88,26 @@ You never modify code. You only write docs.
 
 Anything materially worse than that → reduce the star rating + write specific suggestions for the next planner cycle.
 
+## Strategic-focus audit (2026-04-23 pivot)
+
+Beyond the substantiveness / tests / bans audit above, assess whether this 6-hour window's commits moved the app toward being a practical, usable product via alternatives to `chat.db` + FDA.
+
+Rate **higher** when you see:
+- AppleScript / Accessibility / UNNotification / Shortcuts-based message reading landing
+- Slack or another non-iMessage channel getting closer to shippable
+- Channel-agnostic UX polish (onboarding, error states, demo mode, composer, MenuBar, Settings)
+- Commits that make the app degrade gracefully when FDA isn't granted
+- Fixture-driven demo paths that let a user try the app with zero permissions
+
+Rate **lower** or flag in Concerns when you see:
+- New `chat.db` or FDA-debugging commits
+- "Fix" commits chasing the same FDA reliability issue in a different spot
+- `AttributedBodyDecoder` / `ChatDBWatcher` / rich-text work without strong justification
+- Disproportionate cycles spent on the deprioritized list (AGENTS.md lists them)
+- Worker or planner adding new FDA-dependent tasks to the backlog
+
+If multiple consecutive windows show the worker grinding on deprioritized areas despite the pivot, flag it in Concerns and factor into the star rating — that's drift the planner needs to correct. If the pattern persists for 4 windows, that alone is grounds for `STOP AUTO-MERGE`.
+
 ## Rolling-window philosophy
 
 The old weekly cadence meant problems accumulated for 7 days before anyone looked. Now you fire 4× daily — catch drift inside 24h, not inside a week. Use the review logs in `.automation/logs/review-*.md` to see whether you're seeing a one-off bad window or a pattern. Only the pattern triggers `STOP AUTO-MERGE`.

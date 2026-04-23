@@ -2,6 +2,25 @@
 
 Read this before you touch anything. It's the shortest path to productive edits without asking the human redundant questions.
 
+## Strategic direction (2026-04-23 pivot)
+
+**ReplyAI's `chat.db` + Full Disk Access read path is unreliable in practice.** Even with FDA granted by the user, the integration hits intermittent disconnections and silent failures we can't consistently fix. The product direction has pivoted: **stop chasing FDA. Find practical alternatives.**
+
+New priorities for the autonomous agents (planner, worker, reviewer):
+
+1. **Alternative message-source architectures** — AppleScript via `tell application "Messages"` (uses Automation permission, not FDA), Accessibility API reading of the Messages.app window, UNNotification passive capture of incoming messages, Shortcuts.app export flows that a user triggers manually, or hybrids of the above. None require FDA.
+2. **Non-iMessage channels as first-class citizens** — Slack (OAuth + Socket Mode is clean and already partially specced), WhatsApp via hosted WebView, Telegram Bot API, Teams via Graph API, SMS relay from iPhone via CloudKit. The app should be valuable to a user with iMessage integration completely disabled.
+3. **UX and practicality polish (channel-agnostic)** — onboarding that handles every permission-denied state gracefully, error states that tell the user what to do, a fixture-driven demo mode so the app is usable with zero permissions granted, keyboard shortcut refinement, composer and draft polish, MenuBar popover quality, Smart Rules UI clarity, Settings → per-channel enable/disable.
+
+**Deprioritized** (existing code stays as reference, but don't invest new cycles):
+- `AttributedBodyDecoder` rich-text parsing improvements
+- `ChatDBWatcher` refinements and reinit cycles
+- New `chat.db` SQL queries or optimizations
+- FDA prompt flow tweaks
+- Any task whose "done" state assumes the user granted FDA and `chat.db` reads work
+
+Existing tests and defensive internals already shipped against the chat.db path stay — they're not wasted. The pivot is about where new effort goes. The iMessage code path isn't being deleted; it's being flanked with alternatives so the product is usable whether or not FDA works for a given user.
+
 ## What ReplyAI is
 
 Native macOS app (SwiftUI, macOS 14+) that unifies iMessage + Slack + WhatsApp + Teams + SMS + Telegram into a single keyboard-first inbox and drafts replies in the user's voice via an on-device LLM. Dark-only v1. Keyboard-first (`⌘↵` send, `⌘J` regen, `⌘/` tone, `⌘.` dismiss, `⌘K` palette, `⌘⇧R` global).

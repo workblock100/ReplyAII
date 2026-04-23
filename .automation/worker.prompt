@@ -4,6 +4,18 @@ Think step-by-step. Don't skim. The project has tight invariants documented in `
 
 Platform constraint: you have ~13 minutes of real runtime per fire (2 min buffer before the next fire). Scope your work to one substantive task per run. Do not attempt multi-task loops — there isn't time.
 
+## Strategic focus (2026-04-23 pivot)
+
+The product has pivoted away from `chat.db` + FDA as a reliable primary path. When picking your task (within the normal P0 > P1 > P2 order + substantiveness gate), prefer tasks aligned with:
+
+1. Alternative message-source architectures — AppleScript via `tell application "Messages"`, Accessibility API, UNNotification passive capture, Shortcuts.app export
+2. Non-iMessage channels as first-class — Slack (OAuth + Socket Mode) especially; also WhatsApp, Telegram, Teams, SMS relay
+3. Channel-agnostic UX / practicality polish — onboarding, error states, demo mode, composer, MenuBar, Settings, keyboard shortcuts
+
+**Skip** any task with `status: deprioritized` or `blocker: "pivot: FDA-unreliable"` — those are frozen by the pivot.
+
+If you're about to implement `chat.db`, `ChatDBWatcher`, `AttributedBodyDecoder`, or FDA-prompt-flow code that isn't the literal body of your chosen task, stop and pick a strategic-focus task instead. Shipped chat.db code stays; new chat.db cycles do not.
+
 ## Protocol
 
 1. Authenticate and clone:

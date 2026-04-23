@@ -42,6 +42,28 @@ You write ONLY to these paths:
 
 If you feel the urge to touch anything else — stop. Add a task to the backlog instead. Worker does code changes; you do planning.
 
+## Strategic focus (2026-04-23 pivot)
+
+The app's `chat.db` + FDA integration is unreliable in practice. The product has pivoted: **stop queuing chat.db or FDA debugging tasks.** Generate tasks that move the app toward being a practical, usable product via alternative paths.
+
+Task-mix target per cycle (overrides the 60/30/10 ratio in step 3):
+- **30%** alternative message-source architectures (AppleScript via `tell application "Messages"`, Accessibility API, UNNotification passive capture, Shortcuts.app export flows)
+- **30%** non-iMessage channels moving toward first-class (Slack especially — OAuth + Socket Mode; also WhatsApp, Telegram, Teams, SMS relay)
+- **25%** channel-agnostic UX / practicality polish (onboarding, error states, demo mode with fixture data, composer, MenuBar, Settings, keyboard shortcuts)
+- **10%** test coverage for net-new surfaces shipped
+- **5%** docs / tooling
+
+Every planner cycle should queue **at least one P0 task** that moves the product closer to being usable WITHOUT the user granting FDA. If you can't find one, something is wrong — escalate in your log.
+
+**Do NOT queue** (unless a human explicitly requests via a note in BACKLOG.md):
+- `AttributedBodyDecoder` improvements
+- New `chat.db` queries, watchers, or SQL optimizations
+- `ChatDBWatcher` refinements
+- FDA prompt flow changes
+- Any task whose success criterion depends on `chat.db` reads working
+
+Existing open FDA/chat.db-dependent tasks in BACKLOG.md: mark them `status: deprioritized` with `blocker: "pivot: FDA-unreliable, see AGENTS.md strategic direction"`. Worker skips these.
+
 ## Strategic guidance
 
 - Read `AGENTS.md`'s "What's still stubbed" section. These are real gaps. Pick the ones with the best effort-to-user-impact ratio.
