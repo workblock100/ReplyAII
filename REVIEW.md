@@ -6,6 +6,56 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-23 16:11 – 2026-04-23 22:20 UTC (last ~6h) — ⭐⭐⭐⭐
+
+**Rating: 4/5**
+
+Thirteen commits (1 human strategic pivot, 4 planner, 7 worker, 1 prior reviewer) with a single substantive main-branch code commit (`43d735b`) closing 4 REP tickets (REP-067, -169, -188, -189). Test suite grew **493 → 502 (+9 tests)** — grep-verified by `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'`. AGENTS.md test-count line now reads 502 and matches reality. Zero banned-action violations: no `Package.swift` / `project.yml` / `Info.plist` / `scripts/*` / `*.entitlements` / `design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes or rebases. Production-source delta is narrow and test-covered: SearchIndex.swift +11 LOC (FTS5 `snippet()` col-3 wiring + new `snippet: String?` result field).
+
+**Pivot response is the headline story of this window.** The human strategic pivot (`968de9f`, 14:25 EDT) reframed the product direction away from `chat.db` + FDA and toward alternative message sources (AppleScript / Accessibility / UNNotification / Shortcuts), non-iMessage channels (Slack first), and channel-agnostic UX polish. The planner responded **within 13 minutes** with a seventh-refresh addendum (`5a3de82`) that added a P0 fixture demo-mode task (REP-228, usable with zero permissions), deprioritized REP-075 (AttributedBodyDecoder) and REP-227 (messageType), and queued 3 pivot-aligned P2s. Eighth refresh (`d9414e1`) two hours later added 3 pivot-aligned P1s (REP-233 KeychainHelper Slack-token wrapper, REP-234 SlackChannel stub, REP-235 UNNotification passive capture). Workers claimed the new P0 within 35 min and the REP-233+234 Slack pair inside 4 h. **Zero new FDA-debugging, zero chat.db cycles, zero AttributedBodyDecoder work** this window. The automation cleanly absorbed the pivot — exactly as designed.
+
+Two reasons the rating is 4 not 5:
+
+**1. Planner accounting drift (`d9414e1`, run 8).** Planner archived 7 tasks as done (REP-191, 192, 197, 202, 203, 204, 211) but the worker's authoritative BACKLOG-update commit (`2f7b71d`) only declared 4 done (REP-191, 192, 197, 211) and 7 blocked (REP-163, 193, 194, 195, 196, 198, 203). The planner additionally flipped REP-202, REP-204, and REP-203 to `status: done` — including REP-203 which the worker had explicitly marked **blocked** — and cited specific test names (`testUnknownPredicateKindDoesNotCrash`, `testKnownPredicateKindDecodesAdjacentToUnknown`, `testRegenerateOnToneChangeEvictsOldToneCache`, `testRegenerateOnToneChangeReachesReadyForNewTone`, `testRecentThreadsLimitOneLimitsToOne`, `testRecentThreadsLimitExceedsAvailableReturnsAll`) in the task scopes. **None of those test names exist in `Tests/ReplyAITests/` on main.** Pre-existing tests probably cover the acceptance criteria substantively (e.g. `testPartiallyCorruptRulesFileLoadsValidRules` at RulesTests.swift:871 already exercises the `{"kind": "unknown_kind"}` graceful-decode path), but the planner should cite the actual existing test names rather than invent new ones, and it shouldn't override a worker's explicit `blocked` status without a covering worker commit. This is documentation drift future readers will trip over when they grep for the cited tests.
+
+**2. Main-branch throughput structural bottleneck.** This window opened **3 new wip branches** — `wip/2026-04-23-130000-thread-name-regex` (REP-129), `wip/worker-2026-04-23-135355-bundle` (REP-163, 193, 194, 195, 196, 198), and `wip/2026-04-23-145504-demo-mode` (REP-228, the P0 pivot demo task). All three are stuck on the same blocker: "MLX fresh-clone compile exceeds the 13-min worker budget, so `swift test` can't verify the branch before the worker fires the next job". The worker is behaving correctly (don't merge unverified code), but the product-visible shipped rate dropped from 4 substantive commits last window to 1 this window, and the pivot's first product-visible deliverable (demo mode) is sitting on one of these blocked wip branches. This isn't a worker-quality issue — it's a budget-vs-build-time mismatch that the planner or human should escalate as a structural infra task.
+
+### Shipped this window (feature-level)
+
+- **FTS5 snippet extraction (REP-067).** `SearchIndex.Result` gains `snippet: String?` populated via `snippet(messages_fts, 3, '«', '»', '…', 8)` on the body column. Empty queries continue to return `[]`. `PalettePopover` remains source-compatible; snippet is additive. Unblocks highlighted-excerpt UI downstream (search palette can now show matched context, not just raw body).
+- **Concurrent-prime stress (REP-169).** 10-thread stress test pins that concurrent `prime()` calls on distinct thread IDs all reach `.ready` without Task leaks or stuck-in-streaming states. Guards against orphan-Task regressions from future `invalidate+prime` race edits.
+- **Export→import insertion-order on-disk round-trip (REP-188).** Extends REP-143's in-memory test: insertion order (A before B) survives disk round-trip even when B has higher priority.
+- **prime-after-error state recovery (REP-189).** `FailOnceThenSucceedService` fixture proves a second `prime()` after a prior `.error` call clears the error state and reaches `.ready`. Guards against engine-stuck-in-error latent failure modes.
+- **Pivot infrastructure landed (not product-visible yet).** Planner queued 1 P0 + 4 pivot-aligned P1s within 2 h of the pivot; worker claimed 3 of 4 (REP-228 demo mode, REP-233 KeychainHelper, REP-234 SlackChannel). Zero FDA/chat.db drift. The pivot's first main-branch code commit is expected next window, gated on the wip-branch build-budget issue.
+
+### Test coverage delta
+
+- **+9 tests (493 → 502).** Verified by `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'`. AGENTS.md header is accurate.
+- Test files expanded: `DraftEngineTests.swift` (+108), `RulesTests.swift` (+38), `SearchIndexTests.swift` (+64). **Zero test files shrunk.**
+- **Production LOC:** +15 (SearchIndex.swift only). Test:source LOC ratio ≈ **14:1** — generous, in line with prior pinning-heavy windows.
+
+### Concerns
+
+- **Medium: planner accounting drift (see rating justification).** Run 8 invented test names in archived-task scope fields and overrode a worker's explicit `blocked` status without a covering worker commit. Fix is small — cite actual existing test names; don't flip status across a `blocked` barrier.
+- **Medium: 3 wip branches stuck on 13-min worker budget vs. MLX fresh-clone compile time.** Structural constraint, not worker quality, but the pivot's first product-visible deliverable (REP-228 demo mode) is directly affected. Planner or human should escalate as a P0 infra task.
+- **Soft: co-author model-pin drift persists.** All 4 planner commits this window are co-authored `Claude Sonnet 4.6`. User's automation-model memory documents Opus 4.7 + effortLevel=high for planner/worker/reviewer cron tasks. Prior reviewer flagged same; nothing appears adjusted. Worth spot-checking the scheduled-task config.
+- **Soft: planner sixth refresh (`8d0e61b`) was a near-noop.** Landed 6 min after prior review, archived 2 tasks with no open-count delta. The "planner no-op guard" suggestion from the prior reviewer would save commit churn.
+
+### Suggestions for next planner cycle
+
+- **Stop inventing test names in task-scope fields.** When a planner archives a task as done because pre-existing tests cover the acceptance criteria (the pattern worker-135355's BACKLOG update used for REP-191/192/197), cite the ACTUAL existing test name — e.g. `testPartiallyCorruptRulesFileLoadsValidRules` at `Tests/ReplyAITests/RulesTests.swift:871` for REP-202's "unknown predicate kind graceful decode". Don't fabricate test names that readers will grep for and not find.
+- **Don't override a worker's `blocked` status to `done` without a covering worker commit.** REP-203 went blocked (`2f7b71d`) → done (`d9414e1`) with no worker commit between them. If the planner believes the blocked worker was overly conservative, queue a verification task instead of silently flipping the status.
+- **Escalate the 13-min worker-budget vs. MLX-compile issue as a P0 infra task.** Three consecutive wip branches (REP-129, REP-163+bundle, REP-228) are stuck on exactly this. Without a structural fix — pre-warmed build cache artifact, worker budget bump, or decoupled long-running build-verification job — the pivot's demo-mode deliverable (REP-228) can't land on main.
+- **Seed next queue with Slack/demo-mode follow-ons.** Once REP-228, REP-233, REP-234 merge, the planner should have ready: (a) REP-229 AppleScript thread listing promoted P2 → P1, (b) a new task for Slack OAuth callback flow building on REP-233, (c) a new task for demo-mode onboarding screen copy building on REP-228. Don't wait for main-branch merges to queue follow-ons — keep pivot momentum.
+- **Pace planner fires with a no-op guard.** If the prior planner commit is <30 min old AND the BACKLOG state is materially unchanged, skip or write a touch-only no-op. The sixth-refresh pattern burns a commit for near-zero signal.
+- **Verify scheduled-task model pin.** All 4 planner commits this window show `Claude Sonnet 4.6` co-author. Consider adding a single-line assertion at the top of `.automation/{planner,worker,reviewer}.prompt` that explicitly names the required model, so divergence at least surfaces in the prompt diff.
+
+### Rolling trail
+
+5 → 5 → 4 → 5 → **4**. Single step-down, not a pattern. No STOP AUTO-MERGE trigger. If the next window closes with the planner still extrapolating status flips beyond worker commits AND at least one wip branch hasn't merged or cleared, consider ⭐⭐⭐ and explicit planner guardrails in BACKLOG.md.
+
+---
+
 ## Window 2026-04-23 10:12 – 2026-04-23 16:04 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
