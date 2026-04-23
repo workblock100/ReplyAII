@@ -345,110 +345,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
 
 
-### REP-148 — RuleEvaluator: `apply()` output contract tests
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RuleEvaluator.apply(rules:to:)` returns `[(ruleID: UUID, action: RuleAction)]` for all matching rules — it's the entry point used by `InboxViewModel` to execute rule side-effects. The `matching()` and `defaultTone()` functions have heavy test coverage, but `apply()` itself is untested. Add 4 test cases using isolated `RuleEvaluator` calls: no matching rules returns empty array; two matching rules return two pairs; pairs are ordered priority-descending; inactive rule excluded from apply output. No production code changes.
-- success_criteria:
-  - `testApplyReturnsEmptyWhenNoRulesMatch` — no match → empty array
-  - `testApplyIncludesAllMatchingRuleIDsAndActions` — 2 matching rules → 2 result pairs
-  - `testApplyOrderFollowsPriorityDescending` — higher-priority rule's pair appears first
-  - `testApplySkipsInactiveRules` — inactive rule excluded even if predicate matches
-  - Existing RulesTests remain green
-- test_plan: 4 new tests in `RulesTests.swift`; fabricate `SmartRule` + `RuleContext` inline, no `RulesStore` needed.
-
-### REP-149 — Stats: `acceptanceRate(for:)` nil-vs-zero distinction
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
-- scope: `Stats.acceptanceRate(for tone:)` returns `nil` when no drafts have been generated for that tone (no data), `0.0` when drafts were generated but none accepted, and a real ratio when both generated and sent. This nil-vs-zero distinction is a product contract — nil means "no stats yet" vs 0% acceptance, and a UI should display these differently. Pin the three states: nil (fresh Stats, no casual drafts); 0.0 (1 casual generated, 0 sent); 0.5 (2 casual generated, 1 sent). No production code changes expected.
-- success_criteria:
-  - `testAcceptanceRateNilWhenNoDataForTone` — fresh Stats, `acceptanceRate(for: .casual)` is nil
-  - `testAcceptanceRateZeroWhenGeneratedButNotSent` — 1 generated, 0 sent → 0.0
-  - `testAcceptanceRateRatioWhenPartialAcceptance` — 2 generated, 1 sent → 0.5
-  - Existing StatsTests remain green
-- test_plan: 3 new tests in `StatsTests.swift` using isolated `Stats` instances (nil URL).
-
-### REP-150 — SearchIndex: `Result` struct fields populated correctly from upsert data
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: `SearchIndex.Result` contains `threadID`, `threadName`, `senderName?`, `text`, and `time`. No existing test verifies that each field is populated from the data supplied to `upsert(thread:messages:)` — tests only check `threadID` presence in results. Add tests: upsert a thread with a known name; search for it; assert `Result.threadName == thread.name`. Also pin `senderName` nil when the thread has no contact name. Multiple-thread search returns all matching threads without omissions.
-- success_criteria:
-  - `testSearchResultThreadNameMatchesUpsertedThread` — `result.threadName` equals the inserted thread name
-  - `testSearchResultSenderNameNilWhenNoContact` — `result.senderName` is nil for a thread with no resolved contact
-  - `testSearchReturnsAllMatchingThreadIDs` — 3 threads indexed, query matching 2 returns exactly 2 results
-  - Existing SearchIndexTests remain green
-- test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex`.
-
-### REP-151 — IMessageChannel: `secondsSinceReferenceDate` autodetect at exact magnitude boundary
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
-- scope: `IMessageChannel.secondsSinceReferenceDate(appleDate:)` autodetects nanoseconds vs seconds by magnitude: if the value exceeds 1_000_000_000_000_000 (1e15), it divides by 1e9; otherwise treats as seconds. Test the boundary: value exactly 1e15 → treated as nanoseconds (1 million seconds → year ~2032); value 999_999_999_999_999 (one below) → treated as seconds (~year 33,000 which is wrong but defines the contract); value 0 → year 2001; value 1 billion → year ~2032 as seconds. Documents the implicit contract so a future magnitude-threshold change is caught.
-- success_criteria:
-  - `testNanosecondValueAboveBoundaryDividedByBillion` — input > 1e15 produces date ~year 2032
-  - `testSecondValueBelowBoundaryPassesThrough` — input < 1e15 treated as seconds
-  - `testZeroDateIsReferenceDate` — appleDate=0 → Jan 1 2001
-  - Existing IMessageChannelTests remain green
-- test_plan: 3 new tests in `IMessageChannelTests.swift`; compare `Date` against known reference epochs using `timeIntervalSince1970`.
-
-### REP-152 — PromptBuilder: all-messages-from-same-sender produces valid prompt
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
-- scope: `PromptBuilder.buildPrompt(messages:tone:)` formats each message with a sender role prefix. Edge case: if every message has `from: .me` (user replying to themselves) or every message has `from: .them`, the prompt should still be valid and non-empty — no crash, no assertion failure. Tests: all-`.me` messages → non-empty string; all-`.them` messages → non-empty string. A secondary test pins that the output changes between all-`.me` and all-`.them` inputs (i.e. the author label is actually different in the formatted output).
-- success_criteria:
-  - `testAllMessagesFromMeProducesValidPrompt` — all `.me` messages → non-empty string, no crash
-  - `testAllMessagesFromThemProducesValidPrompt` — all `.them` messages → non-empty string, no crash
-  - `testAuthorLabelDiffersBetweenMeAndThem` — prompt differs between all-`.me` and all-`.them` inputs
-  - Existing PromptBuilderTests remain green
-- test_plan: 3 new tests in `PromptBuilderTests.swift`; fabricate `Message` arrays with fixed `from` values.
-
-### REP-153 — DraftEngine: `invalidate()` on uncached thread is idempotent
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: `DraftEngine.invalidate(threadID:)` is called when the watcher fires new messages for a thread — it evicts any in-flight draft so the next prime generates fresh context. If `invalidate` is called for a thread that was never primed (no cache entry), it should be a no-op: no crash, state remains `.idle`, and other cached threads are unaffected. Tests: `invalidate` on a thread with no prior prime → no crash, state `.idle`; `invalidate` on thread A does not affect thread B's `.ready` state. No production code changes expected.
-- success_criteria:
-  - `testInvalidateUnknownThreadIsNoop` — no crash, state `.idle` for never-primed thread
-  - `testInvalidateDoesNotAffectOtherCachedThread` — thread B's `.ready` state unchanged after invalidating thread A
-  - Existing DraftEngineTests remain green
-- test_plan: 2 new tests in `DraftEngineTests.swift`; use `StubLLMService` to prime thread B to `.ready` before calling `invalidate(threadID: threadA)`.
-
-### REP-154 — RulesStore: `update()` with unknown UUID is a no-op
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RulesStore.update(rule:)` patches an existing rule by UUID. Calling it with a UUID not in the store should be a no-op: no crash, no change to rule count, no spurious write to disk. Existing test `testRemoveNonExistentUUIDIsNoOp` covers the `remove` path; the `update` path is unprotected by an equivalent. Tests: store contains 2 rules; call `update()` with a freshly-generated UUID → count stays 2, no crash; call `update()` on an existing rule UUID → rule's fields changed, count stays 2. Validates both the happy path and the guard.
-- success_criteria:
-  - `testUpdateUnknownUUIDIsNoop` — update unknown UUID → count unchanged, no crash
-  - `testUpdateKnownUUIDChangesFields` — update known UUID → rule fields reflect new values
-  - Existing RulesTests remain green
-- test_plan: 2 new tests in `RulesTests.swift`; use isolated `RulesStore` with suiteName-based `UserDefaults`.
-
 ### REP-155 — InboxViewModel: re-selecting same thread does not double-prime
 - priority: P2
 - effort: S
@@ -477,35 +373,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing ContactsResolverTests remain green
 - test_plan: 2 new tests in `ContactsResolverTests.swift`; use the existing `MockContactsStore` pattern.
 
-### REP-157 — SmartRule: empty `and([])` evaluates to vacuous true
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RulePredicate.or([])` (empty disjunction) already has a test pinning it to `false` (`testOrEmptyArrayReturnsFalse`). The dual case, `RulePredicate.and([])` (empty conjunction), should evaluate to `true` by vacuous truth — no sub-predicates, none can fail. This is mathematically correct and guards against a future refactor that accidentally returns `false` for both empty composites. Also test `not(and([]))` which should be `false`. No production code changes expected.
-- success_criteria:
-  - `testAndEmptyArrayReturnsTrue` — `and([])` evaluates to `true` regardless of context
-  - `testNotAndEmptyReturnsFalse` — `not(and([]))` evaluates to `false`
-  - Codable round-trip for `and([])` preserves empty array
-  - Existing RulesTests remain green
-- test_plan: 3 new tests in `RulesTests.swift`; use any `RuleContext`.
-
-### REP-158 — IMessageSender: `chatGUID(for:)` format for 1:1 vs group thread
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
-- scope: `IMessageSender.chatGUID(for thread:)` returns `thread.chatGUID` verbatim for group chats (where chatGUID is already set by the SQL query), and synthesizes `"iMessage;-;<chatIdentifier>"` for 1:1 threads. This GUID selection is load-bearing — a wrong GUID routes a message to the wrong recipient in AppleScript. Add tests using mock `MessageThread` values: 1:1 thread with `chatGUID: nil`, `id: "alice@example.com"` → `"iMessage;-;alice@example.com"`; group thread with `chatGUID: "iMessage;+;chat123"` → returns GUID verbatim; thread with group-style `chatGUID` → not synthesized. No production code changes.
-- success_criteria:
-  - `testChatGUIDForOneToOneThreadSynthesized` — nil chatGUID → synthesized `iMessage;-;<id>`
-  - `testChatGUIDForGroupThreadUsedVerbatim` — non-nil chatGUID → returned unchanged
-  - Existing IMessageSenderTests remain green
-- test_plan: 2 new tests in `IMessageSenderTests.swift`; construct `MessageThread` fixtures with controlled `chatGUID` values.
-
 ### REP-159 — IMessageChannel: `MessageThread.hasAttachment` from message-level SQL field
 - priority: P2
 - effort: S
@@ -519,36 +386,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testThreadHasAttachmentFalseWhenNoMessages HaveAttachment` — no attachment messages → thread `hasAttachment: false`
   - Existing IMessageChannelTests remain green
 - test_plan: 2 new tests in `IMessageChannelTests.swift`; use the existing in-memory SQLite fixture helper.
-
-### REP-160 — Stats: concurrent mixed-counter stress test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
-- scope: REP-097 added a concurrent `recordDraftGenerated` stress test. A mixed-counter concurrent test is missing: `recordRuleFired`, `recordMessagesIndexed`, and `incrementIndexed` called simultaneously from multiple threads. Using `DispatchQueue.concurrentPerform(iterations: 100)`, fire a mix of all three in each iteration. Assert: no crash; `snapshot().rulesMatchedCount` is ≥ 100 (every iteration increments it once via `recordRuleFired + incrementRulesMatched`); total indexed ≥ 100. Guards the `Locked<T>` coverage across all three counter paths simultaneously.
-- success_criteria:
-  - `testConcurrentMixedCounterNoCrash` — 100 concurrent mixed calls complete without crash
-  - `testConcurrentMixedCountersReachExpectedFloor` — each counter ≥ 100 after completion
-  - Existing StatsTests remain green
-- test_plan: 2 new tests in `StatsTests.swift`; use isolated `Stats(statsFileURL: nil)`.
-
-### REP-161 — SmartRule: `textMatchesRegex` with anchored patterns (^ and $)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-020741
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RuleEvaluator` uses `NSRegularExpression` for `textMatchesRegex`. Anchored patterns rely on the evaluator calling `.range(of:options:range:)` (which respects `^` and `$`) rather than `.contains`, which would ignore anchors. Tests: pattern `"^Hello"` matches "Hello world" and does not match "Say Hello"; pattern `"world$"` matches "Hello world" and does not match "world is big". Guards against a future refactor that replaces NSRegularExpression with a `.contains`-style shortcut and silently breaks user rules.
-- success_criteria:
-  - `testRegexStartAnchorMatchesPrefix` — `"^Hello"` matches "Hello world"
-  - `testRegexStartAnchorRejectsNonPrefix` — `"^Hello"` does not match "Say Hello"
-  - `testRegexEndAnchorMatchesSuffix` — `"world$"` matches "Hello world"
-  - `testRegexEndAnchorRejectsNonSuffix` — `"world$"` does not match "world is big"
-  - Existing RulesTests remain green
-- test_plan: 4 new tests in `RulesTests.swift`; fabricate `RuleContext` with controlled `messageText`.
 
 ### REP-162 — IMessageSender: extract GUID validation to per-channel protocol method
 - priority: P2
@@ -616,21 +453,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testConcurrentClearAndUpsertNoCrash` — concurrent calls complete without crash
   - Existing SearchIndexTests remain green
 - test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex`.
-
-### REP-166 — RuleEvaluator: empty-rules-array edge cases (test-only)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-063646
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: No test covers `RuleEvaluator` with an empty rules array, the trivial boundary case. `matching(rules: [], context:)` should return `[]`; `defaultTone(rules: [], context:)` should return nil; `apply(rules: [], to:)` should return `[]`. All are safe no-ops. No production code changes expected.
-- success_criteria:
-  - `testMatchingEmptyRulesReturnsEmpty` — `matching([])` → `[]`
-  - `testDefaultToneEmptyRulesReturnsNil` — `defaultTone([])` → nil
-  - `testApplyEmptyRulesReturnsEmpty` — `apply([], to:)` → `[]`
-  - Existing RulesTests remain green
-- test_plan: 3 new tests in `RulesTests.swift`; fabricate any `RuleContext`.
 
 ### REP-167 — Preferences: all AppStorage key strings are distinct (regression guard)
 - priority: P2
@@ -708,74 +530,220 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing StatsTests remain green
 - test_plan: 1 new test in `StatsTests.swift`; use isolated `Stats(statsFileURL: nil)`.
 
-### REP-172 — AttributedBodyDecoder: zero-length and all-zero blobs return nil (test-only)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-063646
-- files_to_touch: `Tests/ReplyAITests/AttributedBodyDecoderTests.swift`
-- scope: `AttributedBodyDecoder.extractText(_:)` returns nil when no 0x2B tag is present. Pin the nil-on-no-tag contract for the two most common edge inputs: empty `Data()` and a 32-byte all-zero blob (a common null/empty DB entry). Both should return nil (not crash, not return empty string). Also test that a 1-byte blob containing only `0x2B` (the tag byte with no following length) returns nil without crashing — malformed minimal input.
-- success_criteria:
-  - `testEmptyDataReturnsNil` — `extractText(Data())` → nil
-  - `testAllZeroBlobReturnsNil` — 32-byte zero blob → nil
-  - `testSingleTagByteWithNoPayloadReturnsNil` — `Data([0x2B])` → nil, no crash
-  - Existing AttributedBodyDecoderTests remain green
-- test_plan: 3 new tests in `AttributedBodyDecoderTests.swift`; fabricate minimal `Data` values inline.
 
-### REP-173 — ChatDBWatcher: repeated stop→reinit cycles complete without crash (test-only)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-063646
-- files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift`
-- scope: Restart path: deallocate a `ChatDBWatcher`, create a new instance on the same source path, start, stop. Repeat 5 times. Guards against `DispatchSource` retain-cycle accumulation, handle reuse, or double-cancel from the prior watcher's `deinit`. After 5 cycles, the final watcher should fire callbacks correctly (write a test-file timestamp and verify the callback triggers). Uses a temp file URL as the watched path (no real chat.db needed).
-- success_criteria:
-  - `testFiveStopReinitCyclesNoCrash` — 5 reinit cycles complete without crash or trap
-  - `testFinalWatcherAfterCyclesFiresCallback` — 6th instance fires its onChange callback on file touch
-  - Existing ChatDBWatcherTests remain green
-- test_plan: 2 new tests in `ChatDBWatcherTests.swift`; use `FileManager.default.temporaryDirectory` for the watched path; `tearDownWithError` removes temp file.
 
-### REP-174 — IMessageSender: special-character escaping in AppleScript string construction
+### REP-176 — DraftStore: 7-day prune threshold removes old files and preserves recent ones (test-only)
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-063646
-- files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
-- scope: The AppleScript template embeds the message text inside a quoted string: `send "<text>" to <target>`. If `<text>` contains `"` (unescaped), the AppleScript is syntactically broken; a `
-` inside the string may produce a multi-line literal that confuses the `tell` block. Add an `escapeForAppleScript(_:)` helper that escapes `\` → `\`, `"` → `"`, and newlines → `
-` (the two-char literal). Apply it to `text` before insertion. Tests (dry-run mode): message with `"hello"` (quotes) produces script containing `"hello"`; message with embedded newline produces `
-` literal in script; message with backslash doubles it; emoji string passes unchanged.
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
+- scope: `DraftStore.init()` prunes draft files older than 7 days. No test pins the exact expiry threshold: a file timestamped 8 days ago should be deleted, a file from 6 days ago should survive. Using injected temp directory, write two `.md` files with their modification dates set to `Date().addingTimeInterval(-8 * 86400)` (old) and `Date().addingTimeInterval(-6 * 86400)` (recent) respectively via `FileManager.setAttributes`. Create a new `DraftStore` from the same directory. Assert: old file is absent; recent file is still present and readable.
 - success_criteria:
-  - `IMessageSender.escapeForAppleScript(_:) -> String` helper added (internal)
-  - Applied to `text` before building the AppleScript string
-  - `testDoubleQuoteEscapedInAppleScript` — `"` → `"`
-  - `testNewlineEscapedInAppleScript` — newline → `
-` literal
-  - `testBackslashEscapedInAppleScript` — `\` → `\`
-  - `testEmojiPassesThroughUnchanged` — 🐢 emoji in message is not altered
-  - Existing IMessageSenderTests remain green
-- test_plan: 4 new tests in `IMessageSenderTests.swift`; inspect the generated `scriptSource` string in dry-run mode.
+  - `testPruneRemovesFilesOlderThanSevenDays` — file aged 8 days deleted on init
+  - `testPrunePreservesFilesNewerThanSevenDays` — file aged 6 days survives init
+  - Existing DraftStoreTests remain green
+- test_plan: 2 new tests in `DraftStoreTests.swift`; set file modification dates via `setAttributes([.modificationDate: date])` before reinitializing.
 
-### REP-175 — RulesStore: `import()` merge-not-replace semantics (test-only)
+### REP-177 — Stats: overallAcceptanceRate() aggregate across all tone keys
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-063646
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.acceptanceRate(for tone:)` gives per-tone rates. A UI surface (e.g. set-privacy screen) may want an aggregate across all tones. Add `Stats.overallAcceptanceRate() -> Double?` that returns `nil` if no drafts generated across any tone, or `Double(totalSent) / Double(totalGenerated)` aggregating across all tone counters. Tests: fresh instance → nil; 3 generated across 2 tones, 1 sent → 0.333...; all generated but none sent → 0.0.
+- success_criteria:
+  - `Stats.overallAcceptanceRate() -> Double?` added
+  - `testOverallAcceptanceRateNilWhenNoData` — nil on fresh instance
+  - `testOverallAcceptanceRateAggregatesAcrossTones` — total sent / total generated
+  - `testOverallAcceptanceRateZeroWhenGeneratedButNoneSent` — 0.0 not nil
+  - Existing StatsTests remain green
+- test_plan: 3 new tests in `StatsTests.swift` using isolated `Stats(statsFileURL: nil)`.
+
+### REP-178 — InboxViewModel: pin state persists to Preferences across re-init
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: `InboxViewModel.pinThread` sets a flag that causes the thread to sort above others. Verify the pin state persists through Preferences so it survives an app relaunch. Test: pin a thread in one ViewModel instance with an injectable `UserDefaults` suite; create a second ViewModel from the same defaults; assert the thread is still marked pinned and appears at the top of the sorted list. Also pin: unpinThread removes from `pinnedIDs` and thread drops from pinned position.
+- success_criteria:
+  - `testPinStatePersistsThroughReInit` — pinned thread still at top after ViewModel re-init from same UserDefaults
+  - `testUnpinRemovesFromPinnedSet` — unpinned thread no longer pinned after reinit
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift` using suiteName-isolated `UserDefaults`.
+
+### REP-179 — RuleEvaluator: equal-priority rules maintain deterministic evaluation order
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: REP-035's `import(from:)` has UUID-keyed merge semantics (update existing UUIDs, append new UUIDs, skip malformed). The existing test `testImportMergesRules` may not cover all three merge outcomes simultaneously. Ensure full coverage: (1) store contains rule A and B; import file contains updated rule A (same UUID, new action) and new rule C (fresh UUID) → result has 3 rules, A's action updated, B unchanged, C appended; (2) import of a file with no new UUIDs and no updated UUIDs produces identical store; (3) import of empty rules array is a no-op. No production code changes.
+- scope: `RuleEvaluator.matching(rules:context:)` sorts by priority descending. When two rules have the same priority, the output order should be deterministic (insertion order preserved, not arbitrary). Test: two rules at priority 0, inserted A then B; matching returns `[A, B]` (insertion order). Also test with priority 5 and 5: same result. This guards against a future `sort` → `stableSort` rollback. No production code changes expected if insertion order is already preserved.
 - success_criteria:
-  - `testImportUpdatesExistingAndAppendsNew` — 2-rule store + import with 1 update + 1 new → 3 rules, updated action correct
-  - `testImportWithNoChangesIsNoop` — import matching existing UUIDs and actions → store unchanged
-  - `testImportEmptyArrayIsNoop` — import `[]` → store count unchanged
-  - All import-related RulesTests remain green
-- test_plan: 3 new tests in `RulesTests.swift`; use suiteName-isolated `RulesStore` and temp URL for export.
+  - `testEqualPriorityRulesPreserveInsertionOrder` — two rules at same priority return in insertion order
+  - `testEqualPriorityDeterministicOnMultipleCalls` — calling matching() twice returns identical order
+  - Existing RulesTests remain green
+- test_plan: 2 new tests in `RulesTests.swift`; fabricate two rules with identical priority and different UUIDs.
 
+### REP-180 — PromptBuilder: system prompt precedes all conversation history in output
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.buildPrompt(messages:tone:)` prepends a tone-specific system instruction before conversation messages. Pin this structural contract: the system instruction appears before the first message line, and the final output is formatted as `[system]\n\n[messages]`. Tests: given any tone + 1 message, `systemPrompt` string appears at the start of the output; given 3 messages, all appear after the system block; empty system prompt (if possible) still doesn't precede non-system lines. No production code changes expected.
+- success_criteria:
+  - `testSystemPromptPrecedesConversationHistory` — system instruction at start of output
+  - `testAllMessagesFollowSystemBlock` — 3 messages all appear after system section
+  - Existing PromptBuilderTests remain green
+- test_plan: 2 new tests in `PromptBuilderTests.swift` using fabricated messages and `.casual` tone.
 
----
+### REP-181 — IMessageSender: -1708 retry count capped, not infinite
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: REP-064 added a -1708 retry for the "Messages not ready" OSA error. The retry should be capped (e.g. 3 attempts) to avoid hanging indefinitely. Using the injectable `executeHook` seam, configure a hook that always returns `-1708`. Assert: `send()` eventually throws `SenderError.scriptError` (or equivalent), not hanging forever; the hook was called ≤ 3 times (max retry + 1 initial). Also test: hook returns -1708 once then succeeds → send succeeds after 2 calls. Documents the retry contract without relying on timing.
+- success_criteria:
+  - `testRetryCapReachedThrowsError` — all-failing hook throws after ≤ maxRetry+1 invocations
+  - `testRetrySucceedsOnSecondAttempt` — one-failure hook results in success with 2 hook calls
+  - Existing IMessageSenderTests remain green
+- test_plan: 2 new tests in `IMessageSenderTests.swift` using call-counting hook closures; no real AppleScript.
+
+### REP-182 — DraftEngine: empty LLM stream produces `.idle` not stuck `.priming`
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: If `LLMService.draft(messages:tone:)` returns a stream that yields zero chunks before completing normally (an empty stream), the DraftEngine should transition to `.idle` (no content to show), not remain in `.priming` or transition to `.ready("")`. Use a stub that returns an immediately-closing `AsyncThrowingStream` with no yields. Assert: final state is `.idle`; no crash; priming count incremented once.
+- success_criteria:
+  - `testEmptyLLMStreamTransitionsToIdle` — empty stream → `.idle`, not stuck in `.priming`
+  - `testEmptyLLMStreamDoesNotCrash` — no crash or assertion failure
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; add `EmptyStubLLMService` that returns a zero-yield stream.
+
+### REP-183 — Preferences: wipeReplyAIDefaults skips firstLaunchDate and launchCount (regression guard)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: REP-130 and REP-115 added `firstLaunchDate` and `launchCount` as wipe-exempt keys. Verify the exemption is enforced: call `wipe()` after setting both values; assert both survive. This pins the `wipeExemptions` set as a regression guard — if the exemption list is accidentally cleared, this test fails. Also test: non-exempt keys ARE wiped (e.g. `autoPrimeEnabled` returns default after wipe). No production code changes expected.
+- success_criteria:
+  - `testWipePreservesFirstLaunchDate` — `firstLaunchDate` non-nil after wipe
+  - `testWipePreservesLaunchCount` — `launchCount` retains value after wipe
+  - `testWipeClearsNonExemptKey` — a non-exempt preference key returns default after wipe
+  - Existing PreferencesTests remain green
+- test_plan: 3 new tests in `PreferencesTests.swift` using suiteName-isolated `UserDefaults`.
+
+### REP-184 — SearchIndex: 3-word query requires all 3 terms (explicit AND semantics test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-027 added explicit AND semantics for multi-word queries. Extend coverage to 3-word queries and near-miss cases: index thread A ("quick brown fox"), thread B ("quick lazy dog"), thread C ("lazy brown cat"). Query "quick brown" → only A. Query "quick brown fox" → only A. Query "quick lazy fox" → no results (no thread has all 3). Guards the AND-semantics contract against an FTS5 query string that accidentally switches to OR.
+- success_criteria:
+  - `testThreeWordQueryRequiresAllTerms` — "quick lazy fox" returns empty (no thread has all 3)
+  - `testTwoWordQueryFiltersCorrectly` — "quick brown" returns only thread A
+  - Existing SearchIndexTests remain green
+- test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory FTS5; set up threads with overlapping term sets.
+
+### REP-185 — ContactsResolver: TTL expiry forces re-query on next call (cache invalidation test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: REP-074 added a 30-min TTL and made it injectable for tests. Pin the cache invalidation path: initialize resolver with `ttl=0`; call `name(for: "alice")` once (store queried, result cached); advance clock past TTL (instant with ttl=0); call `name(for: "alice")` again. Assert: store query count == 2 (cache missed on second call). Also test: with `ttl=9999`, second call uses cache (store query count == 1). Documents the explicit TTL contract.
+- success_criteria:
+  - `testExpiredTTLForcesRefetch` — ttl=0 → store queried twice on two calls
+  - `testActiveTTLUsesCache` — ttl=9999 → store queried once on two calls
+  - Existing ContactsResolverTests remain green
+- test_plan: 2 new tests in `ContactsResolverTests.swift` using `MockContactsStore` with call counter.
+
+### REP-186 — IMessageChannel: messages within a thread ordered newest-first
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `messages(forThreadID:limit:)` fetches messages and returns them sorted for display. Pin the sort order contract: using an in-memory SQLite fixture with 3 messages at Apple reference timestamps T+10, T+20, T+30, assert the first returned message has the largest date (newest first). A secondary test: inserting in reverse date order (T+30 first in DB) still returns newest-first. This guards against a SQL `ORDER BY` direction change.
+- success_criteria:
+  - `testMessagesReturnedNewestFirst` — first element has latest `lastMessageDate`
+  - `testMessagesNewestFirstRegardlessOfInsertOrder` — DB insert order doesn't affect result order
+  - Existing IMessageChannelTests remain green
+- test_plan: 2 new tests in `IMessageChannelTests.swift` using the existing in-memory SQLite fixture helper.
+
+### REP-187 — Stats: snapshot() values are JSON-serializable without throwing
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.snapshot()` returns `[String: Any]`. This dictionary is passed to `JSONSerialization.data(withJSONObject:)` by `writeWeeklyLog()`. If any value type is not JSON-serializable (e.g. a `Date` object, a struct), `writeWeeklyLog` will silently fail or crash at the `try?` call site. Pin the contract: `JSONSerialization.isValidJSONObject(snapshot())` returns `true` for a freshly-initialized Stats instance; also for one with non-zero counters. No production code changes expected if the snapshot already uses only numbers/strings.
+- success_criteria:
+  - `testSnapshotIsValidJSONObject` — `JSONSerialization.isValidJSONObject(snapshot())` returns true
+  - `testSnapshotWithCountersIsValidJSON` — snapshot with non-zero counters also passes JSON validation
+  - Existing StatsTests remain green
+- test_plan: 2 new tests in `StatsTests.swift` using isolated `Stats(statsFileURL: nil)` with incremented counters.
+
+### REP-188 — RulesStore: rules persisted in insertion order, not sort order
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: REP-143 verified `rules` array insertion order. Extend to cover the on-disk serialization round-trip: add rule A (priority 0) then rule B (priority 5), export to temp URL, import back, assert order is `[A, B]` (insertion order preserved in JSON, not sorted by priority at serialization time). This guards the UI display contract: users see rules in creation order, not priority order.
+- success_criteria:
+  - `testDiskRoundTripPreservesInsertionOrder` — A before B after export+import even though B has higher priority
+  - Existing RulesTests remain green
+- test_plan: 1 new test in `RulesTests.swift` using temp URL; `tearDownWithError` cleans up.
+
+### REP-189 — DraftEngine: LLM stream error transitions state to `.idle`, not stuck in `.priming`
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: The existing `ThrowingStubLLMService` verifies error state from REP-114. Extend: after a prime that throws, assert state is `.idle` (error cleared), not `.error(...)` — the error state is transient and the engine should be primeable again. A second `prime()` call after an error should reach `.ready` with the new stub. Guards against a stuck error state that prevents future priming.
+- success_criteria:
+  - `testPrimeErrorLeavesEngineInIdleNotErrorState` — after throw, state is `.idle`
+  - `testPrimeSucceedsAfterPreviousError` — second prime after error reaches `.ready`
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; use `ThrowingStubLLMService` then `StubLLMService` in sequence.
+
+### REP-190 — InboxViewModel: thread sort stability — same-timestamp threads don't swap order
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: When two threads share the same `lastMessageDate`, the sort should be stable (threads don't arbitrarily swap positions between syncs). Test: add threads A and B with identical timestamps; sync multiple times; assert A always appears before B (using thread IDs as tiebreaker or creation order). Unstable sort is user-visible as jumping rows in the thread list during live sync.
+- success_criteria:
+  - `testEqualTimestampThreadsSortStably` — threads with same timestamp don't reorder across syncs
+  - `testEqualTimestampSortUsesIdAsSecondaryKey` — tiebreaker is thread ID (deterministic)
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` with two threads sharing a timestamp.
+
 
 ## Done / archived
 
@@ -1053,6 +1021,119 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 *(Planner moves finished items here each day. Worker never modifies this section.)*
+
+### REP-148 — RuleEvaluator: `apply()` output contract tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-149 — Stats: `acceptanceRate(for:)` nil-vs-zero distinction
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-150 — SearchIndex: `Result` struct fields populated correctly from upsert data
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-151 — IMessageChannel: `secondsSinceReferenceDate` autodetect at exact magnitude boundary
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-152 — PromptBuilder: all-messages-from-same-sender produces valid prompt
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-153 — DraftEngine: `invalidate()` on uncached thread is idempotent
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-154 — RulesStore: `update()` with unknown UUID is a no-op
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-157 — SmartRule: empty `and([])` evaluates to vacuous true
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-158 — IMessageSender: `chatGUID(for:)` format for 1:1 vs group thread
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-160 — Stats: concurrent mixed-counter stress test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-161 — SmartRule: `textMatchesRegex` with anchored patterns (^ and $)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-020741
+
+### REP-166 — RuleEvaluator: empty-rules-array edge cases (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-063646
+
+### REP-172 — AttributedBodyDecoder: zero-length and all-zero blobs return nil (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-063646
+
+### REP-173 — ChatDBWatcher: repeated stop→reinit cycles complete without crash (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-063646
+
+### REP-174 — IMessageSender: special-character escaping in AppleScript string construction
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-063646
+
+### REP-175 — RulesStore: `import()` merge-not-replace semantics (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-063646
+
 
 ### REP-066 — DraftEngine: persist draft edits to disk between launches
 - priority: P2
