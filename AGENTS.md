@@ -110,7 +110,7 @@ Tests/ReplyAITests/                454 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `<sha>` AppleScript newline escaping, empty-rules-array boundary, zero-blob decoder, watcher reinit cycles, import merge semantics (REP-166,172,173,174,175, worker-2026-04-23-063646)
+- `42b518c` AppleScript newline escaping, empty-rules-array boundary, zero-blob decoder, watcher reinit cycles, import merge semantics (REP-166,172,173,174,175, worker-2026-04-23-063646)
 - `904b0e7` apply() contract, acceptanceRate nil/zero, SearchIndex.Result fields, secondsSince boundary, same-sender prompt, invalidate-uncached, update-unknown-UUID, and([]) vacuous-true, chatGUID format, concurrent mixed-counter, anchored regex (REP-148,149,150,151,152,153,154,157,158,160,161, worker-2026-04-23-020741)
 - `6d80f9d` timeOfDay predicate, export round-trip test for all predicate kinds (REP-079, REP-133, worker-2026-04-23-000050)
 - `7132176` chatGUID validation, firstLaunchDate pref, oversized-prompt guard, dismiss→store delete, disk index round-trip, concurrent race tests (REP-126, REP-128, REP-130, REP-134, REP-137, REP-138, REP-140, REP-141, REP-143, REP-144, REP-145, REP-147, worker-2026-04-22-213000)
