@@ -204,8 +204,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-000050
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: The current predicate DSL has 8 primitive kinds (senderIs, senderUnknown, hasAttachment, isGroupChat, textMatchesRegex, messageAgeOlderThan, hasUnread, and/or/not). Add `case timeOfDay(startHour: Int, endHour: Int)` (0–23, inclusive range, wrap-around for overnight e.g. 22–06). `RuleEvaluator` evaluates against `Calendar.current.component(.hour, from: Date())`. Inject a `DateProvider: () -> Date` for testability (same pattern as `messageAgeOlderThan`). Tests: current hour within range matches; current hour outside range doesn't; wrap-around overnight range (22–06) works correctly; Codable round-trip preserves startHour/endHour.
 - success_criteria:
@@ -295,8 +295,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-000050
+- status: open
+- claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-035 added export/import; REP-110 adds a version wrapper. Neither test exercises the full predicate set — existing tests use a small subset of predicates. Build one `SmartRule` for each currently-shipped predicate kind: `senderIs`, `senderUnknown`, `hasAttachment`, `isGroupChat`, `textMatchesRegex`, `messageAgeOlderThan`, `hasUnread`, plus composite `and`, `or`, `not` wrappers. Export all to a temp JSON URL, import back, assert every rule round-trips with an identical predicate (equality check). This is a Codable regression test: any new predicate kind that breaks the discriminated-union encoder/decoder will fail here.
 - success_criteria:
@@ -373,6 +373,212 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testTotalMessageCountRespectsCappedSum` — sum equals min(count, cap) per thread, not a global cap
   - No production code changes expected
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
+
+
+### REP-148 — RuleEvaluator: `apply()` output contract tests
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RuleEvaluator.apply(rules:to:)` returns `[(ruleID: UUID, action: RuleAction)]` for all matching rules — it's the entry point used by `InboxViewModel` to execute rule side-effects. The `matching()` and `defaultTone()` functions have heavy test coverage, but `apply()` itself is untested. Add 4 test cases using isolated `RuleEvaluator` calls: no matching rules returns empty array; two matching rules return two pairs; pairs are ordered priority-descending; inactive rule excluded from apply output. No production code changes.
+- success_criteria:
+  - `testApplyReturnsEmptyWhenNoRulesMatch` — no match → empty array
+  - `testApplyIncludesAllMatchingRuleIDsAndActions` — 2 matching rules → 2 result pairs
+  - `testApplyOrderFollowsPriorityDescending` — higher-priority rule's pair appears first
+  - `testApplySkipsInactiveRules` — inactive rule excluded even if predicate matches
+  - Existing RulesTests remain green
+- test_plan: 4 new tests in `RulesTests.swift`; fabricate `SmartRule` + `RuleContext` inline, no `RulesStore` needed.
+
+### REP-149 — Stats: `acceptanceRate(for:)` nil-vs-zero distinction
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.acceptanceRate(for tone:)` returns `nil` when no drafts have been generated for that tone (no data), `0.0` when drafts were generated but none accepted, and a real ratio when both generated and sent. This nil-vs-zero distinction is a product contract — nil means "no stats yet" vs 0% acceptance, and a UI should display these differently. Pin the three states: nil (fresh Stats, no casual drafts); 0.0 (1 casual generated, 0 sent); 0.5 (2 casual generated, 1 sent). No production code changes expected.
+- success_criteria:
+  - `testAcceptanceRateNilWhenNoDataForTone` — fresh Stats, `acceptanceRate(for: .casual)` is nil
+  - `testAcceptanceRateZeroWhenGeneratedButNotSent` — 1 generated, 0 sent → 0.0
+  - `testAcceptanceRateRatioWhenPartialAcceptance` — 2 generated, 1 sent → 0.5
+  - Existing StatsTests remain green
+- test_plan: 3 new tests in `StatsTests.swift` using isolated `Stats` instances (nil URL).
+
+### REP-150 — SearchIndex: `Result` struct fields populated correctly from upsert data
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: `SearchIndex.Result` contains `threadID`, `threadName`, `senderName?`, `text`, and `time`. No existing test verifies that each field is populated from the data supplied to `upsert(thread:messages:)` — tests only check `threadID` presence in results. Add tests: upsert a thread with a known name; search for it; assert `Result.threadName == thread.name`. Also pin `senderName` nil when the thread has no contact name. Multiple-thread search returns all matching threads without omissions.
+- success_criteria:
+  - `testSearchResultThreadNameMatchesUpsertedThread` — `result.threadName` equals the inserted thread name
+  - `testSearchResultSenderNameNilWhenNoContact` — `result.senderName` is nil for a thread with no resolved contact
+  - `testSearchReturnsAllMatchingThreadIDs` — 3 threads indexed, query matching 2 returns exactly 2 results
+  - Existing SearchIndexTests remain green
+- test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex`.
+
+### REP-151 — IMessageChannel: `secondsSinceReferenceDate` autodetect at exact magnitude boundary
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `IMessageChannel.secondsSinceReferenceDate(appleDate:)` autodetects nanoseconds vs seconds by magnitude: if the value exceeds 1_000_000_000_000_000 (1e15), it divides by 1e9; otherwise treats as seconds. Test the boundary: value exactly 1e15 → treated as nanoseconds (1 million seconds → year ~2032); value 999_999_999_999_999 (one below) → treated as seconds (~year 33,000 which is wrong but defines the contract); value 0 → year 2001; value 1 billion → year ~2032 as seconds. Documents the implicit contract so a future magnitude-threshold change is caught.
+- success_criteria:
+  - `testNanosecondValueAboveBoundaryDividedByBillion` — input > 1e15 produces date ~year 2032
+  - `testSecondValueBelowBoundaryPassesThrough` — input < 1e15 treated as seconds
+  - `testZeroDateIsReferenceDate` — appleDate=0 → Jan 1 2001
+  - Existing IMessageChannelTests remain green
+- test_plan: 3 new tests in `IMessageChannelTests.swift`; compare `Date` against known reference epochs using `timeIntervalSince1970`.
+
+### REP-152 — PromptBuilder: all-messages-from-same-sender produces valid prompt
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.buildPrompt(messages:tone:)` formats each message with a sender role prefix. Edge case: if every message has `from: .me` (user replying to themselves) or every message has `from: .them`, the prompt should still be valid and non-empty — no crash, no assertion failure. Tests: all-`.me` messages → non-empty string; all-`.them` messages → non-empty string. A secondary test pins that the output changes between all-`.me` and all-`.them` inputs (i.e. the author label is actually different in the formatted output).
+- success_criteria:
+  - `testAllMessagesFromMeProducesValidPrompt` — all `.me` messages → non-empty string, no crash
+  - `testAllMessagesFromThemProducesValidPrompt` — all `.them` messages → non-empty string, no crash
+  - `testAuthorLabelDiffersBetweenMeAndThem` — prompt differs between all-`.me` and all-`.them` inputs
+  - Existing PromptBuilderTests remain green
+- test_plan: 3 new tests in `PromptBuilderTests.swift`; fabricate `Message` arrays with fixed `from` values.
+
+### REP-153 — DraftEngine: `invalidate()` on uncached thread is idempotent
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftEngine.invalidate(threadID:)` is called when the watcher fires new messages for a thread — it evicts any in-flight draft so the next prime generates fresh context. If `invalidate` is called for a thread that was never primed (no cache entry), it should be a no-op: no crash, state remains `.idle`, and other cached threads are unaffected. Tests: `invalidate` on a thread with no prior prime → no crash, state `.idle`; `invalidate` on thread A does not affect thread B's `.ready` state. No production code changes expected.
+- success_criteria:
+  - `testInvalidateUnknownThreadIsNoop` — no crash, state `.idle` for never-primed thread
+  - `testInvalidateDoesNotAffectOtherCachedThread` — thread B's `.ready` state unchanged after invalidating thread A
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; use `StubLLMService` to prime thread B to `.ready` before calling `invalidate(threadID: threadA)`.
+
+### REP-154 — RulesStore: `update()` with unknown UUID is a no-op
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore.update(rule:)` patches an existing rule by UUID. Calling it with a UUID not in the store should be a no-op: no crash, no change to rule count, no spurious write to disk. Existing test `testRemoveNonExistentUUIDIsNoOp` covers the `remove` path; the `update` path is unprotected by an equivalent. Tests: store contains 2 rules; call `update()` with a freshly-generated UUID → count stays 2, no crash; call `update()` on an existing rule UUID → rule's fields changed, count stays 2. Validates both the happy path and the guard.
+- success_criteria:
+  - `testUpdateUnknownUUIDIsNoop` — update unknown UUID → count unchanged, no crash
+  - `testUpdateKnownUUIDChangesFields` — update known UUID → rule fields reflect new values
+  - Existing RulesTests remain green
+- test_plan: 2 new tests in `RulesTests.swift`; use isolated `RulesStore` with suiteName-based `UserDefaults`.
+
+### REP-155 — InboxViewModel: re-selecting same thread does not double-prime
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: `InboxViewModel.selectThread(_:)` primes a draft via the injected `primeHandler`. Calling it twice with the same thread should invoke the prime handler exactly once, not twice — the second call is a no-op when the thread is already selected. This guards against duplicate draft requests on tap-heavy UI interactions. Tests: set up `InboxViewModel` with a call-counting `primeHandler`; call `selectThread(thread)` twice; assert prime count == 1. Also verify `selectedThread` reflects the correct thread.
+- success_criteria:
+  - `testReselectSameThreadDoesNotDoublePrime` — prime handler invoked once on double-select
+  - `testSelectedThreadIsCorrectAfterDoubleSelect` — `selectedThread` reflects the thread
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift`; use the existing `StaticMockChannel` + call-counting closure.
+
+### REP-156 — ContactsResolver: `name(for:)` fallback to raw handle when store returns nil
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: `ContactsResolver.name(for handle:)` resolves a contact name; when the underlying store returns nil (handle not in address book), it falls back to the raw handle string as the display name. Pin this fallback contract: given a handle not in the mock store, `name(for:)` returns the handle itself (not nil, not empty). Also test the success path: when the mock store returns "Alice Smith" for "alice@example.com", `name(for:)` returns "Alice Smith". This is the display-name contract the inbox relies on.
+- success_criteria:
+  - `testNameForHandleFallsBackToHandleWhenNotInStore` — unresolved handle → returns handle string
+  - `testNameForHandleReturnsContactNameWhenFound` — resolved handle → returns contact name
+  - Existing ContactsResolverTests remain green
+- test_plan: 2 new tests in `ContactsResolverTests.swift`; use the existing `MockContactsStore` pattern.
+
+### REP-157 — SmartRule: empty `and([])` evaluates to vacuous true
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulePredicate.or([])` (empty disjunction) already has a test pinning it to `false` (`testOrEmptyArrayReturnsFalse`). The dual case, `RulePredicate.and([])` (empty conjunction), should evaluate to `true` by vacuous truth — no sub-predicates, none can fail. This is mathematically correct and guards against a future refactor that accidentally returns `false` for both empty composites. Also test `not(and([]))` which should be `false`. No production code changes expected.
+- success_criteria:
+  - `testAndEmptyArrayReturnsTrue` — `and([])` evaluates to `true` regardless of context
+  - `testNotAndEmptyReturnsFalse` — `not(and([]))` evaluates to `false`
+  - Codable round-trip for `and([])` preserves empty array
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift`; use any `RuleContext`.
+
+### REP-158 — IMessageSender: `chatGUID(for:)` format for 1:1 vs group thread
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: `IMessageSender.chatGUID(for thread:)` returns `thread.chatGUID` verbatim for group chats (where chatGUID is already set by the SQL query), and synthesizes `"iMessage;-;<chatIdentifier>"` for 1:1 threads. This GUID selection is load-bearing — a wrong GUID routes a message to the wrong recipient in AppleScript. Add tests using mock `MessageThread` values: 1:1 thread with `chatGUID: nil`, `id: "alice@example.com"` → `"iMessage;-;alice@example.com"`; group thread with `chatGUID: "iMessage;+;chat123"` → returns GUID verbatim; thread with group-style `chatGUID` → not synthesized. No production code changes.
+- success_criteria:
+  - `testChatGUIDForOneToOneThreadSynthesized` — nil chatGUID → synthesized `iMessage;-;<id>`
+  - `testChatGUIDForGroupThreadUsedVerbatim` — non-nil chatGUID → returned unchanged
+  - Existing IMessageSenderTests remain green
+- test_plan: 2 new tests in `IMessageSenderTests.swift`; construct `MessageThread` fixtures with controlled `chatGUID` values.
+
+### REP-159 — IMessageChannel: `MessageThread.hasAttachment` from message-level SQL field
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `MessageThread.hasAttachment` is derived from `cache_has_attachments` in the message SQL query. No test verifies the thread-level aggregation: a thread with at least one message where `cache_has_attachments=1` should produce `MessageThread.hasAttachment == true`; a thread with no such messages should produce `false`. Uses the in-memory SQLite fixture pattern. Two tests: one thread with attachment → `hasAttachment: true`; one thread without → `hasAttachment: false`.
+- success_criteria:
+  - `testThreadHasAttachmentTrueWhenMessageHasAttachment` — at least one attachment message → thread `hasAttachment: true`
+  - `testThreadHasAttachmentFalseWhenNoMessages HaveAttachment` — no attachment messages → thread `hasAttachment: false`
+  - Existing IMessageChannelTests remain green
+- test_plan: 2 new tests in `IMessageChannelTests.swift`; use the existing in-memory SQLite fixture helper.
+
+### REP-160 — Stats: concurrent mixed-counter stress test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: REP-097 added a concurrent `recordDraftGenerated` stress test. A mixed-counter concurrent test is missing: `recordRuleFired`, `recordMessagesIndexed`, and `incrementIndexed` called simultaneously from multiple threads. Using `DispatchQueue.concurrentPerform(iterations: 100)`, fire a mix of all three in each iteration. Assert: no crash; `snapshot().rulesMatchedCount` is ≥ 100 (every iteration increments it once via `recordRuleFired + incrementRulesMatched`); total indexed ≥ 100. Guards the `Locked<T>` coverage across all three counter paths simultaneously.
+- success_criteria:
+  - `testConcurrentMixedCounterNoCrash` — 100 concurrent mixed calls complete without crash
+  - `testConcurrentMixedCountersReachExpectedFloor` — each counter ≥ 100 after completion
+  - Existing StatsTests remain green
+- test_plan: 2 new tests in `StatsTests.swift`; use isolated `Stats(statsFileURL: nil)`.
+
+### REP-161 — SmartRule: `textMatchesRegex` with anchored patterns (^ and $)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RuleEvaluator` uses `NSRegularExpression` for `textMatchesRegex`. Anchored patterns rely on the evaluator calling `.range(of:options:range:)` (which respects `^` and `$`) rather than `.contains`, which would ignore anchors. Tests: pattern `"^Hello"` matches "Hello world" and does not match "Say Hello"; pattern `"world$"` matches "Hello world" and does not match "world is big". Guards against a future refactor that replaces NSRegularExpression with a `.contains`-style shortcut and silently breaks user rules.
+- success_criteria:
+  - `testRegexStartAnchorMatchesPrefix` — `"^Hello"` matches "Hello world"
+  - `testRegexStartAnchorRejectsNonPrefix` — `"^Hello"` does not match "Say Hello"
+  - `testRegexEndAnchorMatchesSuffix` — `"world$"` matches "Hello world"
+  - `testRegexEndAnchorRejectsNonSuffix` — `"world$"` does not match "world is big"
+  - Existing RulesTests remain green
+- test_plan: 4 new tests in `RulesTests.swift`; fabricate `RuleContext` with controlled `messageText`.
 
 
 ---
