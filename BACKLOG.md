@@ -28,7 +28,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: blocked
 - claimed_by: worker-2026-04-23-145504
-- blocker: MLX full build on fresh clone exceeded time budget; implementation complete on wip/2026-04-23-145504-demo-mode; human should run `swift test` and merge if green
+- blocker: TWO complete implementations available: `wip/2026-04-23-145504-demo-mode` (worker-145504, +193 LOC, 3 tests) and `wip/worker-2026-04-23-161500-demo-mode` (worker-161500, +207 LOC, 3 tests). Human should diff both, pick the cleaner implementation (or cherry-pick best parts), run `swift test`, and merge. Mark done after merge.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Fixtures/Fixtures.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Strategic pivot P0: app must be useful with zero permissions.** When `syncFromIMessage()` returns 0 threads AND no other channel provides threads, populate `viewModel.threads` from `Fixtures.demoChatThreads` (a new `static let` on `Fixtures`). Each demo thread carries `isDemoThread: Bool = true`. Demo threads are excluded from `send()` (throws `InboxError.demoModeNotSendable`). Rules do not auto-apply to demo threads. `Preferences.demoModeActive: Bool` (defaults `true`; auto-set to `false` after any real sync returns ≥1 thread; exempt from `wipe()`). Tests: demo threads appear when real sync returns empty; demo mode flag persists to Preferences; demo mode disables after successful real sync; `send()` on demo thread throws `demoModeNotSendable`.
 - success_criteria:
@@ -41,6 +41,25 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testSendOnDemoThreadThrows`
   - Existing InboxViewModelTests remain green
 - test_plan: 3 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` returning empty threads for first test, non-empty threads for second.
+
+### REP-236 — InboxViewModel: wire AppleScript fallback when chat.db returns authorizationDenied
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: **Pivot-aligned P0: app must list threads without FDA.** Implement `AppleScriptMessageReader` (from REP-229 spec, consolidated here) with `recentChats() -> [MessageThread]` using an injectable executor that runs `tell application "Messages" to get every chat`. Wire into `IMessageChannel.recentThreads()`: if `openReadOnly()` throws `ChannelError.authorizationDenied`, call `AppleScriptMessageReader.recentChats()` as the fallback. Returns `[MessageThread]` with `displayName`, `chatGUID`, placeholder `previewText`, and `channel: .iMessage`. No FDA required — uses macOS Automation permission. Tests: mock executor returning chat list → threads populated; mock FDA failure → fallback executor called; executor throws → propagates error; successful fallback results sorted by displayName.
+- success_criteria:
+  - `AppleScriptMessageReader.recentChats() -> [MessageThread]` with injectable executor
+  - `IMessageChannel.recentThreads()` calls fallback when `openReadOnly()` throws `authorizationDenied`
+  - `testAppleScriptFallbackCalledWhenFDADenied` — FDA denied + executor returns data → non-empty thread list
+  - `testAppleScriptFallbackExecutorIsInjectable` — captures AppleScript string for assertion
+  - `testAppleScriptFallbackErrorPropagates` — executor throws → error surfaced
+  - `testFDASuccessSkipsFallback` — when chat.db opens successfully, fallback never called
+  - Existing IMessageChannelTests remain green
+- test_plan: 4 new tests in `IMessageChannelTests.swift`; injectable executor returns either structured data or throws without executing real AppleScript.
+
 
 ---
 
@@ -136,8 +155,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-171932
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (new), `Tests/ReplyAITests/KeychainHelperTests.swift` (new)
 - scope: **Pivot-aligned (Slack/channel prereq).** REP-010 (Slack OAuth) and REP-230 (OAuth listener) both need a Keychain wrapper but neither specs one. Add `KeychainHelper` with three methods: `set(value: String, for key: String) throws`, `get(key: String) -> String?`, `delete(key: String)`. Keys are prefixed with `ReplyAI-` (matching the AGENTS.md convention) to isolate from system keys. Uses `kSecClassGenericPassword` with `kSecAttrAccount` = key. Injectable `service: String` parameter (default `"co.replyai.app"`) for test isolation — tests use a unique service string and call `delete` in `tearDownWithError`. Tests: set+get round-trip returns same value; get on missing key returns nil; delete removes key (subsequent get returns nil); overwrite returns new value; two distinct keys don't interfere.
 - success_criteria:
@@ -155,8 +174,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-23-171932
+- status: open
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (new), `Tests/ReplyAITests/SlackChannelTests.swift` (new)
 - scope: **Pivot-aligned (first non-iMessage channel stub).** Build `SlackChannel: ChannelService` that is immediately registerable without breaking the app. `recentThreads(limit:)`: checks `KeychainHelper.get("Slack-token")` — if nil, throws `ChannelError.authorizationDenied`; otherwise returns `[]` for now (real API calls come in a follow-up). `send(text:toChatGUID:)`: throws `ChannelError.authorizationDenied` until token exists. `channel: Channel` property returns `.slack`. `displayName` returns `"Slack"`. Injectable `KeychainHelper` for test isolation. `InboxViewModel` does NOT wire this up yet — it's a standalone conformance that can be exercised in isolation. Tests: returns authDenied when no token; returns empty thread list when token present (mock KeychainHelper returning a token); channel property is `.slack`; no real network calls.
 - success_criteria:
@@ -188,6 +207,42 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testReplyNotificationDoesNotFireIncomingCallback` — reply category skipped
   - Existing NotificationCoordinatorTests remain green
 - test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; inject mock `UNUserNotificationCenter` and fabricate `UNNotification` payloads.
+
+### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackHTTPClient.swift` (new), `Tests/ReplyAITests/SlackHTTPClientTests.swift` (new)
+- scope: **Pivot-aligned (Slack channel prereq).** `SlackHTTPClient` is the HTTP layer needed by `SlackChannel` for `conversations.list` and `conversations.history` API calls. Protocol: `func get(endpoint: String, token: String, params: [String: String]) async throws -> Data`. Default conformance: `URLSessionSlackClient` sends `GET https://slack.com/api/<endpoint>?<params>` with `Authorization: Bearer <token>` header. Injectable for tests via protocol. Tests: mock session returns valid JSON → Data returned; auth header is `Bearer <token>`; correct base URL + endpoint + params in request; HTTP 200 → Data; HTTP 401 → throws `ChannelError.authorizationDenied`; HTTP 429 → throws `ChannelError.networkError`; network error → throws `ChannelError.networkError`.
+- success_criteria:
+  - `SlackHTTPClient` protocol in new file
+  - `URLSessionSlackClient: SlackHTTPClient` default conformance
+  - `testAuthHeaderIsBearerToken` — request includes `Authorization: Bearer <token>`
+  - `testCorrectEndpointURLConstructed` — URL matches `https://slack.com/api/<endpoint>?<params>`
+  - `testHTTP401ThrowsAuthDenied` — 401 response → `ChannelError.authorizationDenied`
+  - `testHTTP429ThrowsNetworkError` — 429 response → `ChannelError.networkError`
+  - `testSuccessfulResponseReturnsData` — 200 response body returned as Data
+  - Existing tests remain green
+- test_plan: 5 new tests in `SlackHTTPClientTests.swift`; use `MockURLSession` that returns configured `(Data, HTTPURLResponse)` tuples.
+
+### REP-238 — KeychainHelper: `deleteAll(prefix:)` for factory reset
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (depends on REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift` (depends on REP-233)
+- scope: **Pivot-aligned (factory reset / channel de-auth).** `Preferences.wipe()` currently clears UserDefaults but leaves Keychain entries (Slack token, future tokens). Add `KeychainHelper.deleteAll(prefix: String)` that uses `SecItemDelete` with a `kSecAttrAccount` prefix match — deletes every item where the account key starts with `prefix`. Called with `"ReplyAI-"` to wipe all channel tokens on factory reset. Tests: 3 keys with `"ReplyAI-"` prefix → all 3 deleted after `deleteAll("ReplyAI-")`; 1 key without prefix → not deleted; calling on empty keychain does not throw.
+- success_criteria:
+  - `KeychainHelper.deleteAll(prefix:)` implemented
+  - `testDeleteAllRemovesPrefixedKeys` — 3 prefixed keys → all deleted
+  - `testDeleteAllLeavesNonPrefixedKeys` — unprefixed key survives
+  - `testDeleteAllOnEmptyKeychainIsNoop` — no crash on empty keychain
+  - Existing KeychainHelperTests remain green (depends on REP-233)
+- test_plan: 3 new tests in `KeychainHelperTests.swift`; uses same injectable service as REP-233.
+
 
 ---
 
@@ -797,7 +852,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `IMessageSenderTests.swift`; use `executeHook` seam to capture AppleScript string for assertion rather than executing.
 
 ### REP-229 — AppleScript thread listing: `tell Messages to get every chat` fallback when FDA unavailable
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -991,6 +1046,256 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testStandardMessageTypeIsStandard`, `testTapbackMessageTypeIsTapback`, `testDeliveryReceiptTypeIsDeliveryReceipt`, `testUnknownAssociatedTypeIsPreserved`
   - Existing IMessageChannelTests and thread-preview filter remain green
 - test_plan: 4 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture with varied `associated_message_type` values.
+
+### REP-239 — MessagesAppActivationObserver: notify when Messages.app becomes frontmost
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/MessagesAppActivationObserver.swift` (new), `Tests/ReplyAITests/MessagesAppActivationObserverTests.swift` (new)
+- scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` watches `NSWorkspace.shared.notificationCenter` for `NSWorkspace.didActivateApplicationNotification`. When the frontmost app's `bundleIdentifier` is `"com.apple.MobileSMS"`, fires `onMessagesActivated: (() -> Void)?` callback. Injectable `NSWorkspace` and notification center for tests. 600ms debounce so rapid app switches don't trigger multiple syncs. Tests: notification with Messages bundle ID → callback fires; notification with other bundle ID → callback silent; two rapid activations within 600ms → only one callback; injectable workspace observer captures posted notification.
+- success_criteria:
+  - `MessagesAppActivationObserver` type with `onMessagesActivated` callback
+  - Debounce of 600ms for rapid activations
+  - Injectable `NSWorkspace` + notification center for test isolation
+  - `testActivationCallbackFiresForMessages` — Messages app activated → callback fires
+  - `testActivationCallbackSilentForOtherApps` — Safari activated → callback silent
+  - `testRapidActivationsDebounced` — two activations within 600ms → one callback
+  - Existing tests remain green
+- test_plan: 3 new tests using injectable `MockWorkspace` and `NotificationCenter`; no real NSWorkspace in tests.
+
+### REP-240 — AppleScriptMessageReader: `messagesForChat(chatGUID:limit:) -> [Message]`
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (extends REP-236), `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: **Pivot-aligned (alt message-source, no FDA).** Extend `AppleScriptMessageReader` (from REP-236) to fetch messages for a specific chat: `messagesForChat(chatGUID: String, limit: Int) -> [Message]`. AppleScript: `tell application "Messages" to get (items 1 through <limit> of messages of first chat whose id is "<guid>")`. Parses `content`, `sender`, `date` fields from each message. Returns `[Message]` in chronological order (newest last). Injectable executor preserves testability. Tests: mock executor returns 3-message list → `[Message]` with correct bodies; `limit` parameter limits result count; empty chat → empty array; AppleScript returns error → throws `ChannelError.generalError`.
+- success_criteria:
+  - `AppleScriptMessageReader.messagesForChat(chatGUID:limit:) -> [Message]` implemented
+  - Injectable executor seam (same as REP-236)
+  - `testMessagesForChatParsesBodyCorrectly` — message body from AppleScript output
+  - `testMessagesForChatRespectsLimit` — limit=2 with 3 available → 2 returned
+  - `testMessagesForChatEmptyResultIsEmpty` — empty message list → []
+  - `testMessagesForChatErrorPropagates` — executor throws → ChannelError surfaced
+  - Existing tests remain green
+- test_plan: 4 new tests in `IMessageChannelTests.swift`; inject mock executor; no real AppleScript.
+
+### REP-241 — UNNotificationContentParser: structured parser for iMessage notification payloads
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/UNNotificationContentParser.swift` (new), `Tests/ReplyAITests/UNNotificationContentParserTests.swift` (new)
+- scope: **Pivot-aligned (alt message-source, no FDA).** Extract notification payload parsing from `NotificationCoordinator` (REP-235) into a dedicated testable type. `UNNotificationContentParser.parse(_ content: UNNotificationContent) -> ParsedMessageNotification?` where `ParsedMessageNotification` has `senderHandle: String`, `preview: String`, and optional `chatGUID: String?`. Tries `content.userInfo["CKSenderID"]` first, then `content.userInfo["sender"]`, then `content.title` as sender handle. Uses `content.body` as preview. Returns nil if neither sender key is present. Tests: full payload → all fields; missing CKSenderID falls back to sender key; both missing → nil; body-only notification (no userInfo keys) → nil; chatGUID present in userInfo → populated; chatGUID absent → nil.
+- success_criteria:
+  - `UNNotificationContentParser.parse(_:) -> ParsedMessageNotification?` static func
+  - `ParsedMessageNotification` struct with `senderHandle`, `preview`, `chatGUID?` fields
+  - `testFullPayloadParsesAllFields` — all userInfo keys present → all fields populated
+  - `testMissingCKSenderIDFallsBackToSenderKey` — fallback key resolution
+  - `testBothSenderKeysMissingReturnsNil` — nil when no sender recoverable
+  - `testChatGUIDPresentAndAbsent` — both cases tested
+  - Existing tests remain green
+- test_plan: 4 new tests in `UNNotificationContentParserTests.swift`; construct mock `UNNotificationContent` via `UNMutableNotificationContent`.
+
+### REP-242 — SlackChannel: `recentThreads()` with real `conversations.list` API call
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
+- scope: **Pivot-aligned (first real Slack data fetch).** Implement real `recentThreads(limit:)` in `SlackChannel` using `SlackHTTPClient` (REP-237 prereq). Call `GET api/conversations.list?types=im&exclude_archived=true&limit=<limit>`. Parse the JSON response (`channels[]` array, each with `id`, `name`, `is_im: true`, `latest.text`) into `[MessageThread]`. Set `channel: .slack` on each. Returns `ChannelError.authorizationDenied` if no token; `ChannelError.networkError` on HTTP failure. Injectable `SlackHTTPClient`. Tests: mock client returning sample IM list JSON → threads created with correct fields; empty channels array → empty result; missing `latest` → previewText is empty string; HTTP error → `ChannelError.networkError`; no token → `authorizationDenied` (existing test from REP-234, unchanged).
+- success_criteria:
+  - `SlackChannel.recentThreads(limit:)` calls `conversations.list` when token present
+  - Threads created with `channel: .slack`, `displayName`, `previewText` from `latest.text`
+  - `testSlackRecentThreadsParsesIMListResponse` — sample JSON → correct `[MessageThread]`
+  - `testSlackRecentThreadsEmptyChannelsReturnsEmpty` — empty channels array → []
+  - `testSlackRecentThreadsMissingLatestUsesEmptyPreview` — missing latest → empty previewText
+  - `testSlackRecentThreadsHTTPErrorThrowsNetworkError` — HTTP failure → `networkError`
+  - Existing SlackChannelTests remain green (REP-234)
+- test_plan: 4 new tests in `SlackChannelTests.swift`; mock `SlackHTTPClient` returns configured JSON Data.
+
+### REP-243 — Channel enum: add `.telegram`, `.whatsapp`, `.teams`, `.sms` cases
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Models/Channel.swift` (or wherever `Channel` is defined), `Tests/ReplyAITests/ChannelTests.swift` (new or extend)
+- scope: **Pivot-aligned (channel architecture scaffolding).** `Channel` enum currently has only cases used in the codebase (`.iMessage`, `.slack`). Add `.telegram`, `.whatsapp`, `.teams`, `.sms` as future-channel stubs. Each case needs `displayName: String` and `iconName: String` properties. Add `CaseIterable` conformance and `Codable` (raw `String` value). `ChannelDot` and any exhaustive `switch` over `Channel` must be updated (no behavior change — add placeholder colors for new cases). Tests: `Channel.allCases` count matches expected; each case decodes from its `rawValue` string; `displayName` is non-empty for every case.
+- success_criteria:
+  - `.telegram`, `.whatsapp`, `.teams`, `.sms` cases added
+  - `CaseIterable` and `Codable` conformance
+  - `displayName` and `iconName` properties for all cases
+  - `testAllCasesDecodable` — every case round-trips through `Codable`
+  - `testDisplayNameNonEmpty` — all cases have non-empty `displayName`
+  - `testCaseIterableCount` — `allCases.count` matches expected (pins against accidental omission)
+  - Existing tests remain green (no behavior change in iMessage/Slack paths)
+- test_plan: 3 new tests in `ChannelTests.swift`; no mocking needed — pure enum conformance.
+
+### REP-244 — InboxViewModel: `syncAllChannels()` merges results from all registered ChannelServices
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: **Pivot-aligned (multi-channel UX).** Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
+- success_criteria:
+  - `InboxViewModel.registeredChannels: [any ChannelService]` injectable property
+  - `syncAllChannels() async -> [MessageThread]` — concurrent fetch, dedupe, sort
+  - `testSyncAllChannelsMergesResults` — 2 channels × 2 threads = 4 merged
+  - `testSyncAllChannelsDeduplicatesByThreadID` — duplicate ID → deduplicated
+  - `testSyncAllChannelsOneThrowsOtherStillSyncs` — partial failure handled
+  - `testSyncAllChannelsEmptyListReturnsEmpty` — no channels → empty
+  - Existing InboxViewModelTests remain green
+- test_plan: 4 new tests in `InboxViewModelTests.swift`; inject `[StaticMockChannel, AnotherStaticMockChannel]` as `registeredChannels`.
+
+### REP-245 — InboxViewModel: `filterByChannel(_ channel: Channel?)` view-level filter
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Add `filterByChannel(_ channel: Channel?)` to `InboxViewModel`. When non-nil, sets `activeChannelFilter: Channel?` which causes `threads` computed property to return only threads matching that channel. When nil, returns all threads. Filter is view-level — underlying `_threads` array is unchanged. Tests: filter for `.iMessage` returns only iMessage threads; filter for `.slack` returns only Slack threads; nil filter returns all; setting filter does not mutate `_threads`; empty result when no threads match filter.
+- success_criteria:
+  - `InboxViewModel.activeChannelFilter: Channel?` property
+  - `threads` computed property filters by `activeChannelFilter` when non-nil
+  - `testFilterByChannelIMessage` — iMessage filter shows only iMessage threads
+  - `testFilterByChannelSlack` — Slack filter shows only Slack threads
+  - `testFilterByChannelNilShowsAll` — nil filter shows all threads
+  - `testFilterByChannelDoesNotMutateUnderlying` — `_threads` unchanged after filter
+  - Existing InboxViewModelTests remain green
+- test_plan: 4 new tests in `InboxViewModelTests.swift`; seed mixed-channel threads via `StaticMockChannel`.
+
+### REP-246 — InboxViewModel: `totalUnreadCount: Int` computed property
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Add `totalUnreadCount: Int` to `InboxViewModel` that sums `thread.unread` across all threads. Useful for the MenuBar badge (REP-044) and the sidebar header. Clamped to ≥0 (guard against hypothetical negative unread). Tests: no threads → 0; 3 threads with unread 2, 0, 5 → 7; all unread=0 → 0; single thread unread=1 → 1.
+- success_criteria:
+  - `InboxViewModel.totalUnreadCount: Int` computed property
+  - `testTotalUnreadCountSumsCorrectly` — 2+0+5 → 7
+  - `testTotalUnreadCountZeroWhenAllRead` — all-zero threads → 0
+  - `testTotalUnreadCountNoThreadsIsZero` — empty thread list → 0
+  - Existing InboxViewModelTests remain green
+- test_plan: 3 new tests in `InboxViewModelTests.swift` using `StaticMockChannel` with seeded threads.
+
+### REP-247 — InboxViewModel: `ViewState` enum for loading/populated/demo/error states
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Replace implicit thread-count-based state detection with explicit `ViewState` enum: `case loading, populated, empty(EmptyReason), demo, error(Error)` where `EmptyReason: Equatable { case noMessages, noPermissions }`. `InboxViewModel.viewState: ViewState` is `@Published`. Transitions: on init → `.loading`; sync returns threads → `.populated`; sync returns [] with demo mode active → `.demo`; sync returns [] without demo → `.empty(.noMessages)`; sync throws `authorizationDenied` → `.empty(.noPermissions)`; sync throws other → `.error(error)`. Tests: each state transition tested with mock channel; `.loading` → `.populated` on sync; `.loading` → `.demo` when demoMode; `.empty(.noPermissions)` on auth-denied sync.
+- success_criteria:
+  - `ViewState` enum (nested in `InboxViewModel`) with 5 cases
+  - `InboxViewModel.viewState: ViewState` published property
+  - `testViewStateTransitionsToPopulated` — sync returns threads → `.populated`
+  - `testViewStateTransitionsToDemoOnEmptySync` — empty sync + demo mode → `.demo`
+  - `testViewStateTransitionsToEmptyNoPermissions` — auth-denied → `.empty(.noPermissions)`
+  - `testViewStateTransitionsToEmptyNoMessages` — empty sync, no demo → `.empty(.noMessages)`
+  - Existing InboxViewModelTests remain green
+- test_plan: 4 new tests in `InboxViewModelTests.swift` using injected mock channels.
+
+### REP-248 — InboxViewModel: `bulkArchiveRead()` archives all threads with unread=0
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Add `bulkArchiveRead()` to `InboxViewModel` that calls `archive(_:)` on every thread where `thread.unread == 0`. Useful for a "Clear read" menu action (UI wiring is separate). Complements `bulkMarkAllRead()` (REP-224). Tests: 3 threads with unread 0 and 1 with unread 3 → 3 archived, 1 remains; all threads unread=0 → all archived, `threads` empty; no threads with unread=0 → no archives triggered, `threads` unchanged.
+- success_criteria:
+  - `InboxViewModel.bulkArchiveRead()` implemented
+  - `testBulkArchiveReadArchivesZeroUnreadThreads` — 3 read + 1 unread → only 3 archived
+  - `testBulkArchiveReadAllRead` — all unread=0 → `threads` empty after call
+  - `testBulkArchiveReadNoReadThreadsIsNoop` — all unread>0 → `threads` unchanged
+  - Existing InboxViewModelTests remain green
+- test_plan: 3 new tests in `InboxViewModelTests.swift` using `StaticMockChannel` with mixed-unread threads.
+
+### REP-249 — ContactsResolver: concurrent same-handle resolve returns consistent result
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: Pin cache-and-lock correctness under real concurrency: call `name(for: "alice@example.com")` 10 times concurrently via `DispatchQueue.concurrentPerform(iterations: 10)`; assert result is consistent (all 10 results equal the resolved name); assert mock store queried exactly once (not 10 times). Complements REP-219 (single cache-hit test) with concurrent-load correctness. Guards `NSLock`-guarded cache against TOCTOU under actual parallel reads.
+- success_criteria:
+  - `testConcurrentSameHandleResolvesConsistently` — 10 concurrent resolves → all same result
+  - `testConcurrentSameHandleQueriesStoreOnce` — mock store called exactly once
+  - Existing ContactsResolverTests remain green
+- test_plan: 2 new tests using `MockContactsStore` with call counter and `DispatchQueue.concurrentPerform`.
+
+### REP-250 — DraftEngine: `invalidate(threadID:)` mid-prime transitions to idle, not priming
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftEngine.invalidate(threadID:)` (from REP-054 / watcher-refire path) should cancel any in-flight prime task for that thread and transition to `.idle`. Pin the contract: start priming thread X (slow `StubLLMService` with delay); immediately call `invalidate(threadID: X)`; assert state is `.idle` (not `.priming`). Also assert no subsequent `.ready` transition arrives (task was cancelled). Guards against a zombie prime that completes after invalidation and incorrectly flips state to `.ready`.
+- success_criteria:
+  - `testInvalidateMidPrimeTransitionsToIdle` — invalidate during prime → state `.idle`
+  - `testInvalidateMidPrimeCancelsPrimingTask` — no `.ready` after invalidation
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; use a `DelayedStubLLMService` (inject delay > test window) + `waitUntil` helper.
+
+### REP-251 — RulesStore: compound predicate export + import round-trip (complex tree)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: Pin Codable correctness for deeply nested predicates: `and([senderIs("A"), or([textMatchesRegex("^hi"), not(senderUnknown)])])`. Export via `RulesStore.exportRules(to:)`; import via `importRules(from:)`; assert the re-imported rule's predicate tree equals the original (using `Equatable` or matching string descriptions). Also test: `or([])` round-trips as vacuous-false (or empty or); `and([not(hasUnread)])` round-trips correctly. Guards the `kind`-discriminator Codable path for every compound wrapper.
+- success_criteria:
+  - `testCompoundPredicateRoundTrip` — deeply nested and/or/not survives export+import unchanged
+  - `testOrEmptyPredicateRoundTrip` — `or([])` encodes and decodes without crash
+  - `testAndNotPredicateRoundTrip` — `and([not(...)])` round-trips correctly
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift`; compare predicate description strings or add `Equatable` to predicate in tests.
+
+### REP-252 — SearchIndex: BM25 ranking — higher-term-frequency thread ranks first
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: FTS5 BM25 ranking should promote threads where the query term appears more frequently. Test: index thread A with message body "hello hello hello" and thread B with "hello"; search "hello"; assert A ranks before B (first in result array). Also test: after adding a 3rd thread C ("hello hello hello hello hello"), C ranks above A. Guards against FTS5 config changes (e.g. `rank = 'bm25(0, 0, 1)'` parameter change) that break expected ranking semantics.
+- success_criteria:
+  - `testBM25RanksHigherFrequencyFirst` — 3× "hello" thread before 1× "hello" thread
+  - `testBM25RankingIsMonotonic` — 5× > 3× > 1× in result order
+  - Existing SearchIndexTests remain green
+- test_plan: 2 new tests in `SearchIndexTests.swift`; use in-memory FTS5 with threads having controlled term frequencies.
+
+### REP-253 — AGENTS.md: update "What's still stubbed" and "What's done" sections
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `AGENTS.md`
+- scope: **Docs-only.** Update `AGENTS.md` to reflect current automation state: (1) Remove `UNNotification inline reply` from "What's still stubbed" — resolved via REP-072 / commit `bbedd1a`. (2) Update Slack status in "What's still stubbed" to note REP-233/234 (KeychainHelper + SlackChannel stub) are in-progress. (3) Add `AppleScriptMessageReader` to "What's still stubbed" noting REP-236 is the implementation task. (4) Update test count in repo layout header from 502 to match current `grep -c "func test" Tests/ReplyAITests/*.swift` (should still be 502 if no new tests merged). Worker should run the grep to get exact count before committing.
+- success_criteria:
+  - `UNNotification inline reply` removed from "What's still stubbed" section
+  - Slack stub status updated to reflect REP-233/234 progress
+  - `AppleScriptMessageReader` added to "What's still stubbed"
+  - Test count in header verified by grep and updated if stale
+  - No architecture or gotchas sections modified (planner ban)
+- test_plan: N/A (docs-only). Worker verifies via `grep -c "func test" Tests/ReplyAITests/*.swift` before committing.
+
 
 ## Done / archived
 
