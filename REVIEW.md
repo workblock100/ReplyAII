@@ -6,6 +6,49 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-23 10:12 – 2026-04-23 16:04 UTC (last 6h) — ⭐⭐⭐⭐⭐
+
+**Rating: 5/5**
+
+Four substantive worker commits closing **15 REP tickets** (REP-105, -139, -146, -156, -159, -165, -176, -180, -181, -182, -184, -185, -186, -199, -201), **4 claim commits**, and **4 planner commits** (runs 3+4+5, with one no-op duplicate at the third refresh). Test suite grew **463 → 493 (+30 tests)** — grep-verified by `grep -c "func test" Tests/ReplyAITests/*.swift`. AGENTS.md test-count line now reads 493, matching reality — the +2 drift the prior reviewer flagged is resolved. Zero banned-action violations: no `Package.swift`/`project.yml`/`Info.plist`/`scripts/*`/`*.entitlements`/`design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes or rebases. Production source deltas are narrow and test-covered: Stats +11 (2s debounce + `flushNow()` + optional `fileURL`), SearchIndex +10 (`clear()` + counter reset), DraftEngine +9 (empty-stream `isStreaming` guard), ReplyAIApp +small (`willTerminate` observer for `flushNow`), ContactsResolver +3 (handle fallback).
+
+Planner-reviewer feedback loop closed cleanly this window: the prior reviewer flagged stale SHA `904b0e7` and a 465→463 test-count overclaim; planner run 4 opened REP-201 for both items and promoted REP-199 P2→P1 ("non-deterministic crash is a stability issue per reviewer"); worker shipped both. SHA `904b0e7` was already absent (planner run 5 had cleaned it), so worker correctly documented "no SHA change needed" rather than fabricating a fix. That is exactly the signal the 6h cadence is meant to produce.
+
+One soft concern (not a rating hit): `c8c3a04`'s co-author tag reads `Claude Sonnet 4.6`, and the user's documented automation-model rule pins worker/planner/reviewer cron tasks to Opus 4.7 + effortLevel=high. Work quality is high (Swift 6.3 cooperative-pool data-race fix via existing `Locked<T>` pattern) and the model can't be proven from diff alone — user may want to spot-check the scheduled-task config.
+
+### Shipped this window
+
+- **Stats persistence hardening (REP-105, -139).** 2s-debounced writes coalesce rule-eval and sync bursts into single I/O; `flushNow()` wired to `NSApplication.willTerminateNotification` so Force-Quit no longer drops the last session's counters; `fileURL: URL?` optional lets tests skip disk I/O entirely.
+- **InboxViewModelAutoPrimeTests data-race fix (REP-199).** `BlockingMockChannel` had a TOCTOU between cooperative-pool writes (`recentThreadsCallCount` / `blocking` / `pending`) and main-actor reads. Swift 6.3 + macOS 26.3 surfaces this as non-deterministic test crashes. Migrated to codebase's existing `Locked<T>` pattern + per-test RulesStore + in-memory SearchIndex.
+- **SearchIndex.clear() (REP-165).** FTS5 wipe path for preference reset / schema migration; paired `Stats.resetIndexedCounters()` keeps the per-channel counter honest.
+- **DraftEngine empty-stream recovery (REP-182).** Post-loop guard: if the LLM stream terminates without `.done`, `isStreaming` is cleared so callers transition to idle instead of "forever spinner".
+- **ContactsResolver handle fallback (REP-156).** `name(for:)` now returns the raw handle string when no contact matches — centralizes the inbox's existing higher-layer fallback.
+- **Per-thread message-cap contract pinned (REP-146).** Test-pins that `messages(forThreadID:limit:)` is an independent per-thread budget (3-thread fixture: 100/3/50 msgs, cap=20, aggregate = 43, not 60).
+- **Thread.hasAttachment source-of-truth tests (REP-159).** Two tests verify `hasAttachment` derives from `cache_has_attachments` via `recentThreads()`, not just from `messages()`.
+- **15 contract-test pins (REP-176/180/181/184/185/186).** 7-day prune threshold boundary, PromptBuilder systemPrompt-first ordering, IMessageSender −1708 retry cap (max 2), SearchIndex 3-token AND semantics, ContactsResolver TTL=0 vs TTL=∞ behavior, IMessageChannel chronological ordering.
+- **AGENTS.md test-count sync (REP-201).** Bumped 463 → 493 to match `grep -c "func test"` output.
+
+### Test coverage delta
+
+- **+30 tests (463 → 493)**, grep-verified. No test files shrunk.
+- Expanded: `IMessageChannelTests.swift` (+119), `SearchIndexTests.swift` (+125), `InboxViewModelTests.swift` (+90), `IMessageSenderTests.swift` (+55), `DraftEngineTests.swift` (+46), `PromptBuilderTests.swift` (+41), `StatsTests.swift` (+35), `DraftStoreTests.swift` (+34), `ContactsResolverTests.swift` (+32).
+- Production source: ~+40 LOC across 5 files. Test:source LOC ≈ **13:1** — ratio is lower than prior pure-pinning windows because actual product improvements shipped (Stats persistence, DraftEngine streaming recovery, SearchIndex clear). That's the right tradeoff.
+
+### Concerns
+
+- **Soft: co-author drift on `c8c3a04` (Sonnet 4.6 tag on worker commit).** Per the user's documented automation-model rule, worker/planner/reviewer cron tasks run Opus 4.7 + effortLevel=high. Planner commits this window also use `Sonnet 4.6` — consistent, but potentially not what's intended. Recommend user spot-check the scheduled-task model pin.
+- **Soft: duplicate planner commit at the third refresh.** `027f0ba` (46 open) and `1a7c5ea` (47 open) landed 5 minutes apart. Looks like a re-run that should have been a no-op. Not corrupting state, just noisy.
+- **Medium: claim `3f44d43` for REP-067/169/188/189 is unrealized at window close** (<1h old, so no action needed this window). Next reviewer should check whether the worker finished or timed out — if timed out, planner needs to reset the claims (same pattern used for REP-111/162/163 in run 4).
+
+### Suggestions for next planner cycle
+
+- **Check REP-067/169/188/189 claim age.** If worker-2026-04-23-111853 hasn't shipped substantively within ~2h of claim, reset the claims so another worker can pick them up.
+- **Planner no-op guard.** If the previous planner commit is <10 minutes old and the open-ticket set changed by ≤1 ticket, short-circuit to a single "no-op refresh" commit or skip entirely. The third-refresh duplicate burned a commit for zero signal.
+- **Enforce automation model pin.** Consider adding a check in the worker/planner/reviewer prompts that verifies the scheduled-task config is `claude-opus-4-7` + `effortLevel=high`, per the user's documented rule.
+- **Seed next queue with at least one product-visible M-sized item.** Last 6h closed 15 pure-contract/plumbing tickets — healthy, but Global `⌘⇧R`, Slack OAuth, Voice profile training, and Animation+a11y polish remain stubbed. Promoting one of these into the queue would balance test-pinning with net-product motion.
+
+---
+
 ## Window 2026-04-23 04:03 – 2026-04-23 10:12 UTC (last 6h) — ⭐⭐⭐⭐
 
 **Rating: 4/5**

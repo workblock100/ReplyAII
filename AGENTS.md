@@ -110,6 +110,7 @@ Tests/ReplyAITests/                493 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `c8c3a04` InboxViewModelAutoPrimeTests data-race fix via Locked<T> migration + AGENTS.md test count 463→493 (REP-199, REP-201, worker-2026-04-23-091326)
 - `1f170b0` SearchIndex.clear(), DraftEngine empty-stream idle fix, +18 contract tests (REP-165,176,180,181,182,184,185,186, worker-2026-04-23-075700)
 - `c99f235` per-thread cap contract tests, ContactsResolver handle fallback (REP-146,156, worker-2026-04-23-055654)
 - `0102852` Stats lifetime persistence + flushNow() + thread hasAttachment tests (REP-105,139,159, worker-2026-04-23-064432)
