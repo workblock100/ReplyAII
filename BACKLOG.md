@@ -241,8 +241,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.shared` resets all in-memory counters to zero on every app launch. Persist cumulative counters to `~/Library/Application Support/ReplyAI/stats-lifetime.json` (separate from the per-session weekly file REP-056 produces). On `Stats.init`, read the JSON file and seed the in-memory counters from it. On each `increment*` call, schedule an atomic write of the updated totals (debounced 2s to avoid write-per-increment overhead). Use an injectable `statsFileURL: URL?` (nil = skip persistence, for tests). Tests: `testLifetimeCountersSeedFromDisk` — init with pre-written JSON, verify counters start at correct value; `testLifetimeCountersAccumulateAcrossInits` — write to disk in first instance, init second instance, verify accumulation; `testNilURLSkipsPersistence` — ensure tests using nil URL never read/write files.
 - success_criteria:
@@ -259,7 +259,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: M
 - ui_sensitive: false
 - status: open
-- claimed_by: null
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Models/MessageThread.swift` (or equivalent), `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: The gallery has a `sfc-snooze` screen with a snooze-duration picker. Add the underlying ViewModel action: `snooze(thread: MessageThread, until: Date)`. This sets `thread.snoozedUntil = until`, adds the thread ID to a `snoozedThreadIDs: Set<String>` persisted in Preferences (`pref.inbox.snoozedThreadIDs`), and removes the thread from the `threads` display array. A `Task.sleep(until: date, clock: .continuous)` is started that re-inserts the thread when it wakes. UI that triggers this (the snooze picker view) is ui_sensitive and handled separately. Tests: `testSnoozedThreadHiddenFromList` — snooze a thread, assert it's absent from `threads`; `testSnoozedThreadResurfacesAfterExpiry` — use a mock clock (pass `wakeDate` in the near past) to verify re-insertion; `testSnoozeSetPersistedAcrossInit` — verify `pref.inbox.snoozedThreadIDs` is written.
 - success_criteria:
@@ -314,8 +314,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: The debounced write added by REP-105 may not fire if the app terminates before the 2s debounce window expires, causing the last session's increments to be lost. Add `Stats.flushNow()` that cancels the pending debounce task and writes current counters to disk synchronously. Wire it to `ReplyAIApp.applicationWillTerminate` (or equivalent scene lifecycle). Tests using injectable URL: increment counter + call `flushNow()` + re-init Stats from same URL → counter reflects all increments; calling `flushNow()` twice is idempotent; `flushNow()` on nil-URL Stats is a no-op.
 - success_criteria:
@@ -369,8 +369,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `MessageThread.hasAttachment` is derived from `cache_has_attachments` in the message SQL query. No test verifies the thread-level aggregation: a thread with at least one message where `cache_has_attachments=1` should produce `MessageThread.hasAttachment == true`; a thread with no such messages should produce `false`. Uses the in-memory SQLite fixture pattern. Two tests: one thread with attachment → `hasAttachment: true`; one thread without → `hasAttachment: false`.
 - success_criteria:
@@ -384,7 +384,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: M
 - ui_sensitive: false
 - status: open
-- claimed_by: null
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Channels/ChannelService.swift`, `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `IMessageSender.isValidChatGUID(_:)` is currently iMessage-only (validates the `iMessage;[+-];...` prefix). Reviewer noted this guard will need to widen when SMS or other channels add write capability. Refactor: move `isValidChatGUID` to a `static func validateChatGUID(_ guid: String, for channel: Channel) throws` on `IMessageSender`, and add a comment documenting the extension point for future channels. The iMessage validation logic is unchanged — same regex, same `SenderError.invalidChatGUID` throw. SMS path validates that the GUID matches `SMS;[+-];...` format (not yet enforced since SMS send is not wired, but the structure is ready). Tests: existing `isValidChatGUID` tests migrate to `validateChatGUID(for: .iMessage)`; new test `testSMSGUIDFormatRecognized` verifies the SMS branch doesn't throw for a well-formed SMS GUID; `testWrongChannelGUIDThrows` confirms an iMessage GUID passed with `.slack` channel throws. No behavior change for the iMessage path.
 - success_criteria:
@@ -401,7 +401,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: S
 - ui_sensitive: false
 - status: open
-- claimed_by: null
+- claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift`, `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: Add `listStoredDraftIDs() -> [String]` to `DraftStore`. It reads the drafts directory and returns the stem of every `.md` file (each stem is a thread ID). Useful for future "your drafts" UI and detecting orphaned entries whose threads have been deleted. Tests: empty store returns `[]`; after saving 3 drafts returns all 3 IDs; after deleting one draft, that ID is absent from the list; listing is order-independent.
 - success_criteria:
