@@ -375,6 +375,85 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertFalse(state.text.isEmpty, "recovered draft must have text")
     }
 
+    // MARK: - Whitespace trimming on done (REP-127)
+
+    func testDraftLeadingNewlinesTrimmed() async throws {
+        let engine = DraftEngine(service: FixedTextService(text: "\n\nHello there"))
+        let thread = Fixtures.threads[0]
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertEqual(engine.state(threadID: thread.id, tone: .warm).text, "Hello there",
+                       "leading newlines must be stripped on done transition")
+    }
+
+    func testDraftTrailingWhitespaceTrimmed() async throws {
+        let engine = DraftEngine(service: FixedTextService(text: "Hello   \n"))
+        let thread = Fixtures.threads[0]
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertEqual(engine.state(threadID: thread.id, tone: .warm).text, "Hello",
+                       "trailing whitespace must be stripped on done transition")
+    }
+
+    func testWhitespaceOnlyDraftReturnsEmptyString() async throws {
+        let engine = DraftEngine(service: FixedTextService(text: "   \n\n  "))
+        let thread = Fixtures.threads[0]
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertEqual(state.text, "", "all-whitespace draft must trim to empty string")
+        XCTAssertTrue(state.isDone, "engine must still reach done state for whitespace-only draft")
+    }
+
+    // MARK: - Rapid regenerate serialization (REP-132)
+
+    func testRapidRegenerateProducesOneDraftState() async throws {
+        // SlowFixedTextService emits tokens slowly so both calls overlap.
+        let engine = DraftEngine(service: SlowFixedTextService(text: "settled draft"))
+        let thread = Fixtures.threads[0]
+
+        // Prime once so there's a key in the cache, then regenerate twice quickly.
+        engine.prime(thread: thread, tone: .warm, history: [])
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+
+        try await waitUntil(timeout: 3.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertTrue(state.isDone, "engine must reach done state after rapid regenerates")
+        XCTAssertNil(state.error, "rapid regenerate must not leave an error state")
+        // Text must equal exactly one draft — no double-concatenation from two live streams.
+        XCTAssertEqual(state.text, "settled draft",
+                       "final text must be from exactly one completed stream")
+    }
+
+    func testRapidRegenerateDoesNotDoubleDraftCount() async throws {
+        // After rapid double-regenerate only one entry exists per (threadID, tone) key.
+        let engine = DraftEngine(service: SlowFixedTextService(text: "one"))
+        let thread = Fixtures.threads[0]
+
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+
+        try await waitUntil(timeout: 3.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+
+        // cacheSize == 1 confirms only one entry was created for this (threadID, tone).
+        XCTAssertEqual(engine.cacheSize, 1,
+                       "rapid regenerate must not create duplicate cache entries")
+        XCTAssertEqual(engine.state(threadID: thread.id, tone: .warm).text, "one",
+                       "final text must come from one stream, not two concatenated")
+    }
+
     // MARK: - helper
 
     private func waitUntil(
@@ -493,6 +572,49 @@ private final class FailOnceThenSucceedService: LLMService, @unchecked Sendable 
                 continuation.yield(DraftChunk(kind: .done))
                 continuation.finish()
             }
+        }
+    }
+}
+
+/// Emits a single fixed text string then done — useful for testing trimming behavior
+/// where the exact text content matters and Fixtures.seedDraft is not appropriate.
+private struct FixedTextService: LLMService {
+    let text: String
+
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(DraftChunk(kind: .text(text)))
+            continuation.yield(DraftChunk(kind: .done))
+            continuation.finish()
+        }
+    }
+}
+
+/// Emits a fixed text string with a delay between tokens so callers can overlap
+/// two calls before the first completes. Used to test rapid-regenerate serialization.
+private struct SlowFixedTextService: LLMService {
+    let text: String
+
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                // Initial delay so a second regenerate() call can land while we're still streaming.
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                if Task.isCancelled { continuation.finish(); return }
+                continuation.yield(DraftChunk(kind: .text(text)))
+                if Task.isCancelled { continuation.finish(); return }
+                continuation.yield(DraftChunk(kind: .done))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

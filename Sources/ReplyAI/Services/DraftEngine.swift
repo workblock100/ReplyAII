@@ -146,6 +146,7 @@ final class DraftEngine {
         case .loadProgress(let fraction, let message):
             modelLoadStatus = ModelLoadStatus(fraction: fraction, message: message)
         case .done:
+            s.text = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
             s.isStreaming = false
             s.isDone = true
             modelLoadStatus = nil

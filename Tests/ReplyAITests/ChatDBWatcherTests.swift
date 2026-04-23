@@ -113,6 +113,38 @@ final class ChatDBWatcherTests: XCTestCase {
         watcher.stop()
     }
 
+    // MARK: - stop() idempotency (REP-131)
+
+    /// Calling stop() twice must not crash (no double-cancel on DispatchSource).
+    func testDoubleStopDoesNotCrash() {
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            onChange: {}
+        )
+        watcher.stop()
+        watcher.stop()  // second call must be a no-op, not a crash
+        // Reaching here without EXC_BAD_ACCESS / preconditionFailure is the assertion.
+    }
+
+    /// A burst of fires followed immediately by stop() must result in zero callbacks.
+    /// The pending work item was already enqueued before stop(), but stop() cancels it.
+    func testCallbackNotFiredAfterStop() {
+        let counter = FireCounter()
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            onChange: { counter.bump() }
+        )
+        // Schedule a burst so there is a pending work item, then stop immediately.
+        for _ in 0..<5 { watcher.scheduleFire() }
+        watcher.stop()
+        // Wait well past the debounce window — the cancelled work item must not run.
+        waitPast(debounce + settle * 2)
+        XCTAssertEqual(counter.value, 0,
+                       "stop() must cancel the pending work item so callback does not fire")
+    }
+
     // MARK: - Helpers
 
     private func waitPast(_ interval: TimeInterval) {

@@ -285,22 +285,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No production code touched
 - test_plan: 2 new tests in `SearchIndexTests.swift` using `FileManager.default.temporaryDirectory` for URL injection; `tearDownWithError` removes temp file.
 
-### REP-127 — DraftEngine: trim leading/trailing whitespace from accumulated LLM stream output
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-210000
-- files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: LLMs commonly emit drafts with leading newlines (`"\n\nHello"`) or trailing whitespace (`"Hello   \n"`). When the stream accumulator transitions from `.loading` to `.ready(text:)`, apply `.trimmingCharacters(in: .whitespacesAndNewlines)` to the accumulated text before storing. Tests: `StubLLMService` configured to return a draft with leading newlines → state is `.ready("Hello")` not `.ready("\n\nHello")`; trailing whitespace draft → trimmed; whitespace-only draft → `.ready("")` without crash.
-- success_criteria:
-  - `DraftEngine` trims accumulated text before `.ready` transition
-  - `testDraftLeadingNewlinesTrimmed` — leading whitespace removed
-  - `testDraftTrailingWhitespaceTrimmed` — trailing whitespace removed
-  - `testWhitespaceOnlyDraftReturnsEmptyString` — all-whitespace input yields empty `.ready` without crash
-  - Existing DraftEngineTests remain green
-- test_plan: 3 new tests in `DraftEngineTests.swift`; extend `StubLLMService` fixture with configurable draft text or add a second stub variant.
-
 ### REP-128 — IMessageSender: chatGUID format pre-flight validation
 - priority: P2
 - effort: S
@@ -349,34 +333,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing PreferencesTests remain green
 - test_plan: 3 new tests in `PreferencesTests.swift` using suiteName-isolated UserDefaults; use a fresh suite per test to avoid cross-test date pollution.
 
-### REP-131 — ChatDBWatcher: stop() idempotency test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-210000
-- files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift`
-- scope: `ChatDBWatcher.stop()` cancels the DispatchSource. If called twice (e.g. from a `deinit` race with an explicit stop), the second cancel on an already-cancelled source must not crash. Add a test: start a watcher, call `stop()` twice in succession, assert no crash (no `preconditionFailure` or `EXC_BAD_ACCESS`). Additionally, verify the watcher's callback is NOT invoked after the first `stop()` — a spurious callback after cancellation would indicate the source was not cancelled correctly. No production code changes expected.
-- success_criteria:
-  - `testDoubleStopDoesNotCrash` — calling stop() twice never traps
-  - `testCallbackNotFiredAfterStop` — watcher callback is silent after stop()
-  - No production code touched
-- test_plan: 2 new tests in `ChatDBWatcherTests.swift`; use a temp file as the watched path (existing pattern in that test file).
-
-### REP-132 — DraftEngine: rapid regenerate() calls do not spawn parallel LLM streams
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-210000
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: The concurrent prime guard (REP-049) prevents two simultaneous `prime()` calls. `regenerate()` should exhibit the same serialization: if called while a draft is `.loading`, the second call should cancel the first and start fresh (or be dropped), not run two streams in parallel. Using a `StubLLMService` with a configurable delay, call `regenerate()` for the same `(threadID, tone)` twice in quick succession. Assert the engine reaches exactly one `.ready` state (not two), and the draft counter increments by 1, not 2. Tests the invariant without timing dependencies by using a slow stub.
-- success_criteria:
-  - `testRapidRegenerateProducesOneDraftState` — final state is `.ready` exactly once
-  - `testRapidRegenerateDoesNotDoubleDraftCount` — draft acceptance count not doubled
-  - No production code changes if the guard already exists (test confirms invariant); add guard if not
-- test_plan: 2 new tests in `DraftEngineTests.swift` using a slow `StubLLMService` with `Task.sleep` before yielding.
-
 ### REP-133 — RulesStore: export round-trip covers all currently-shipped predicate kinds
 - priority: P2
 - effort: M
@@ -420,22 +376,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testSessionStartedAtApproximatelyNow`, `testSessionDurationIsNonNegative`, `testSessionDurationIncludesInWeeklyLog`
   - Existing StatsTests remain green
 - test_plan: 3 new tests in `StatsTests.swift` using isolated `Stats` instance (nil URL).
-
-### REP-136 — AGENTS.md: consolidate duplicate test-count lines
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-210000
-- files_to_touch: `AGENTS.md`
-- scope: AGENTS.md has the test count in two hard-coded places: the repo-layout code fence header (`Tests/ReplyAITests/ NNN tests`, currently 365) and the "XCTest cases, all green." line in the architecture section (currently 365). The reviewer flagged this duplication in the 2026-04-22 22:10 review. Additionally, the Testing expectations section still references "(340 as of worker-2026-04-22-191500; kept current in the repo layout header above)" — this parenthetical is stale and should be removed. Task: (1) remove the `"NNN XCTest cases, all green."` sentence entirely or replace with a link to the header count; (2) strip the stale "(340 as of …)" parenthetical from the Testing expectations bullet; (3) leave the repo-layout header at 365 (already correct). Docs-only change — no Swift source touches.
-- success_criteria:
-  - Repo-layout header confirms current count (365) — do NOT change this line
-  - Duplicate "NNN XCTest cases, all green." sentence removed or merged with header reference
-  - Stale "(340 as of worker-2026-04-22-191500; …)" parenthetical removed from Testing expectations
-  - No source files touched
-  - Reviewer no longer flags dual test-count lines
-- test_plan: N/A (docs-only).
 
 ### REP-137 — PromptBuilder: oversized system instruction guard
 - priority: P2
@@ -603,6 +543,69 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 ---
 
 ## Done / archived
+
+### REP-136 — AGENTS.md: consolidate duplicate test-count lines
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-210000
+- files_to_touch: `AGENTS.md`
+- scope: AGENTS.md currently has the test count in two places: the repo-layout code fence header (`Tests/ReplyAITests/ NNN tests`) and the Testing expectations section ("NNN XCTest cases, all green."). The reviewer flagged this duplication in the 2026-04-22 22:10 review. Remove the hard-coded number from the Testing expectations section and replace with the live-count instruction: `Run \`grep -r "func test" Tests/ | wc -l\` for the current count`. Update the repo-layout header to the current count (349). Docs-only change — no Swift source touches.
+- success_criteria:
+  - Repo-layout header updated to current count (349)
+  - Testing expectations section uses grep instruction instead of hard-coded number
+  - No source files touched
+  - Reviewer no longer flags dual test-count lines
+- test_plan: N/A (docs-only).
+
+
+### REP-132 — DraftEngine: rapid regenerate() calls do not spawn parallel LLM streams
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-210000
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: The concurrent prime guard (REP-049) prevents two simultaneous `prime()` calls. `regenerate()` should exhibit the same serialization: if called while a draft is `.loading`, the second call should cancel the first and start fresh (or be dropped), not run two streams in parallel. Using a `StubLLMService` with a configurable delay, call `regenerate()` for the same `(threadID, tone)` twice in quick succession. Assert the engine reaches exactly one `.ready` state (not two), and the draft counter increments by 1, not 2. Tests the invariant without timing dependencies by using a slow stub.
+- success_criteria:
+  - `testRapidRegenerateProducesOneDraftState` — final state is `.ready` exactly once
+  - `testRapidRegenerateDoesNotDoubleDraftCount` — draft acceptance count not doubled
+  - No production code changes if the guard already exists (test confirms invariant); add guard if not
+- test_plan: 2 new tests in `DraftEngineTests.swift` using a slow `StubLLMService` with `Task.sleep` before yielding.
+
+
+### REP-131 — ChatDBWatcher: stop() idempotency test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-210000
+- files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift`
+- scope: `ChatDBWatcher.stop()` cancels the DispatchSource. If called twice (e.g. from a `deinit` race with an explicit stop), the second cancel on an already-cancelled source must not crash. Add a test: start a watcher, call `stop()` twice in succession, assert no crash (no `preconditionFailure` or `EXC_BAD_ACCESS`). Additionally, verify the watcher's callback is NOT invoked after the first `stop()` — a spurious callback after cancellation would indicate the source was not cancelled correctly. No production code changes expected.
+- success_criteria:
+  - `testDoubleStopDoesNotCrash` — calling stop() twice never traps
+  - `testCallbackNotFiredAfterStop` — watcher callback is silent after stop()
+  - No production code touched
+- test_plan: 2 new tests in `ChatDBWatcherTests.swift`; use a temp file as the watched path (existing pattern in that test file).
+
+
+### REP-127 — DraftEngine: trim leading/trailing whitespace from accumulated LLM stream output
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-210000
+- files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: LLMs commonly emit drafts with leading newlines (`"\n\nHello"`) or trailing whitespace (`"Hello   \n"`). When the stream accumulator transitions from `.loading` to `.ready(text:)`, apply `.trimmingCharacters(in: .whitespacesAndNewlines)` to the accumulated text before storing. Tests: `StubLLMService` configured to return a draft with leading newlines → state is `.ready("Hello")` not `.ready("\n\nHello")`; trailing whitespace draft → trimmed; whitespace-only draft → `.ready("")` without crash.
+- success_criteria:
+  - `DraftEngine` trims accumulated text before `.ready` transition
+  - `testDraftLeadingNewlinesTrimmed` — leading whitespace removed
+  - `testDraftTrailingWhitespaceTrimmed` — trailing whitespace removed
+  - `testWhitespaceOnlyDraftReturnsEmptyString` — all-whitespace input yields empty `.ready` without crash
+  - Existing DraftEngineTests remain green
+- test_plan: 3 new tests in `DraftEngineTests.swift`; extend `StubLLMService` fixture with configurable draft text or add a second stub variant.
+
 
 *(Planner moves finished items here each day. Worker never modifies this section.)*
 
