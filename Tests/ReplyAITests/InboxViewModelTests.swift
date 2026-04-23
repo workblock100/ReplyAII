@@ -19,27 +19,41 @@ private func fastContacts() -> ContactsResolver {
 /// each call until `resumeAll()` is called. `enteredStream` fires once
 /// the call has incremented the counter and entered the blocking wait,
 /// so tests can synchronise without busy-polling.
+///
+/// All mutable state is wrapped in `Locked<T>` so that the cooperative-pool
+/// thread running `recentThreads` and the main-actor test code that reads
+/// `recentThreadsCallCount` / `blocking` never race. Without this,
+/// Swift 6 strict-concurrency + macOS 26 TSan would flag data races on
+/// plain integer reads crossing executor boundaries.
 private final class BlockingMockChannel: ChannelService, @unchecked Sendable {
-    private let lock = NSLock()
-    private(set) var recentThreadsCallCount: Int = 0
-    var blocking: Bool = true
-    private var pending: [CheckedContinuation<[MessageThread], Error>] = []
+    private let _callCount = Locked(0)
+    private let _blocking  = Locked(true)
+    private let _pending   = Locked([CheckedContinuation<[MessageThread], Error>]())
 
     let (enteredStream, enteredContinuation) = AsyncStream<Void>.makeStream()
 
+    var recentThreadsCallCount: Int { _callCount.withLock { $0 } }
+    var blocking: Bool {
+        get { _blocking.withLock { $0 } }
+        set { _blocking.withLock { $0 = newValue } }
+    }
+
     func recentThreads(limit: Int) async throws -> [MessageThread] {
-        lock.lock(); recentThreadsCallCount += 1; lock.unlock()
+        _callCount.withLock { $0 += 1 }
         guard blocking else { return [] }
         enteredContinuation.yield(())
         return try await withCheckedThrowingContinuation { cont in
-            lock.lock(); pending.append(cont); lock.unlock()
+            _pending.withLock { $0.append(cont) }
         }
     }
 
     func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
 
     func resumeAll() {
-        lock.lock(); let conts = pending; pending = []; lock.unlock()
+        let conts = _pending.withLock { arr -> [CheckedContinuation<[MessageThread], Error>] in
+            defer { arr = [] }
+            return arr
+        }
         for cont in conts { cont.resume(returning: []) }
     }
 }
@@ -321,10 +335,21 @@ final class InboxViewModelThreadSelectionTests: XCTestCase {
         return ch
     }
 
+    private func makeRules() -> RulesStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-selection-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+        return store
+    }
+
     func testSelectThreadUpdatesSelectedID() {
         let t1 = MessageThread(id: "t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
-        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts())
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(),
+                                rules: makeRules(), searchIndex: SearchIndex(databaseURL: nil))
         vm.selectThread("t2")
         XCTAssertEqual(vm.selectedThreadID, "t2", "selectThread must update selectedThreadID")
     }
@@ -334,7 +359,9 @@ final class InboxViewModelThreadSelectionTests: XCTestCase {
         // autoPrime defaults to true after registerReplyAIDefaults
         let t1 = MessageThread(id: "t1-prime", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "t2-prime", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
-        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         var primeCallCount = 0
         vm.primeHandler = { _, _, _ in primeCallCount += 1 }
@@ -347,7 +374,9 @@ final class InboxViewModelThreadSelectionTests: XCTestCase {
         let d = makeDefaults()
         let t1 = MessageThread(id: "t1-idem", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "t2-idem", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
-        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         var primeCallCount = 0
         vm.primeHandler = { _, _, _ in primeCallCount += 1 }
@@ -370,6 +399,21 @@ final class InboxViewModelAutoPrimeTests: XCTestCase {
         return ch
     }
 
+    /// Isolated RulesStore backed by a per-test temp file so `startObservingRules`
+    /// inside InboxViewModel.init does not share the production rules.json across
+    /// tests. Without isolation, concurrent runs of different test classes could
+    /// mutate the shared file, trigger onChange callbacks in other tests' VMs,
+    /// and race on the @Observable machinery under Swift 6 + macOS 26.
+    private func makeRules() -> RulesStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-autoprime-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+        return store
+    }
+
     func testAutoPrimeTrueCallsPrime() {
         let suite = "test.ReplyAI.autoprime.true.\(UUID())"
         let d = UserDefaults(suiteName: suite)!
@@ -378,7 +422,9 @@ final class InboxViewModelAutoPrimeTests: XCTestCase {
 
         let t1 = MessageThread(id: "ap-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "ap-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
-        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         var primeCalled = false
         vm.primeHandler = { _, _, _ in primeCalled = true }
@@ -395,7 +441,9 @@ final class InboxViewModelAutoPrimeTests: XCTestCase {
 
         let t1 = MessageThread(id: "ap2-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "ap2-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
-        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(), contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         var primeCalled = false
         vm.primeHandler = { _, _, _ in primeCalled = true }
@@ -790,12 +838,24 @@ final class InboxViewModelReselectTests: XCTestCase {
         return d
     }
 
+    private func makeRules() -> RulesStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-reselect-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+        return store
+    }
+
     func testReselectSameThreadDoesNotDoublePrime() {
         let d = makeDefaults()
         let t1 = MessageThread(id: "rep155-t1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
         let t2 = MessageThread(id: "rep155-t2", channel: .imessage, name: "Bob",   avatar: "B", preview: "", time: "")
         let ch = BlockingMockChannel(); ch.blocking = false
-        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         var primeCount = 0
         vm.primeHandler = { _, _, _ in primeCount += 1 }
@@ -812,7 +872,9 @@ final class InboxViewModelReselectTests: XCTestCase {
         let t1 = MessageThread(id: "rep155-ta", channel: .imessage, name: "Carol", avatar: "C", preview: "", time: "")
         let t2 = MessageThread(id: "rep155-tb", channel: .imessage, name: "Dave",  avatar: "D", preview: "", time: "")
         let ch = BlockingMockChannel(); ch.blocking = false
-        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(), defaults: d)
+        let vm = InboxViewModel(threads: [t1, t2], imessage: ch, contacts: fastContacts(),
+                                rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
 
         vm.selectThread("rep155-tb")
         vm.selectThread("rep155-tb")
