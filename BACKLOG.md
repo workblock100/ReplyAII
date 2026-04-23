@@ -340,8 +340,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-201500
 - files_to_touch: `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: The in-memory cache in `ContactsResolver` is never flushed mid-session unless TTL expires (REP-074). If the user adds a new contact, that handle remains cached as the raw string until TTL. Register for `NSNotification.Name.CNContactStoreDidChange` in `ContactsResolver.init` and flush all cache entries when the notification fires, forcing a re-query on the next access. Inject `NotificationCenter` via init parameter (default `.default`) for testability. Tests: `testContactStoreChangeFlushesCache` — resolve a handle, post the notification, resolve again, verify the store was called twice (not once from cache); `testFlushDoesNotCrashOnEmptyCache` — post the notification without any prior resolutions.
 - success_criteria:
@@ -369,8 +369,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-201500
 - files_to_touch: `Sources/ReplyAI/Rules/RulesStore.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore.exportRules(to:)` (REP-035) writes a bare JSON array `[SmartRule]`. This is fragile: a future predicate type addition would silently corrupt imports on older versions. Wrap the export in a `RulesExport` struct `{ "version": 1, "rules": [...] }`. Update `importRules(from:)` to read the version key and handle `version == 1` as the current schema; unknown versions throw a new `RulesStoreError.unsupportedExportVersion`. Tests: `testExportIncludesVersionField` — verify exported JSON contains `"version": 1`; `testImportRoundTripWithVersionField` — export then import produces same rules; `testImportUnknownVersionThrows` — JSON with `"version": 99` throws `unsupportedExportVersion`.
 - success_criteria:
@@ -415,8 +415,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-201500
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Add `pref.app.launchCount: Int` (default 0) to `Preferences`. This key is NOT wiped by `wipe()` — it tracks lifetime launches regardless of settings resets. Increment in `ReplyAIApp.init()` using `Preferences.shared.launchCount += 1`. Future consumers can gate first-run hints or onboarding nudges on `launchCount == 1`. Tests: `testLaunchCountStartsAtZero` — fresh suite returns 0; `testLaunchCountIncrementsOnWrite` — write 1, read back 1; `testLaunchCountSurvivesWipe` — set to 5, call wipe(), verify count is still 5 (not reset).
 - success_criteria:
@@ -446,8 +446,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-22-201500
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: Messages with `message.text IS NULL AND message.attributedBody IS NULL` represent deleted messages, unsent drafts, or unsupported iMessage extensions (Handoff, Digital Touch). The current SQL `COALESCE(text, attributedBody)` returns NULL for these rows; `AttributedBodyDecoder` is not invoked. Confirm the decoder path returns an empty string or a placeholder (e.g. `"[deleted]"`) rather than crashing or producing nil that trips downstream displays. Add a fixture: an in-memory SQLite row with both columns NULL; assert the resulting `Message.body` is not nil (returns empty string or explicit placeholder); assert no crash on decode.
 - success_criteria:
