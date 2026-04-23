@@ -200,21 +200,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - All existing AttributedBodyDecoderTests remain green
 - test_plan: Extend `AttributedBodyDecoderTests.swift` with 3 new hex-fixture cases.
 
-### REP-079 — SmartRule: timeOfDay(start:end:) predicate for hour-range matching
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-000050
-- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
-- scope: The current predicate DSL has 8 primitive kinds (senderIs, senderUnknown, hasAttachment, isGroupChat, textMatchesRegex, messageAgeOlderThan, hasUnread, and/or/not). Add `case timeOfDay(startHour: Int, endHour: Int)` (0–23, inclusive range, wrap-around for overnight e.g. 22–06). `RuleEvaluator` evaluates against `Calendar.current.component(.hour, from: Date())`. Inject a `DateProvider: () -> Date` for testability (same pattern as `messageAgeOlderThan`). Tests: current hour within range matches; current hour outside range doesn't; wrap-around overnight range (22–06) works correctly; Codable round-trip preserves startHour/endHour.
-- success_criteria:
-  - `RulePredicate.timeOfDay(startHour:endHour:)` case added and Codable
-  - `RuleEvaluator` evaluates with injectable `DateProvider`
-  - `testTimeOfDayWithinRangeMatches`, `testTimeOfDayOutsideRangeMismatches`, `testOvernightWrapAround`, `testTimeOfDayCodableRoundTrip`
-  - Existing RulesTests remain green
-- test_plan: Extend `RulesTests.swift` with 4 new cases using an injectable date closure.
-
 ### REP-082 — ThreadRow: selection highlight bar animation with matchedGeometryEffect
 - priority: P2
 - effort: S
@@ -289,21 +274,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testThreadNameMatchesRegexWhenMatching`, `testThreadNameMatchesRegexWhenNotMatching`, `testThreadNameInvalidRegexThrows`, `testThreadNameMatchesRegexCodableRoundTrip`
   - Existing RulesTests remain green
 - test_plan: 4 new tests in `RulesTests.swift` in a `ThreadNameMatchesRegexTests` class.
-
-
-### REP-133 — RulesStore: export round-trip covers all currently-shipped predicate kinds
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-000050
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: REP-035 added export/import; REP-110 adds a version wrapper. Neither test exercises the full predicate set — existing tests use a small subset of predicates. Build one `SmartRule` for each currently-shipped predicate kind: `senderIs`, `senderUnknown`, `hasAttachment`, `isGroupChat`, `textMatchesRegex`, `messageAgeOlderThan`, `hasUnread`, plus composite `and`, `or`, `not` wrappers. Export all to a temp JSON URL, import back, assert every rule round-trips with an identical predicate (equality check). This is a Codable regression test: any new predicate kind that breaks the discriminated-union encoder/decoder will fail here.
-- success_criteria:
-  - `testExportImportRoundTripAllPredicateKinds` — all 8+ predicate kinds survive export/import unmodified
-  - Test uses a temp URL; `tearDownWithError` cleans up
-  - No production code touched
-- test_plan: 1 new test in `RulesTests.swift`; extend if new predicate kinds land (REP-079, REP-129) by adding their cases.
 
 
 ### REP-135 — Stats: sessionStartedAt timestamp and sessionDuration computed field
@@ -597,10 +567,249 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - All existing `IMessageSenderTests` remain green
 - test_plan: Migrate existing chatGUID validation tests to new API; add 2 new cross-channel tests.
 
+### REP-163 — DraftStore: `listStoredDraftIDs()` method + orphan detection test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift`, `Tests/ReplyAITests/DraftStoreTests.swift`
+- scope: Add `listStoredDraftIDs() -> [String]` to `DraftStore`. It reads the drafts directory and returns the stem of every `.md` file (each stem is a thread ID). Useful for future "your drafts" UI and detecting orphaned entries whose threads have been deleted. Tests: empty store returns `[]`; after saving 3 drafts returns all 3 IDs; after deleting one draft, that ID is absent from the list; listing is order-independent.
+- success_criteria:
+  - `DraftStore.listStoredDraftIDs() -> [String]` implemented
+  - `testListStoredDraftIDsEmpty` — empty store returns `[]`
+  - `testListStoredDraftIDsAfterSave` — 3 saved drafts → 3 IDs returned
+  - `testListStoredDraftIDsAfterDelete` — deleted draft ID absent from list
+  - Existing DraftStoreTests remain green
+- test_plan: 3 new tests in `DraftStoreTests.swift` using temp directory URL injection.
+
+### REP-164 — IMessageChannel: per-thread message pagination with `before:` rowID cursor
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `messages(forThreadID:limit:)` currently fetches the N most-recent messages. Add an overload `messages(forThreadID:limit:before:)` where `before: Int64?` is an optional SQLite ROWID cursor. When non-nil the SQL WHERE clause includes `message.ROWID < before`, enabling "load older" pagination. The existing overload delegates to `before: nil` for backward compatibility. Tests: messages returned all have `ROWID < before`; `before: nil` matches current behavior; fewer than limit available returns all; `before` equal to minimum ROWID in DB returns empty.
+- success_criteria:
+  - `messages(forThreadID:limit:before:)` overload added
+  - Existing overload delegates to `before: nil`
+  - `testMessagesBeforeCursorFiltersCorrectly` — returned messages have rowID < before
+  - `testMessagesPaginationNilCursorMatchesCurrent` — nil cursor identical to legacy call
+  - `testMessagesPaginationReturnsAllWhenUnderLimit` — fewer than limit → all returned
+  - `testMessagesPaginationAtMinRowIDReturnsEmpty` — before=minROWID → empty
+  - Existing IMessageChannelTests remain green
+- test_plan: 4 new tests in `IMessageChannelTests.swift` using multi-message in-memory SQLite fixture.
+
+### REP-165 — SearchIndex: `clear()` method to wipe and rebuild
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: Add `clear()` to `SearchIndex` that executes `DELETE FROM thread_search` and resets the per-channel indexed-message counter in `Stats` to zero (so the counter reflects actual indexed content after a rebuild). Called when the user wipes preferences or when a schema migration forces a full rebuild. Tests: upsert 3 threads, call `clear()`, search returns empty; upsert again after clear → searchable; concurrent `clear()` + `upsert()` does not crash.
+- success_criteria:
+  - `SearchIndex.clear()` executes `DELETE FROM thread_search` and resets Stats counter
+  - `testClearWipesAllIndexedThreads` — no results after clear
+  - `testClearThenUpsertIsSearchable` — re-indexed after clear is findable
+  - `testConcurrentClearAndUpsertNoCrash` — concurrent calls complete without crash
+  - Existing SearchIndexTests remain green
+- test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex`.
+
+### REP-166 — RuleEvaluator: empty-rules-array edge cases (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: No test covers `RuleEvaluator` with an empty rules array, the trivial boundary case. `matching(rules: [], context:)` should return `[]`; `defaultTone(rules: [], context:)` should return nil; `apply(rules: [], to:)` should return `[]`. All are safe no-ops. No production code changes expected.
+- success_criteria:
+  - `testMatchingEmptyRulesReturnsEmpty` — `matching([])` → `[]`
+  - `testDefaultToneEmptyRulesReturnsNil` — `defaultTone([])` → nil
+  - `testApplyEmptyRulesReturnsEmpty` — `apply([], to:)` → `[]`
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift`; fabricate any `RuleContext`.
+
+### REP-167 — Preferences: all AppStorage key strings are distinct (regression guard)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: Duplicate `UserDefaults` key strings silently shadow each other — a future typo (e.g. reusing `"replyai.inbox.threadLimit"` for a new pref) would cause silent data loss. Add a test that explicitly lists all string keys defined in `Preferences` and asserts their uniqueness. The test should enumerate the constants via a hand-maintained array (not reflection) so adding a new key forces the engineer to add it here too. No production code changes.
+- success_criteria:
+  - `testAllPreferenceKeysAreUnique` — no duplicate key strings in the known-keys array
+  - If a new key is added to `Preferences` without updating the test, the test fails at review
+  - Existing PreferencesTests remain green
+- test_plan: 1 new test in `PreferencesTests.swift`; maintain the key array alongside `Preferences.swift`.
+
+### REP-168 — InboxViewModel: `isSyncing` flag transitions during syncFromIMessage
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: `InboxViewModel.syncFromIMessage()` has no observable loading state — the UI has no way to know a sync is in progress (useful for showing a spinner or disabling the sync button). Add `isSyncing: Bool` (default false) that is set to true at the top of `syncFromIMessage` and reset to false in the defer block. Tests: `isSyncing` is true while sync is in progress; `isSyncing` is false after success; `isSyncing` is false after a channel throw.
+- success_criteria:
+  - `InboxViewModel.isSyncing: Bool` added
+  - Set true at sync start, false in defer
+  - `testIsSyncingTrueWhileSyncing` — flag is true during a slow sync
+  - `testIsSyncingFalseAfterSuccess` — flag reset after normal completion
+  - `testIsSyncingFalseAfterError` — flag reset after channel throws
+  - Existing InboxViewModelTests remain green
+- test_plan: 3 new tests in `InboxViewModelTests.swift`; use a slow-completion mock channel to observe the in-progress state.
+
+### REP-169 — DraftEngine: N-concurrent-thread primes don't leak in-flight tasks (stress test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: Prime 10 different thread IDs concurrently from a `DispatchQueue.concurrentPerform` loop using `StubLLMService`. After all primes complete (wait using `waitUntil`), verify that every thread is `.ready` and none are stuck in `.priming`. Guards against a task-leak where a concurrent invalidate+prime race leaves an orphaned `Task` whose completion updates are silently discarded, starving the state machine.
+- success_criteria:
+  - `testConcurrentPrimesOnDistinctThreadsAllReachReady` — 10 threads, all `.ready` after concurrent prime
+  - `testNoPrimingStateLeaksAfterConcurrentPrimes` — no thread stuck in `.priming` after completion
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; use `StubLLMService` with configurable stream delay; `waitUntil` helper.
+
+### REP-170 — SmartRule: `contactGroupMatchesName(groupName:)` predicate
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: Add `case contactGroupMatchesName(groupName: String)` to `RulePredicate`. `RuleContext` gains `contactGroupNames: [String]` (contact group names for the sender's handle, resolved via `CNContactStore.groups(matching:)` in `ContactsResolver`). `RuleEvaluator` evaluates using `context.contactGroupNames.contains { $0.localizedCaseInsensitiveContains(groupName) }`. Codable discriminator: `"contactGroupMatchesName"`. `SfcRulesView.humanize` gets a new case string. Tests: matching group name matches; non-matching group name doesn't; case-insensitive match; Codable round-trip preserves groupName; empty contactGroupNames returns false.
+- success_criteria:
+  - `RulePredicate.contactGroupMatchesName(groupName:)` case added and Codable
+  - `RuleContext.contactGroupNames: [String]` field
+  - `RuleEvaluator` case-insensitive contains check
+  - `SfcRulesView.humanize` updated
+  - `testContactGroupMatchesWhenGroupPresent`, `testContactGroupNoMatchWhenGroupAbsent`, `testContactGroupCaseInsensitive`, `testContactGroupMatchesCodableRoundTrip`, `testContactGroupEmptyGroupsReturnsFalse`
+  - Existing RulesTests remain green
+- test_plan: 5 new tests in `RulesTests.swift`; mock `contactGroupNames` in `RuleContext` directly without CNContactStore.
+
+### REP-171 — Stats: `snapshot()` dictionary contains all expected counter keys (regression guard)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
+- scope: `Stats.snapshot()` returns a `[String: Any]` summary dictionary used by `writeWeeklyLog()`. No test pins which keys are present. A future rename could silently drop a key and break the weekly log format without a test failure. Add a test asserting that a freshly-initialized Stats instance's snapshot contains all expected top-level keys. Maintain a `knownKeys` array in the test that matches the keys actually written by `snapshot()`.
+- success_criteria:
+  - `testSnapshotContainsAllExpectedKeys` — snapshot dict has all known key strings
+  - If a key is renamed, this test fails; engineer updates both Stats and the test
+  - Existing StatsTests remain green
+- test_plan: 1 new test in `StatsTests.swift`; use isolated `Stats(statsFileURL: nil)`.
+
+### REP-172 — AttributedBodyDecoder: zero-length and all-zero blobs return nil (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/AttributedBodyDecoderTests.swift`
+- scope: `AttributedBodyDecoder.extractText(_:)` returns nil when no 0x2B tag is present. Pin the nil-on-no-tag contract for the two most common edge inputs: empty `Data()` and a 32-byte all-zero blob (a common null/empty DB entry). Both should return nil (not crash, not return empty string). Also test that a 1-byte blob containing only `0x2B` (the tag byte with no following length) returns nil without crashing — malformed minimal input.
+- success_criteria:
+  - `testEmptyDataReturnsNil` — `extractText(Data())` → nil
+  - `testAllZeroBlobReturnsNil` — 32-byte zero blob → nil
+  - `testSingleTagByteWithNoPayloadReturnsNil` — `Data([0x2B])` → nil, no crash
+  - Existing AttributedBodyDecoderTests remain green
+- test_plan: 3 new tests in `AttributedBodyDecoderTests.swift`; fabricate minimal `Data` values inline.
+
+### REP-173 — ChatDBWatcher: repeated stop→reinit cycles complete without crash (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift`
+- scope: Restart path: deallocate a `ChatDBWatcher`, create a new instance on the same source path, start, stop. Repeat 5 times. Guards against `DispatchSource` retain-cycle accumulation, handle reuse, or double-cancel from the prior watcher's `deinit`. After 5 cycles, the final watcher should fire callbacks correctly (write a test-file timestamp and verify the callback triggers). Uses a temp file URL as the watched path (no real chat.db needed).
+- success_criteria:
+  - `testFiveStopReinitCyclesNoCrash` — 5 reinit cycles complete without crash or trap
+  - `testFinalWatcherAfterCyclesFiresCallback` — 6th instance fires its onChange callback on file touch
+  - Existing ChatDBWatcherTests remain green
+- test_plan: 2 new tests in `ChatDBWatcherTests.swift`; use `FileManager.default.temporaryDirectory` for the watched path; `tearDownWithError` removes temp file.
+
+### REP-174 — IMessageSender: special-character escaping in AppleScript string construction
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: The AppleScript template embeds the message text inside a quoted string: `send "<text>" to <target>`. If `<text>` contains `"` (unescaped), the AppleScript is syntactically broken; a `
+` inside the string may produce a multi-line literal that confuses the `tell` block. Add an `escapeForAppleScript(_:)` helper that escapes `\` → `\`, `"` → `"`, and newlines → `
+` (the two-char literal). Apply it to `text` before insertion. Tests (dry-run mode): message with `"hello"` (quotes) produces script containing `"hello"`; message with embedded newline produces `
+` literal in script; message with backslash doubles it; emoji string passes unchanged.
+- success_criteria:
+  - `IMessageSender.escapeForAppleScript(_:) -> String` helper added (internal)
+  - Applied to `text` before building the AppleScript string
+  - `testDoubleQuoteEscapedInAppleScript` — `"` → `"`
+  - `testNewlineEscapedInAppleScript` — newline → `
+` literal
+  - `testBackslashEscapedInAppleScript` — `\` → `\`
+  - `testEmojiPassesThroughUnchanged` — 🐢 emoji in message is not altered
+  - Existing IMessageSenderTests remain green
+- test_plan: 4 new tests in `IMessageSenderTests.swift`; inspect the generated `scriptSource` string in dry-run mode.
+
+### REP-175 — RulesStore: `import()` merge-not-replace semantics (test-only)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: REP-035's `import(from:)` has UUID-keyed merge semantics (update existing UUIDs, append new UUIDs, skip malformed). The existing test `testImportMergesRules` may not cover all three merge outcomes simultaneously. Ensure full coverage: (1) store contains rule A and B; import file contains updated rule A (same UUID, new action) and new rule C (fresh UUID) → result has 3 rules, A's action updated, B unchanged, C appended; (2) import of a file with no new UUIDs and no updated UUIDs produces identical store; (3) import of empty rules array is a no-op. No production code changes.
+- success_criteria:
+  - `testImportUpdatesExistingAndAppendsNew` — 2-rule store + import with 1 update + 1 new → 3 rules, updated action correct
+  - `testImportWithNoChangesIsNoop` — import matching existing UUIDs and actions → store unchanged
+  - `testImportEmptyArrayIsNoop` — import `[]` → store count unchanged
+  - All import-related RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift`; use suiteName-isolated `RulesStore` and temp URL for export.
+
 
 ---
 
 ## Done / archived
+
+### REP-079 — SmartRule: timeOfDay(start:end:) predicate for hour-range matching
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-000050
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: The current predicate DSL has 8 primitive kinds (senderIs, senderUnknown, hasAttachment, isGroupChat, textMatchesRegex, messageAgeOlderThan, hasUnread, and/or/not). Add `case timeOfDay(startHour: Int, endHour: Int)` (0–23, inclusive range, wrap-around for overnight e.g. 22–06). `RuleEvaluator` evaluates against `Calendar.current.component(.hour, from: Date())`. Inject a `DateProvider: () -> Date` for testability (same pattern as `messageAgeOlderThan`). Tests: current hour within range matches; current hour outside range doesn't; wrap-around overnight range (22–06) works correctly; Codable round-trip preserves startHour/endHour.
+- success_criteria:
+  - `RulePredicate.timeOfDay(startHour:endHour:)` case added and Codable
+  - `RuleEvaluator` evaluates with injectable `DateProvider`
+  - `testTimeOfDayWithinRangeMatches`, `testTimeOfDayOutsideRangeMismatches`, `testOvernightWrapAround`, `testTimeOfDayCodableRoundTrip`
+  - Existing RulesTests remain green
+- test_plan: Extend `RulesTests.swift` with 4 new cases using an injectable date closure.
+
+
+### REP-133 — RulesStore: export round-trip covers all currently-shipped predicate kinds
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-000050
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: REP-035 added export/import; REP-110 adds a version wrapper. Neither test exercises the full predicate set — existing tests use a small subset of predicates. Build one `SmartRule` for each currently-shipped predicate kind: `senderIs`, `senderUnknown`, `hasAttachment`, `isGroupChat`, `textMatchesRegex`, `messageAgeOlderThan`, `hasUnread`, plus composite `and`, `or`, `not` wrappers. Export all to a temp JSON URL, import back, assert every rule round-trips with an identical predicate (equality check). This is a Codable regression test: any new predicate kind that breaks the discriminated-union encoder/decoder will fail here.
+- success_criteria:
+  - `testExportImportRoundTripAllPredicateKinds` — all 8+ predicate kinds survive export/import unmodified
+  - Test uses a temp URL; `tearDownWithError` cleans up
+  - No production code touched
+- test_plan: 1 new test in `RulesTests.swift`; extend if new predicate kinds land (REP-079, REP-129) by adding their cases.
+
+
 
 ### REP-136 — AGENTS.md: consolidate duplicate test-count lines
 - priority: P2
