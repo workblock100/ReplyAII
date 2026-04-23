@@ -26,8 +26,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-145504
+- blocker: MLX full build on fresh clone exceeded time budget; implementation complete on wip/2026-04-23-145504-demo-mode; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Fixtures/Fixtures.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Strategic pivot P0: app must be useful with zero permissions.** When `syncFromIMessage()` returns 0 threads AND no other channel provides threads, populate `viewModel.threads` from `Fixtures.demoChatThreads` (a new `static let` on `Fixtures`). Each demo thread carries `isDemoThread: Bool = true`. Demo threads are excluded from `send()` (throws `InboxError.demoModeNotSendable`). Rules do not auto-apply to demo threads. `Preferences.demoModeActive: Bool` (defaults `true`; auto-set to `false` after any real sync returns ≥1 thread; exempt from `wipe()`). Tests: demo threads appear when real sync returns empty; demo mode flag persists to Preferences; demo mode disables after successful real sync; `send()` on demo thread throws `demoModeNotSendable`.
 - success_criteria:
