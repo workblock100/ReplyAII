@@ -117,6 +117,77 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
+### REP-232 — human: review + merge wip/worker-2026-04-23-135355-bundle
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`, `Tests/ReplyAITests/RulesTests.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: Worker-2026-04-23-135355 implemented 6 tasks but was blocked by MLX full-project build time. All 6 implementations are on branch `wip/worker-2026-04-23-135355-bundle`: REP-163 (DraftStore.listStoredDraftIDs), REP-193 (IMessageSender 4096-char boundary), REP-194 (Preferences.threadLimit clamped [1,200]), REP-195 (DraftEngine dismiss-on-unprimed is no-op), REP-196 (SearchIndex repeated-search order stability), REP-198 (IMessageChannel empty-thread exclusion). Human should: (1) review the diff; (2) run `swift test` on main for baseline; (3) merge or cherry-pick the branch; (4) run `swift test` to confirm; (5) mark REP-163, REP-193, REP-194, REP-195, REP-196, REP-198 done in BACKLOG.
+- success_criteria:
+  - wip/worker-2026-04-23-135355-bundle merged into main
+  - REP-163, REP-193, REP-194, REP-195, REP-196, REP-198 all marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
+
+### REP-233 — KeychainHelper: generic set/get/delete wrapper for channel OAuth tokens
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (new), `Tests/ReplyAITests/KeychainHelperTests.swift` (new)
+- scope: **Pivot-aligned (Slack/channel prereq).** REP-010 (Slack OAuth) and REP-230 (OAuth listener) both need a Keychain wrapper but neither specs one. Add `KeychainHelper` with three methods: `set(value: String, for key: String) throws`, `get(key: String) -> String?`, `delete(key: String)`. Keys are prefixed with `ReplyAI-` (matching the AGENTS.md convention) to isolate from system keys. Uses `kSecClassGenericPassword` with `kSecAttrAccount` = key. Injectable `service: String` parameter (default `"co.replyai.app"`) for test isolation — tests use a unique service string and call `delete` in `tearDownWithError`. Tests: set+get round-trip returns same value; get on missing key returns nil; delete removes key (subsequent get returns nil); overwrite returns new value; two distinct keys don't interfere.
+- success_criteria:
+  - `KeychainHelper(service:)` type in new file
+  - `set(value:for:)`, `get(key:)`, `delete(key:)` methods
+  - `testKeyValueRoundTrip` — set then get returns same value
+  - `testGetMissingKeyReturnsNil` — nil on unknown key
+  - `testDeleteRemovesKey` — get returns nil after delete
+  - `testOverwriteReturnsNewValue` — second set replaces first
+  - `testDistinctKeysAreIsolated` — two keys don't interfere
+  - Existing tests remain green
+- test_plan: 5 new tests in `KeychainHelperTests.swift`; use injectable `service: "co.replyai.test-\(UUID().uuidString)"` and `tearDownWithError` to clean up.
+
+### REP-234 — SlackChannel: ChannelService conformance stub with Keychain token gate
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (new), `Tests/ReplyAITests/SlackChannelTests.swift` (new)
+- scope: **Pivot-aligned (first non-iMessage channel stub).** Build `SlackChannel: ChannelService` that is immediately registerable without breaking the app. `recentThreads(limit:)`: checks `KeychainHelper.get("Slack-token")` — if nil, throws `ChannelError.authorizationDenied`; otherwise returns `[]` for now (real API calls come in a follow-up). `send(text:toChatGUID:)`: throws `ChannelError.authorizationDenied` until token exists. `channel: Channel` property returns `.slack`. `displayName` returns `"Slack"`. Injectable `KeychainHelper` for test isolation. `InboxViewModel` does NOT wire this up yet — it's a standalone conformance that can be exercised in isolation. Tests: returns authDenied when no token; returns empty thread list when token present (mock KeychainHelper returning a token); channel property is `.slack`; no real network calls.
+- success_criteria:
+  - `SlackChannel: ChannelService` in new file
+  - `recentThreads` throws `authorizationDenied` when no Keychain token
+  - `recentThreads` returns `[]` when token present
+  - `channel` property returns `.slack`
+  - Injectable `KeychainHelper` seam for testing
+  - `testSlackChannelThrowsAuthDeniedWithNoToken`
+  - `testSlackChannelReturnsEmptyThreadsWithToken`
+  - `testSlackChannelIdentifiesAsSlack`
+  - Existing tests remain green
+- test_plan: 3 new tests in `SlackChannelTests.swift`; use mock KeychainHelper returning nil vs. a fake token.
+
+### REP-235 — NotificationCoordinator: passive capture of incoming message metadata without FDA
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
+- scope: **Pivot-aligned (alt message source, no FDA required).** `NotificationCoordinator` already handles inline reply (REP-028, REP-072). Extend it to passively capture incoming message metadata from `UNNotificationCenter` delegate callbacks — specifically `userNotificationCenter(_:willPresent:)`. Parse `content.userInfo["sender"]` (handle/name) and `content.body` (preview text) from each arriving notification. Call a new `onIncomingMessage: ((senderHandle: String, preview: String) -> Void)?` callback on `NotificationCoordinator`. `InboxViewModel` subscribes to this callback and uses it to refresh-or-create a lightweight thread entry when FDA is unavailable (checking `Preferences.channels.iMessageEnabled && !chatDBAvailable`). No FDA required — uses `UNUserNotificationCenter` which needs only Notification permission. Tests: `onIncomingMessage` fires when a new notification arrives; `senderHandle` and `preview` fields populated correctly; callback is NOT fired for inline-reply notifications (category differs); no FDA entitlement needed (injectable `UNUserNotificationCenter`).
+- success_criteria:
+  - `NotificationCoordinator.onIncomingMessage` callback added
+  - `userNotificationCenter(_:willPresent:)` parses sender + preview and fires callback
+  - `InboxViewModel` subscribes and creates/refreshes thread entry when FDA unavailable
+  - `testIncomingNotificationFiresCallback` — delegate call triggers onIncomingMessage
+  - `testIncomingNotificationParsesFields` — senderHandle and preview extracted correctly
+  - `testReplyNotificationDoesNotFireIncomingCallback` — reply category skipped
+  - Existing NotificationCoordinatorTests remain green
+- test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; inject mock `UNUserNotificationCenter` and fabricate `UNNotification` payloads.
+
 ---
 
 ## P2 — stretch / backlog depth
@@ -489,35 +560,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` with two threads sharing a timestamp.
 
 
-### REP-191 — DraftStore: concurrent read+write does not corrupt draft file
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
-- scope: `DraftStore` writes atomically via a temp-file rename, but a concurrent read during a write could theoretically return an empty or partial file. Test with `DispatchQueue.concurrentPerform(iterations: 20)` performing alternating writes and reads on the same thread ID using an injected temp directory. Assert: no empty string returned from `read()`; no crash; final `read()` after all concurrency returns the last-written draft text. No production code changes expected (atomic write should be sufficient).
-- success_criteria:
-  - `testConcurrentReadWriteNoCrash` — 20 concurrent read+write cycles complete without crash
-  - `testConcurrentReadWriteNoEmptyResult` — `read()` never returns empty string mid-write
-  - Existing DraftStoreTests remain green
-- test_plan: 2 new tests in `DraftStoreTests.swift` using temp directory injection and `DispatchQueue.concurrentPerform`.
-
-### REP-192 — RulesStore: 100-rule cap boundary — 100th add succeeds, 101st throws
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: REP-069 added a 100-rule hard cap via `RulesStore.addValidating(_:)`. Pin the exact boundary: adding rule #100 succeeds (no throw); adding rule #101 throws `tooManyRules`. Also: the store count must remain at 100 after the failed add (no partial state). No production code changes expected.
-- success_criteria:
-  - `testHundredthRuleAddSucceeds` — rule #100 added without throwing
-  - `testHundredAndFirstRuleThrowsTooManyRules` — rule #101 throws `tooManyRules`
-  - `testStoreCountUnchangedAfterFailedAdd` — count stays at 100 after throw
-  - Existing RulesTests remain green
-- test_plan: 3 new tests in `RulesTests.swift` using isolated `RulesStore` with injected `UserDefaults`.
-
 ### REP-193 — IMessageSender: 4096-char boundary — 4096 succeeds, 4097 throws
 - priority: P2
 - effort: S
@@ -578,19 +620,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing SearchIndexTests remain green
 - test_plan: 2 new tests in `SearchIndexTests.swift` using in-memory FTS5 with 3 seeded threads.
 
-### REP-197 — PromptBuilder: each supported tone produces a distinct non-empty system instruction
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
-- scope: `PromptBuilder.systemPrompt(tone:)` is called for each `Tone` case. Pin the distinctness contract: iterate all `Tone` cases via `CaseIterable`, collect the system strings, assert every string is non-empty, assert all strings are pairwise distinct (no two tones share identical instruction text). Guards against a future refactor that accidentally maps multiple tones to the same prompt.
-- success_criteria:
-  - `testAllTonesProduceNonEmptySystemInstruction` — every tone yields a non-empty string
-  - `testToneSystemInstructionsAreDistinct` — no two tones share identical instruction text
-  - Existing PromptBuilderTests remain green
-- test_plan: 2 new tests in `PromptBuilderTests.swift`; `Tone.allCases` must be `CaseIterable`.
 
 ### REP-198 — IMessageChannel: threads with no messages are excluded from recentThreads
 - priority: P2
@@ -606,47 +635,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageChannelTests remain green
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture.
 
-### REP-202 — SmartRule: decode unknown predicate discriminator produces graceful nil (test-only)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: Forward-compatibility guard: when `RulePredicate` decodes a JSON dict with `"kind": "unknownFutureFeature"`, the decode should either return nil or throw a `DecodingError.dataCorrupted` — never an unhandled crash. Build a test that JSON-decodes a `SmartRule` array containing one rule with an unknown predicate kind and one with a valid kind. Assert: the valid rule decodes correctly; decoding the unknown kind does not crash (may throw or be skipped depending on the implementation). Simulates a user downgrading from a newer app version that added a new predicate.
-- success_criteria:
-  - `testUnknownPredicateKindDoesNotCrash` — decode of unknown `"kind"` does not trap
-  - `testKnownPredicateKindDecodesAdjacentToUnknown` — valid predicate in same array decodes correctly
-  - Existing RulesTests remain green
-- test_plan: 2 new tests in `RulesTests.swift`; craft a JSON literal with a `"kind": "xyzzy"` predicate alongside a `"kind": "senderIs"` predicate.
-
-### REP-203 — DraftEngine: regenerate on different tone evicts original tone's cache entry (test-only)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: Prime thread X with `.casual` → wait for `.ready`. Call `regenerate(threadID: X, tone: .formal)`. Assert: the engine no longer has a valid `.casual` cache entry for thread X (state returns to `.idle` or begins `.priming` for `.formal`); a second wait yields `.ready` with the `.formal` tone. Guards against tone-switch displaying a stale `.casual` draft while the new `.formal` prime runs in the background.
-- success_criteria:
-  - `testRegenerateOnToneChangeEvictsOldToneCache` — `.casual` state is gone after `regenerate(.formal)`
-  - `testRegenerateOnToneChangeReachesReadyForNewTone` — engine reaches `.ready` for `.formal` after wait
-  - Existing DraftEngineTests remain green
-- test_plan: 2 new tests in `DraftEngineTests.swift`; use `StubLLMService` + `waitUntil` helper.
-
-### REP-204 — IMessageChannel: recentThreads limit boundary (under-limit and over-limit)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
-- scope: In-memory fixture with exactly 5 threads. `recentThreads(limit: 1)` → 1 thread; `recentThreads(limit: 3)` → 3 threads; `recentThreads(limit: 10)` → 5 threads (all available). Documents that `limit` is applied strictly (SQL LIMIT) and the query doesn't overshoot or error when fewer rows exist than the requested limit.
-- success_criteria:
-  - `testRecentThreadsLimitOneLimitsToOne` — limit 1 returns exactly 1 thread
-  - `testRecentThreadsLimitExceedsAvailableReturnsAll` — limit 10 with 5 threads returns 5
-  - Existing IMessageChannelTests remain green
-- test_plan: 2 new tests in `IMessageChannelTests.swift` using in-memory SQLite with 5 seeded chat rows.
 
 ### REP-205 — SearchIndex: delete() removes thread from all subsequent queries (test-only)
 - priority: P2
@@ -720,19 +708,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing InboxViewModelTests remain green
 - test_plan: 2 new tests in `InboxViewModelTests.swift`; seed a thread with `unread: 3` via the mock channel fixture.
 
-### REP-211 — AGENTS.md: correct stale SHA `05e7035` → `4035c5a` in done-log (docs-only)
-- priority: P1
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-135355
-- files_to_touch: `AGENTS.md`
-- scope: Reviewer-2026-04-23-1012 flagged `05e7035` as a non-existent commit SHA in the "What's done" log — identified as pre-existing from the 2026-04-22-174500 worker run. The real SHA is `4035c5a` (covers REP-098/099/101/103/104/109/114). Planner has already corrected this in AGENTS.md during the 2026-04-23 run6 refresh; this task is a verification commit — worker must run `git cat-file -e 4035c5a` to confirm validity, verify the AGENTS.md entry now reads `4035c5a`, and commit a one-line confirmation with the validation result in the commit body.
-- success_criteria:
-  - `git cat-file -e 4035c5a` exits 0 (verified)
-  - AGENTS.md done-log entry for worker-2026-04-22-174500 reads `4035c5a` (not `05e7035`)
-  - No other AGENTS.md sections touched
-- test_plan: N/A (docs-only). Worker validates SHA before committing.
 
 ### REP-212 — InboxViewModel: `selectThread` seeds `userEdits` from DraftStore when stored draft exists (integration test-only)
 - priority: P2
@@ -1017,6 +992,41 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 4 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture with varied `associated_message_type` values.
 
 ## Done / archived
+
+### REP-211 — AGENTS.md: correct stale SHA `05e7035` → `4035c5a` (docs-only)
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: SHA `05e7035` corrected to `4035c5a` (REP-098/099/101/103/104/109/114 batch). `git cat-file -e 4035c5a` verified. Docs-only commit.
+
+### REP-204 — IMessageChannel: recentThreads limit boundary (under-limit and over-limit)
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 2 tests in `IMessageChannelTests.swift`: `testRecentThreadsLimitOneLimitsToOne` (limit 1 → 1 result), `testRecentThreadsLimitExceedsAvailableReturnsAll` (limit 10 with 5 threads → 5 results).
+
+### REP-203 — DraftEngine: regenerate on different tone evicts original tone's cache entry
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 2 tests in `DraftEngineTests.swift`: `testRegenerateOnToneChangeEvictsOldToneCache`, `testRegenerateOnToneChangeReachesReadyForNewTone`. Uses `StubLLMService` + `waitUntil`.
+
+### REP-202 — SmartRule: unknown predicate discriminator decodes gracefully without crash
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 2 tests in `RulesTests.swift`: `testUnknownPredicateKindDoesNotCrash`, `testKnownPredicateKindDecodesAdjacentToUnknown`. Forward-compatibility guard.
+
+### REP-197 — PromptBuilder: all tones produce distinct non-empty system instructions
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 2 tests in `PromptBuilderTests.swift` via `Tone.allCases` CaseIterable: `testAllTonesProduceNonEmptySystemInstruction`, `testToneSystemInstructionsAreDistinct`.
+
+### REP-192 — RulesStore: 100-rule cap boundary — 100th add succeeds, 101st throws
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 3 tests in `RulesTests.swift`: `testHundredthRuleAddSucceeds`, `testHundredAndFirstRuleThrowsTooManyRules`, `testStoreCountUnchangedAfterFailedAdd`.
+
+### REP-191 — DraftStore: concurrent read+write does not corrupt draft file
+- status: done
+- claimed_by: worker-2026-04-23-135355
+- scope: 2 tests in `DraftStoreTests.swift`: `testConcurrentReadWriteNoCrash`, `testConcurrentReadWriteNoEmptyResult`. `DispatchQueue.concurrentPerform` with injected temp directory.
 
 ### REP-067 — SearchIndex: FTS5 snippet extraction for search results
 - priority: P2
