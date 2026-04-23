@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                340 tests
+Tests/ReplyAITests/                358 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,8 @@ Tests/ReplyAITests/                340 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `e33be0d` ContactsResolver cache flush, RulesExport version, launchCount pref, NULL-msg placeholder (REP-108, REP-110, REP-115, REP-117, worker-2026-04-22-201500)
+- `7181beb` hasUnread predicate, archive→dismiss eviction, search cap 50, upsert ghost-term tests (REP-116, REP-118, REP-119, REP-125, worker-2026-04-22-195000)
 - `f5ae41d` concurrent-add stress test, PromptBuilder large-payload, date-boundary, stats-invariant, pinned-sort fix + test (REP-120, REP-121, REP-122, REP-123, REP-124, worker-2026-04-22-191500)
 - `05e7035` cache isolation, delete-reinsert, channel-filter, error-path, ordering, pref-unrecognized, AGENTS.md count (REP-098, REP-099, REP-101, REP-103, REP-104, REP-109, REP-114, worker-2026-04-22-174500)
 - `80035e18d6f16e8197320222262df7771182e31b` messageAgeOlderThan predicate, not/or/dismiss/concurrent/tone-distinctness tests (REP-097, REP-100, REP-106, REP-107, REP-112, REP-113, worker-2026-04-22-163000)
@@ -170,7 +172,7 @@ Commits (newest first; run `git log` for detail):
 - `1a9fab9` All 34 screens translated
 - `df72480` Build without Xcode — SPM + .app bundler
 
-340 XCTest cases, all green.
+358 XCTest cases, all green.
 
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
