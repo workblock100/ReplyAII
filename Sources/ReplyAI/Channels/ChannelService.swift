@@ -40,6 +40,8 @@ extension ChannelService {
 
 enum ChannelError: LocalizedError, Sendable {
     case permissionDenied(hint: String)
+    /// Channel requires an OAuth token that is not present in Keychain.
+    case authorizationDenied
     case unavailable(String)
     case query(String)
     /// sqlite3_open_v2 returned a non-OK result code. Preserving the numeric
@@ -54,6 +56,7 @@ enum ChannelError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .permissionDenied(let hint):           hint
+        case .authorizationDenied:                  "Channel not authorized. Complete the OAuth flow in Settings."
         case .unavailable(let s):                   s
         case .query(let s):                         s
         case .databaseError(_, let message):        message

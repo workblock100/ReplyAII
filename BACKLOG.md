@@ -171,8 +171,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-171932
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (new), `Tests/ReplyAITests/KeychainHelperTests.swift` (new)
 - scope: **Pivot-aligned (Slack/channel prereq).** REP-010 (Slack OAuth) and REP-230 (OAuth listener) both need a Keychain wrapper but neither specs one. Add `KeychainHelper` with three methods: `set(value: String, for key: String) throws`, `get(key: String) -> String?`, `delete(key: String)`. Keys are prefixed with `ReplyAI-` (matching the AGENTS.md convention) to isolate from system keys. Uses `kSecClassGenericPassword` with `kSecAttrAccount` = key. Injectable `service: String` parameter (default `"co.replyai.app"`) for test isolation — tests use a unique service string and call `delete` in `tearDownWithError`. Tests: set+get round-trip returns same value; get on missing key returns nil; delete removes key (subsequent get returns nil); overwrite returns new value; two distinct keys don't interfere.
 - success_criteria:
@@ -190,8 +190,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-171932
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (new), `Tests/ReplyAITests/SlackChannelTests.swift` (new)
 - scope: **Pivot-aligned (first non-iMessage channel stub).** Build `SlackChannel: ChannelService` that is immediately registerable without breaking the app. `recentThreads(limit:)`: checks `KeychainHelper.get("Slack-token")` — if nil, throws `ChannelError.authorizationDenied`; otherwise returns `[]` for now (real API calls come in a follow-up). `send(text:toChatGUID:)`: throws `ChannelError.authorizationDenied` until token exists. `channel: Channel` property returns `.slack`. `displayName` returns `"Slack"`. Injectable `KeychainHelper` for test isolation. `InboxViewModel` does NOT wire this up yet — it's a standalone conformance that can be exercised in isolation. Tests: returns authDenied when no token; returns empty thread list when token present (mock KeychainHelper returning a token); channel property is `.slack`; no real network calls.
 - success_criteria:
