@@ -86,6 +86,34 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
+### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Reviewer-2026-04-23-1012 flagged that `InboxViewModelAutoPrimeTests` and nearby test classes crash non-deterministically under Swift 6 strict-concurrency + macOS 26.3. Worker-2026-04-23-025721 noted this in their log but did not add a backlog item. The crash is likely a data-race or sendability violation surfaced by Swift 6's actor isolation checker at test time. Diagnose the root cause: (1) run `swift test --sanitize=thread` to capture the stack trace; (2) identify which shared mutable state is accessed across concurrency domains; (3) add `@MainActor` isolation or `nonisolated(unsafe)` annotations or migrate to a `Locked<T>`-guarded backing store to satisfy Swift 6 strict sendability; (4) confirm zero crashes across 10 test reruns after the fix. This is a stability and correctness concern — tests that crash non-deterministically produce false negatives in CI.
+- success_criteria:
+  - Root cause of non-deterministic crash identified in code and documented in commit body
+  - `InboxViewModelAutoPrimeTests` (and any other affected test classes) run without crash across 10 consecutive `swift test` invocations
+  - No new Swift concurrency warnings in the affected test files
+  - All existing `InboxViewModelTests` remain green
+- test_plan: (1) Run `swift test --sanitize=thread` to capture the race; (2) fix the isolation issue; (3) run `swift test` 10 times to confirm no non-deterministic failures.
+
+### REP-201 — AGENTS.md: correct stale commit SHA `904b0e7` → `7512321` in done-log
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `AGENTS.md`
+- scope: Reviewer-2026-04-23-1012 flagged that AGENTS.md "What's done" log cites a non-existent SHA `904b0e7` for the contract-tests commit (worker-2026-04-23-020741). The real SHA is `7512321` (verified by `git cat-file -e 7512321`). Also update the test-count line from 465 → 463 (grep-accurate per reviewer). Docs-only change — no Swift source or tooling changes. Worker should `git cat-file -e <sha>` to validate each SHA before citing in AGENTS.md commit log entries.
+- success_criteria:
+  - `904b0e7` replaced with `7512321` in AGENTS.md done-log
+  - Test count in AGENTS.md header updated to grep-accurate value (`grep -c "func test" Tests/ReplyAITests/*.swift`)
+  - No Swift source files touched
+- test_plan: N/A (docs-only). Worker verifies `git cat-file -e 7512321` exits 0 before committing.
 
 ---
 
@@ -237,29 +265,12 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - success_criteria: `wip/` branch; human verifies animations skip cleanly under Reduce Motion.
 - test_plan: N/A (view-only environment flag); no unit test needed.
 
-### REP-105 — Stats: persist lifetime counters to disk across app launches
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-064432
-- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
-- scope: `Stats.shared` resets all in-memory counters to zero on every app launch. Persist cumulative counters to `~/Library/Application Support/ReplyAI/stats-lifetime.json` (separate from the per-session weekly file REP-056 produces). On `Stats.init`, read the JSON file and seed the in-memory counters from it. On each `increment*` call, schedule an atomic write of the updated totals (debounced 2s to avoid write-per-increment overhead). Use an injectable `statsFileURL: URL?` (nil = skip persistence, for tests). Tests: `testLifetimeCountersSeedFromDisk` — init with pre-written JSON, verify counters start at correct value; `testLifetimeCountersAccumulateAcrossInits` — write to disk in first instance, init second instance, verify accumulation; `testNilURLSkipsPersistence` — ensure tests using nil URL never read/write files.
-- success_criteria:
-  - `Stats(statsFileURL:)` initializer accepting injectable URL
-  - In-memory counters seeded from disk on init
-  - Atomic write on increment (debounced 2s)
-  - `testLifetimeCountersSeedFromDisk`, `testLifetimeCountersAccumulateAcrossInits`, `testNilURLSkipsPersistence`
-  - Existing StatsTests remain green (use `nil` URL)
-- test_plan: New test cases in `StatsTests.swift` using temp-file URL injection; tear down in `tearDownWithError`.
-
-
 ### REP-111 — InboxViewModel: snooze thread action + resumption
 - priority: P2
 - effort: M
 - ui_sensitive: false
 - status: open
-- claimed_by: worker-2026-04-23-064432
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Models/MessageThread.swift` (or equivalent), `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: The gallery has a `sfc-snooze` screen with a snooze-duration picker. Add the underlying ViewModel action: `snooze(thread: MessageThread, until: Date)`. This sets `thread.snoozedUntil = until`, adds the thread ID to a `snoozedThreadIDs: Set<String>` persisted in Preferences (`pref.inbox.snoozedThreadIDs`), and removes the thread from the `threads` display array. A `Task.sleep(until: date, clock: .continuous)` is started that re-inserts the thread when it wakes. UI that triggers this (the snooze picker view) is ui_sensitive and handled separately. Tests: `testSnoozedThreadHiddenFromList` — snooze a thread, assert it's absent from `threads`; `testSnoozedThreadResurfacesAfterExpiry` — use a mock clock (pass `wakeDate` in the near past) to verify re-insertion; `testSnoozeSetPersistedAcrossInit` — verify `pref.inbox.snoozedThreadIDs` is written.
 - success_criteria:
@@ -310,81 +321,17 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 
-### REP-139 — Stats: flushNow() for clean-shutdown counter persistence
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-064432
-- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/StatsTests.swift`
-- scope: The debounced write added by REP-105 may not fire if the app terminates before the 2s debounce window expires, causing the last session's increments to be lost. Add `Stats.flushNow()` that cancels the pending debounce task and writes current counters to disk synchronously. Wire it to `ReplyAIApp.applicationWillTerminate` (or equivalent scene lifecycle). Tests using injectable URL: increment counter + call `flushNow()` + re-init Stats from same URL → counter reflects all increments; calling `flushNow()` twice is idempotent; `flushNow()` on nil-URL Stats is a no-op.
-- success_criteria:
-  - `Stats.flushNow()` cancels debounce and writes synchronously
-  - Called from app lifecycle shutdown hook
-  - `testFlushNowPersistsBeforeDebounce` — re-init reads correct value after flush
-  - `testFlushNowIsIdempotent` — two consecutive flushes don't corrupt state
-  - `testFlushNowWithNilURLIsNoop` — no crash when URL is nil
-  - Existing StatsTests remain green
-- test_plan: 3 new tests in `StatsTests.swift` using temp-file URL injection; `tearDownWithError` cleans up.
 
 
 
 
-
-
-
-
-### REP-146 — IMessageChannel: per-thread message cap applied independently across threads
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-055654
-- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
-- scope: `IMessageChannel.recentThreads` fetches thread headers, then fetches messages per thread with a per-thread cap. Verify the cap is per-thread, not global: fixture DB with thread A (100 messages), thread B (3 messages), thread C (50 messages), per-thread cap 20. Assert: thread A returns 20, thread B returns 3 (uncapped), thread C returns 20. Total is 43, not 60. Uses the in-memory SQLite fixture pattern.
-- success_criteria:
-  - `testPerThreadMessageCapAppliedIndependently` — each thread capped at limit; under-limit thread returns full count
-  - `testTotalMessageCountRespectsCappedSum` — sum equals min(count, cap) per thread, not a global cap
-  - No production code changes expected
-- test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
-
-
-
-
-### REP-156 — ContactsResolver: `name(for:)` fallback to raw handle when store returns nil
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-055654
-- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
-- scope: `ContactsResolver.name(for handle:)` resolves a contact name; when the underlying store returns nil (handle not in address book), it falls back to the raw handle string as the display name. Pin this fallback contract: given a handle not in the mock store, `name(for:)` returns the handle itself (not nil, not empty). Also test the success path: when the mock store returns "Alice Smith" for "alice@example.com", `name(for:)` returns "Alice Smith". This is the display-name contract the inbox relies on.
-- success_criteria:
-  - `testNameForHandleFallsBackToHandleWhenNotInStore` — unresolved handle → returns handle string
-  - `testNameForHandleReturnsContactNameWhenFound` — resolved handle → returns contact name
-  - Existing ContactsResolverTests remain green
-- test_plan: 2 new tests in `ContactsResolverTests.swift`; use the existing `MockContactsStore` pattern.
-
-### REP-159 — IMessageChannel: `MessageThread.hasAttachment` from message-level SQL field
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-064432
-- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
-- scope: `MessageThread.hasAttachment` is derived from `cache_has_attachments` in the message SQL query. No test verifies the thread-level aggregation: a thread with at least one message where `cache_has_attachments=1` should produce `MessageThread.hasAttachment == true`; a thread with no such messages should produce `false`. Uses the in-memory SQLite fixture pattern. Two tests: one thread with attachment → `hasAttachment: true`; one thread without → `hasAttachment: false`.
-- success_criteria:
-  - `testThreadHasAttachmentTrueWhenMessageHasAttachment` — at least one attachment message → thread `hasAttachment: true`
-  - `testThreadHasAttachmentFalseWhenNoMessages HaveAttachment` — no attachment messages → thread `hasAttachment: false`
-  - Existing IMessageChannelTests remain green
-- test_plan: 2 new tests in `IMessageChannelTests.swift`; use the existing in-memory SQLite fixture helper.
 
 ### REP-162 — IMessageSender: extract GUID validation to per-channel protocol method
 - priority: P2
 - effort: M
 - ui_sensitive: false
 - status: open
-- claimed_by: worker-2026-04-23-064432
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/ChannelService.swift`, `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `IMessageSender.isValidChatGUID(_:)` is currently iMessage-only (validates the `iMessage;[+-];...` prefix). Reviewer noted this guard will need to widen when SMS or other channels add write capability. Refactor: move `isValidChatGUID` to a `static func validateChatGUID(_ guid: String, for channel: Channel) throws` on `IMessageSender`, and add a comment documenting the extension point for future channels. The iMessage validation logic is unchanged — same regex, same `SenderError.invalidChatGUID` throw. SMS path validates that the GUID matches `SMS;[+-];...` format (not yet enforced since SMS send is not wired, but the structure is ready). Tests: existing `isValidChatGUID` tests migrate to `validateChatGUID(for: .iMessage)`; new test `testSMSGUIDFormatRecognized` verifies the SMS branch doesn't throw for a well-formed SMS GUID; `testWrongChannelGUIDThrows` confirms an iMessage GUID passed with `.slack` channel throws. No behavior change for the iMessage path.
 - success_criteria:
@@ -401,7 +348,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: S
 - ui_sensitive: false
 - status: open
-- claimed_by: worker-2026-04-23-064432
+- claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift`, `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: Add `listStoredDraftIDs() -> [String]` to `DraftStore`. It reads the drafts directory and returns the stem of every `.md` file (each stem is a thread ID). Useful for future "your drafts" UI and detecting orphaned entries whose threads have been deleted. Tests: empty store returns `[]`; after saving 3 drafts returns all 3 IDs; after deleting one draft, that ID is absent from the list; listing is order-independent.
 - success_criteria:
@@ -819,22 +766,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageChannelTests remain green
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture.
 
-### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: open
-- claimed_by: null
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: Reviewer-2026-04-23-1012 flagged that `InboxViewModelAutoPrimeTests` and nearby test classes crash non-deterministically under Swift 6 strict-concurrency + macOS 26.3. Worker-2026-04-23-025721 noted this in their log but did not add a backlog item. The crash is likely a data-race or sendability violation surfaced by Swift 6's actor isolation checker at test time. Diagnose the root cause: (1) run `swift test --sanitize=thread` to capture the stack trace; (2) identify which shared mutable state is accessed across concurrency domains; (3) add `@MainActor` isolation or `nonisolated(unsafe)` annotations or migrate to a `Locked<T>`-guarded backing store to satisfy Swift 6 strict sendability; (4) confirm zero crashes across 10 test reruns after the fix. This is a stability and correctness concern — tests that crash non-deterministically produce false negatives in CI.
-- success_criteria:
-  - Root cause of non-deterministic crash identified in code and documented in commit body
-  - `InboxViewModelAutoPrimeTests` (and any other affected test classes) run without crash across 10 consecutive `swift test` invocations
-  - No new Swift concurrency warnings in the affected test files
-  - All existing `InboxViewModelTests` remain green
-- test_plan: (1) Run `swift test --sanitize=thread` to capture the race; (2) fix the isolation issue; (3) run `swift test` 10 times to confirm no non-deterministic failures.
-
-
 ## Done / archived
 
 ### REP-079 — SmartRule: timeOfDay(start:end:) predicate for hour-range matching
@@ -1224,6 +1155,40 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - claimed_by: worker-2026-04-23-063646
 
+### REP-105 — Stats: persist lifetime counters to disk across app launches
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-064432
+
+### REP-139 — Stats: flushNow() for clean-shutdown counter persistence
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-064432
+
+### REP-159 — IMessageChannel: `MessageThread.hasAttachment` from message-level SQL field
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-064432
+
+### REP-146 — IMessageChannel: per-thread message cap applied independently across threads
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-055654
+
+### REP-156 — ContactsResolver: `name(for:)` fallback to raw handle when store returns nil
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-055654
 
 ### REP-066 — DraftEngine: persist draft edits to disk between launches
 - priority: P2
