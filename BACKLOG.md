@@ -90,8 +90,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-091326
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Reviewer-2026-04-23-1012 flagged that `InboxViewModelAutoPrimeTests` and nearby test classes crash non-deterministically under Swift 6 strict-concurrency + macOS 26.3. Worker-2026-04-23-025721 noted this in their log but did not add a backlog item. The crash is likely a data-race or sendability violation surfaced by Swift 6's actor isolation checker at test time. Diagnose the root cause: (1) run `swift test --sanitize=thread` to capture the stack trace; (2) identify which shared mutable state is accessed across concurrency domains; (3) add `@MainActor` isolation or `nonisolated(unsafe)` annotations or migrate to a `Locked<T>`-guarded backing store to satisfy Swift 6 strict sendability; (4) confirm zero crashes across 10 test reruns after the fix. This is a stability and correctness concern — tests that crash non-deterministically produce false negatives in CI.
 - success_criteria:
@@ -105,8 +105,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-091326
 - files_to_touch: `AGENTS.md`
 - scope: Reviewer-2026-04-23-1012 flagged that AGENTS.md "What's done" log cites a non-existent SHA `904b0e7` for the contract-tests commit (worker-2026-04-23-020741). The real SHA is `7512321` (verified by `git cat-file -e 7512321`). Also update the test-count line from 465 → 463 (grep-accurate per reviewer). Docs-only change — no Swift source or tooling changes. Worker should `git cat-file -e <sha>` to validate each SHA before citing in AGENTS.md commit log entries.
 - success_criteria:
