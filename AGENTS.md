@@ -113,7 +113,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                493 tests
+Tests/ReplyAITests/                502 tests
 ```
 
 ## Architecture patterns
@@ -129,6 +129,7 @@ Tests/ReplyAITests/                493 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `43d735b` FTS5 snippet extraction (SearchResult type + snippet() col-3 wiring), concurrent-prime stress test, insertion-order disk round-trip, error→idle state transition (REP-067, REP-169, REP-188, REP-189, worker-2026-04-23-111853, 493→502 tests)
 - `c8c3a04` InboxViewModelAutoPrimeTests data-race fix via Locked<T> migration + AGENTS.md test count 463→493 (REP-199, REP-201, worker-2026-04-23-091326)
 - `1f170b0` SearchIndex.clear(), DraftEngine empty-stream idle fix, +18 contract tests (REP-165,176,180,181,182,184,185,186, worker-2026-04-23-075700)
 - `c99f235` per-thread cap contract tests, ContactsResolver handle fallback (REP-146,156, worker-2026-04-23-055654)

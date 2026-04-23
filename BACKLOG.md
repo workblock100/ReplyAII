@@ -86,12 +86,26 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
+### REP-217 — human: review + merge wip/2026-04-23-130000-thread-name-regex
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: Worker-2026-04-23-130000 implemented REP-129 (`threadNameMatchesRegex(pattern:)` predicate) but was blocked by MLX full-project build time exceeding the 13-min budget. Implementation is complete on branch `wip/2026-04-23-130000-thread-name-regex`. Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm new tests pass; (5) mark REP-129 as done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-23-130000-thread-name-regex merged into main
+  - REP-129 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
+
 ---
 
 ## P2 — stretch / backlog depth
 
 ### REP-009 — Global `⌘⇧R` hotkey (needs Accessibility)
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: true
 - status: open
@@ -182,21 +196,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: Human updates the constants; worker updates the 3 test assertions in `IMessageChannelPreviewTests.swift` that match against the sentinel strings.
 
 
-### REP-067 — SearchIndex: FTS5 snippet extraction for search results
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-111853
-- files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: FTS5's `snippet()` auxiliary function returns a short excerpt of the matching text with terms marked. Currently `SearchIndex.search(query:)` returns `[String]` (thread IDs). Change the return type to `[SearchResult]` where `SearchResult: Equatable { threadID: String, snippet: String? }`. The snippet SQL: `snippet(thread_search, 1, '«', '»', '…', 8)` (column 1 = preview text, 8 token context window). snippet is nil when the query is empty. ⌘K palette can display the snippet as a secondary row under the thread name. Tests: snippet is non-empty for matching query; snippet contains the matched term; empty query returns empty snippets.
-- success_criteria:
-  - `SearchResult` type with `threadID` and `snippet` fields
-  - `search(query:)` returns `[SearchResult]`
-  - FTS5 `snippet()` wired with `«»` markers and 8-token window
-  - `testSnippetContainsMatchedTerm`, `testSnippetNilOnEmptyQuery`, `testResultTypeIsSearchResult`
-  - Existing SearchIndex callers updated (PalettePopover)
-- test_plan: Extend `SearchIndexTests.swift` with 3 new cases using in-memory FTS5.
 
 ### REP-075 — AttributedBodyDecoder: nested NSMutableAttributedString payload handling
 - priority: P2
@@ -354,19 +353,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 
-### REP-169 — DraftEngine: N-concurrent-thread primes don't leak in-flight tasks (stress test)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-111853
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: Prime 10 different thread IDs concurrently from a `DispatchQueue.concurrentPerform` loop using `StubLLMService`. After all primes complete (wait using `waitUntil`), verify that every thread is `.ready` and none are stuck in `.priming`. Guards against a task-leak where a concurrent invalidate+prime race leaves an orphaned `Task` whose completion updates are silently discarded, starving the state machine.
-- success_criteria:
-  - `testConcurrentPrimesOnDistinctThreadsAllReachReady` — 10 threads, all `.ready` after concurrent prime
-  - `testNoPrimingStateLeaksAfterConcurrentPrimes` — no thread stuck in `.priming` after completion
-  - Existing DraftEngineTests remain green
-- test_plan: 2 new tests in `DraftEngineTests.swift`; use `StubLLMService` with configurable stream delay; `waitUntil` helper.
 
 ### REP-170 — SmartRule: `contactGroupMatchesName(groupName:)` predicate
 - priority: P2
@@ -469,32 +455,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing StatsTests remain green
 - test_plan: 2 new tests in `StatsTests.swift` using isolated `Stats(statsFileURL: nil)` with incremented counters.
 
-### REP-188 — RulesStore: rules persisted in insertion order, not sort order
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-111853
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: REP-143 verified `rules` array insertion order. Extend to cover the on-disk serialization round-trip: add rule A (priority 0) then rule B (priority 5), export to temp URL, import back, assert order is `[A, B]` (insertion order preserved in JSON, not sorted by priority at serialization time). This guards the UI display contract: users see rules in creation order, not priority order.
-- success_criteria:
-  - `testDiskRoundTripPreservesInsertionOrder` — A before B after export+import even though B has higher priority
-  - Existing RulesTests remain green
-- test_plan: 1 new test in `RulesTests.swift` using temp URL; `tearDownWithError` cleans up.
 
-### REP-189 — DraftEngine: LLM stream error transitions state to `.idle`, not stuck in `.priming`
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-111853
-- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: The existing `ThrowingStubLLMService` verifies error state from REP-114. Extend: after a prime that throws, assert state is `.idle` (error cleared), not `.error(...)` — the error state is transient and the engine should be primeable again. A second `prime()` call after an error should reach `.ready` with the new stub. Guards against a stuck error state that prevents future priming.
-- success_criteria:
-  - `testPrimeErrorLeavesEngineInIdleNotErrorState` — after throw, state is `.idle`
-  - `testPrimeSucceedsAfterPreviousError` — second prime after error reaches `.ready`
-  - Existing DraftEngineTests remain green
-- test_plan: 2 new tests in `DraftEngineTests.swift`; use `ThrowingStubLLMService` then `StubLLMService` in sequence.
 
 ### REP-190 — InboxViewModel: thread sort stability — same-timestamp threads don't swap order
 - priority: P2
@@ -842,7 +803,186 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageSenderTests remain green
 - test_plan: 2 new tests in `IMessageSenderTests.swift`; use `executeHook` seam to capture AppleScript string for assertion rather than executing.
 
+### REP-218 — InboxViewModel: archiveThread removes thread from SearchIndex (integration test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: REP-063 shipped `SearchIndex.delete(threadID:)` and wired it in `InboxViewModel.archive(_:)`. Add an integration test verifying the full pipeline: seed a thread into an injectable `SearchIndex` and the ViewModel; call `archive(thread)`; assert `searchIndex.search("query matching thread")` returns empty. Also assert thread absent from `viewModel.threads` after archive. Guards against future refactors that break the archive→index-purge path.
+- success_criteria:
+  - `testArchiveThreadRemovesFromSearchIndex` — searching for archived thread returns no results
+  - `testArchiveThreadRemovedFromViewModelThreads` — thread absent from `threads` after archive
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift`; inject temp-directory `SearchIndex` and `StaticMockChannel`.
+
+### REP-219 — ContactsResolver: cache hit within TTL skips CNContactStore re-query
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: REP-074 added injectable `ttl`. Pin the positive cache-hit path: resolve a handle once (store query count = 1); call `name(for:)` again within the TTL window; assert store query count remains 1 (no second query). Complement to REP-185 which tests TTL expiry. Guards against a future change that accidentally bypasses the cache on every call.
+- success_criteria:
+  - `testCacheHitWithinTTLSkipsStoreQuery` — second call within TTL does not increment mock store call count
+  - Existing ContactsResolverTests remain green
+- test_plan: 1 new test in `ContactsResolverTests.swift` using `MockContactsStore` with call counter; `ttl=9999`.
+
+### REP-220 — RulesStore: concurrent add + remove does not corrupt rules array
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore` uses `Locked<T>` for thread-safety. Pin correctness under concurrent writes: `DispatchQueue.concurrentPerform(iterations: 50)` alternately calls `add(_:)` and `remove(ruleID:)` on the same store. After completion, assert: no crash, `rules.count ≥ 0`, no duplicate IDs. Guards against a race where a `Locked<T>` scope is held across an add while a concurrent remove modifies a different index.
+- success_criteria:
+  - `testConcurrentAddRemoveNoCrash` — 50 concurrent add+remove operations complete without crash
+  - `testConcurrentAddRemoveNoDuplicateIDs` — no duplicate UUIDs in `rules` after stress
+  - Existing RulesTests remain green
+- test_plan: 2 new tests in `RulesTests.swift` using isolated `RulesStore` with injected `UserDefaults` suite.
+
+### REP-221 — IMessageChannel: text=NULL message falls back to attributedBody decoder
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: The SQL query selects both `message.text` and `message.attributedBody`. When `text` is NULL, `AttributedBodyDecoder.extractText` is called on the raw blob. Add an in-memory SQLite fixture: one message row with `text = NULL` and a hand-crafted minimal typedstream `attributedBody` blob; call `messages(forThreadID:limit:)`; assert the returned message body matches the decoded string (not nil, not "[deleted]"). Verifies the fallback path is exercised, not just the SQL filter.
+- success_criteria:
+  - `testNullTextFallsBackToAttributedBodyDecoder` — message with null text returns decoded attributedBody content
+  - `testNullTextNullBlobProducesPlaceholder` — both null → "[deleted]" placeholder
+  - Existing IMessageChannelTests remain green
+- test_plan: 2 new tests using in-memory SQLite with attributedBody blob fixtures from `AttributedBodyDecoderTests`.
+
+### REP-222 — UserVoiceProfile: data model + Preferences key + PromptBuilder injection
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Services/PromptBuilder.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: The `ob-voice` screen is a UI mock; full LoRA training is out of scope. Add the data layer: `pref.voice.exampleMessages: [String]` (UserDefaults key, defaults to `[]`, max 20 entries enforced at setter, each entry max 500 chars — truncated at setter). `PromptBuilder.buildPrompt(...)` gains optional `voiceExamples: [String]` parameter; when non-empty, inserts a "Style examples from the user's prior messages:" section above the conversation history. Tests: examples appear in built prompt; empty examples → no section header; >20 examples clamped to 20; entry >500 chars truncated at setter.
+- success_criteria:
+  - `pref.voice.exampleMessages` key with 20-entry cap and 500-char per-entry truncation
+  - `PromptBuilder.buildPrompt` injects voice examples when non-empty
+  - `testVoiceExamplesInjectedIntoPrompt` — examples appear between system and history in output
+  - `testEmptyVoiceExamplesProduceNoHeader` — no section header when list is empty
+  - `testVoiceExamplesCapEnforcedAtTwenty` — setter clamps list to 20 entries
+  - `testVoiceExampleTruncatedAtFiveHundredChars` — long entry truncated at setter
+- test_plan: 4 new tests in `PromptBuilderTests.swift` + 2 in `PreferencesTests.swift`.
+
+### REP-223 — Stats: per-channel indexed-count reset on SearchIndex.clear() (integration)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-165 ships `SearchIndex.clear()` which calls `Stats.resetIndexedCounters()`. Add an integration test: seed an iMessage indexed count of 5 into a shared `Stats` instance via mock increments; call `searchIndex.clear()` (with the same `Stats` instance injected); assert `stats.indexedMessageCount(for: .iMessage) == 0`. Also assert non-index counters (rules fired, drafts generated) are unchanged by clear(). Guards the Stats→SearchIndex contract.
+- success_criteria:
+  - `testClearResetsStatsIndexedCount` — indexed count returns 0 after clear()
+  - `testClearDoesNotAffectOtherStatsCounters` — rules/drafts counters unchanged by clear()
+  - Existing SearchIndexTests and StatsTests remain green
+- test_plan: 2 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex` with injected `Stats` instance.
+
+### REP-224 — InboxViewModel: bulkMarkAllRead() sets unread=0 for all loaded threads
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Add `bulkMarkAllRead()` to `InboxViewModel` that iterates `threads` and sets `unread = 0` for each. Useful for a "Mark all read" menu action (UI wiring is separate, human-reviewed). Tests: start with 3 threads each with `unread > 0`; call `bulkMarkAllRead()`; assert all three have `unread == 0`; thread count unchanged.
+- success_criteria:
+  - `InboxViewModel.bulkMarkAllRead()` implemented
+  - `testBulkMarkAllReadClearsAllUnreadCounts` — all threads have `unread == 0` after call
+  - `testBulkMarkAllReadPreservesThreadCount` — thread array count unchanged
+  - Existing InboxViewModelTests remain green
+- test_plan: 2 new tests in `InboxViewModelTests.swift` using `StaticMockChannel` seeded with 3 threads with `unread > 0`.
+
+### REP-225 — SearchIndex: snippet column pinned to message body, not thread_name (regression guard)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: Worker-111853 notes `snippet(messages_fts, 3, '«', '»', '…', 8)` uses column 3 (message body text). Pin with a test: index a thread where the thread name contains the search term "alpha" but the message body does not; search "alpha"; assert snippet does NOT contain "alpha" (because snippet comes from the message body column, not thread_name). Then index a thread where the message body contains "beta"; search "beta"; assert snippet contains `«beta»`. Guards against schema migration that shifts column indices.
+- success_criteria:
+  - `testSnippetExtractsFromMessageBodyNotThreadName` — thread-name match does not produce snippet
+  - `testSnippetContainsBoldMarkerAroundMatchedTerm` — body match produces `«term»` in snippet
+  - Existing SearchIndexTests remain green
+- test_plan: 2 new tests in `SearchIndexTests.swift` using in-memory FTS5 with distinct thread_name and body content.
+
+### REP-226 — SmartRule: `messageCount(atLeast:)` predicate — match threads with ≥N messages
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: Add `case messageCount(atLeast: Int)` to `RulePredicate`. `RuleContext` gains `messageCount: Int` (from `MessageThread.messages.count`). `RuleEvaluator` evaluates: `context.messageCount >= atLeast`. Codable discriminator: `"messageCountAtLeast"`. `SfcRulesView.humanize` gets a new case string. Useful for rules like "if thread has ≥10 messages, use detailed tone". Tests: context.messageCount=5, predicate atLeast=3 → true; atLeast=5 → true; atLeast=6 → false; Codable round-trip preserves the threshold; atLeast=0 → vacuous-true (always matches).
+- success_criteria:
+  - `RulePredicate.messageCount(atLeast:)` case added and Codable
+  - `RuleContext.messageCount: Int` field populated from thread
+  - `RuleEvaluator` evaluates `context.messageCount >= atLeast`
+  - `SfcRulesView.humanize` updated
+  - `testMessageCountAtLeastMatchesWhenAboveThreshold`, `testMessageCountAtLeastMissesWhenBelowThreshold`, `testMessageCountAtLeastZeroIsVacuousTrue`, `testMessageCountAtLeastCodableRoundTrip`
+  - Existing RulesTests remain green
+- test_plan: 4 new tests in `RulesTests.swift`; construct `RuleContext` directly with controlled `messageCount`.
+
+### REP-227 — IMessageChannel: Message.messageType field exposes tapback/receipt at model layer
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Sources/ReplyAI/Models/MessageThread.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: Tapbacks (`associated_message_type 2000–2005`) and delivery receipts are currently filtered at the SQL level by the thread-preview query. Expose `messageType: MessageType` on `Message` where `MessageType` is an enum: `.standard`, `.tapback`, `.deliveryReceipt`, `.unknown(Int)`. The SQL query for `messages(forThreadID:)` adds the `associated_message_type` column. Tapbacks and receipts are still filtered from thread previews (existing behavior preserved) but are now available to callers who want to show reaction summaries or sync status. Tests: standard message has `.standard` type; a row with `associated_message_type = 2000` has `.tapback`; a row with `associated_message_type = 2002` (read receipt) has `.deliveryReceipt`.
+- success_criteria:
+  - `MessageType` enum with `.standard`, `.tapback`, `.deliveryReceipt`, `.unknown(Int)` cases
+  - `Message.messageType` field populated from SQL
+  - `testStandardMessageTypeIsStandard`, `testTapbackMessageTypeIsTapback`, `testDeliveryReceiptTypeIsDeliveryReceipt`, `testUnknownAssociatedTypeIsPreserved`
+  - Existing IMessageChannelTests and thread-preview filter remain green
+- test_plan: 4 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture with varied `associated_message_type` values.
+
 ## Done / archived
+
+### REP-067 — SearchIndex: FTS5 snippet extraction for search results
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-111853
+- scope: `SearchResult` type with `threadID` and `snippet: String?` fields. `search(query:)` returns `[SearchResult]`. FTS5 `snippet()` wired on message body column (col 3) with `«»` markers and 8-token context window. Worker note: used col 3 (message body) rather than col 1 (thread_name) for semantic correctness. 4 tests in `SearchIndexSnippetTests`.
+
+### REP-169 — DraftEngine: N-concurrent-thread primes don't leak in-flight tasks (stress test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-111853
+- scope: 2 tests in `DraftEngineTests`: `testConcurrentPrimesOnDistinctThreadsAllReachReady` and `testNoPrimingStateLeaksAfterConcurrentPrimes`. 10 threads primed concurrently via `DispatchQueue.concurrentPerform`; all reach `.ready`.
+
+### REP-188 — RulesStore: rules persisted in insertion order, not sort order
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-111853
+- scope: 1 test `testDiskRoundTripPreservesInsertionOrder` in `RulesTests`: add A (priority 0) then B (priority 5), export+import, assert A before B.
+
+### REP-189 — DraftEngine: LLM stream error transitions state to `.idle`, not stuck in `.priming`
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-111853
+- scope: 2 tests in `DraftEngineTests`: `testPrimeErrorLeavesEngineInIdleNotErrorState` and `testPrimeSucceedsAfterPreviousError`. Uses `ThrowingStubLLMService` then `StubLLMService` in sequence.
 
 ### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
 - priority: P1
