@@ -94,7 +94,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                463 tests
+Tests/ReplyAITests/                493 tests
 ```
 
 ## Architecture patterns
@@ -110,6 +110,9 @@ Tests/ReplyAITests/                463 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `1f170b0` SearchIndex.clear(), DraftEngine empty-stream idle fix, +18 contract tests (REP-165,176,180,181,182,184,185,186, worker-2026-04-23-075700)
+- `c99f235` per-thread cap contract tests, ContactsResolver handle fallback (REP-146,156, worker-2026-04-23-055654)
+- `0102852` Stats lifetime persistence + flushNow() + thread hasAttachment tests (REP-105,139,159, worker-2026-04-23-064432)
 - `f40ed9d` isSyncing flag + sync upsert/merge + double-prime guard + key uniqueness + snapshot keys (REP-142,155,167,168,171, worker-2026-04-23-025721)
 - `42b518c` AppleScript newline escaping, empty-rules-array boundary, zero-blob decoder, watcher reinit cycles, import merge semantics (REP-166,172,173,174,175, worker-2026-04-23-063646)
 - `7512321` apply() contract, acceptanceRate nil/zero, SearchIndex.Result fields, secondsSince boundary, same-sender prompt, invalidate-uncached, update-unknown-UUID, and([]) vacuous-true, chatGUID format, concurrent mixed-counter, anchored regex (REP-148,149,150,151,152,153,154,157,158,160,161, worker-2026-04-23-020741)
