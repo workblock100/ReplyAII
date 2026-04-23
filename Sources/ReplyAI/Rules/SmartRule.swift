@@ -80,6 +80,8 @@ indirect enum RulePredicate: Hashable, Sendable {
     /// Supports overnight wrap-around: startHour > endHour covers the range that crosses midnight
     /// (e.g. startHour=22, endHour=6 matches hours 22, 23, 0, 1, 2, 3, 4, 5, 6).
     case timeOfDay(startHour: Int, endHour: Int)
+    /// True when the thread's display name matches the given regex pattern.
+    case threadNameMatchesRegex(pattern: String)
 }
 
 /// Consequence of a rule matching. Intentionally small for v1 — we add
@@ -106,9 +108,10 @@ extension RulePredicate: Codable {
         case isGroupChat      = "is_group_chat"
         case hasAttachment    = "has_attachment"
         case and, or, not
-        case messageAgeOlderThan = "message_age_older_than"
-        case hasUnread           = "has_unread"
-        case timeOfDay           = "time_of_day"
+        case messageAgeOlderThan   = "message_age_older_than"
+        case hasUnread             = "has_unread"
+        case timeOfDay             = "time_of_day"
+        case threadNameMatchesRegex = "thread_name_matches_regex"
     }
 
     private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour" }
@@ -135,6 +138,7 @@ extension RulePredicate: Codable {
                                        startHour: try c.decode(Int.self, forKey: .startHour),
                                        endHour:   try c.decode(Int.self, forKey: .endHour)
                                    )
+        case .threadNameMatchesRegex: self = .threadNameMatchesRegex(pattern: try c.decode(String.self, forKey: .value))
         }
     }
 
@@ -154,8 +158,9 @@ extension RulePredicate: Codable {
         case .or(let xs):              try c.encode(Kind.or, forKey: .kind);  try c.encode(xs, forKey: .clauses)
         case .not(let x):              try c.encode(Kind.not, forKey: .kind); try c.encode(x, forKey: .clause)
         case .messageAgeOlderThan(let h): try c.encode(Kind.messageAgeOlderThan, forKey: .kind); try c.encode(h, forKey: .hours)
-        case .hasUnread:                  try c.encode(Kind.hasUnread, forKey: .kind)
-        case .timeOfDay(let s, let e):    try c.encode(Kind.timeOfDay, forKey: .kind); try c.encode(s, forKey: .startHour); try c.encode(e, forKey: .endHour)
+        case .hasUnread:                        try c.encode(Kind.hasUnread, forKey: .kind)
+        case .timeOfDay(let s, let e):          try c.encode(Kind.timeOfDay, forKey: .kind); try c.encode(s, forKey: .startHour); try c.encode(e, forKey: .endHour)
+        case .threadNameMatchesRegex(let p):    try c.encode(Kind.threadNameMatchesRegex, forKey: .kind); try c.encode(p, forKey: .value)
         }
     }
 }
@@ -219,10 +224,10 @@ extension SmartRule {
         }
     }
 
-    /// Walks the predicate tree and validates every `.textMatchesRegex` leaf.
+    /// Walks the predicate tree and validates every regex leaf.
     static func validatePredicateRegexes(_ predicate: RulePredicate) throws {
         switch predicate {
-        case .textMatchesRegex(let p):
+        case .textMatchesRegex(let p), .threadNameMatchesRegex(let p):
             try validateRegex(p)
         case .and(let xs), .or(let xs):
             for x in xs { try validatePredicateRegexes(x) }

@@ -1745,11 +1745,12 @@ final class ExportAllPredicateKindsTests: XCTestCase {
             SmartRule(name: "isGroupChat",          when: .isGroupChat,                                 then: .archive),
             SmartRule(name: "textMatchesRegex",     when: .textMatchesRegex(#"\d{6}"#),                 then: .archive),
             SmartRule(name: "messageAgeOlderThan",  when: .messageAgeOlderThan(hours: 24),              then: .archive),
-            SmartRule(name: "hasUnread",            when: .hasUnread,                                   then: .archive),
-            SmartRule(name: "timeOfDay",            when: .timeOfDay(startHour: 22, endHour: 6),        then: .archive),
-            SmartRule(name: "and-composite",        when: .and([.senderIs("Bob"), .hasUnread]),         then: .pin),
-            SmartRule(name: "or-composite",         when: .or([.senderIs("Carol"), .isGroupChat]),      then: .pin),
-            SmartRule(name: "not-composite",        when: .not(.hasAttachment),                         then: .silentlyIgnore),
+            SmartRule(name: "hasUnread",               when: .hasUnread,                                          then: .archive),
+            SmartRule(name: "timeOfDay",               when: .timeOfDay(startHour: 22, endHour: 6),               then: .archive),
+            SmartRule(name: "threadNameMatchesRegex",  when: .threadNameMatchesRegex(pattern: #"(?i)project"#),   then: .archive),
+            SmartRule(name: "and-composite",           when: .and([.senderIs("Bob"), .hasUnread]),                then: .pin),
+            SmartRule(name: "or-composite",            when: .or([.senderIs("Carol"), .isGroupChat]),             then: .pin),
+            SmartRule(name: "not-composite",           when: .not(.hasAttachment),                                then: .silentlyIgnore),
         ]
 
         for rule in rules { try store.add(rule) }
@@ -2062,5 +2063,61 @@ final class RulesStoreImportMergeTests: XCTestCase {
         try store.import(from: emptyURL)
         XCTAssertEqual(store.rules.count, countBefore, "importing [] must leave store count unchanged")
         XCTAssertTrue(store.rules.contains(where: { $0.id == rule.id }), "existing rule must survive empty import")
+    }
+}
+
+// MARK: - REP-129: threadNameMatchesRegex predicate
+
+final class ThreadNameMatchesRegexTests: XCTestCase {
+
+    private func ctx(threadName: String) -> RuleContext {
+        RuleContext(
+            senderName: threadName,
+            senderHandle: threadName,
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "chat123",
+            threadDisplayName: threadName
+        )
+    }
+
+    func testThreadNameMatchesRegexWhenMatching() {
+        let ctx = ctx(threadName: "Project Alpha Discussion")
+        XCTAssertTrue(
+            RuleEvaluator.matches(.threadNameMatchesRegex(pattern: #"(?i)project"#), in: ctx),
+            "case-insensitive 'project' must match thread named 'Project Alpha Discussion'"
+        )
+    }
+
+    func testThreadNameMatchesRegexWhenNotMatching() {
+        let ctx = ctx(threadName: "Soccer Team 🏆")
+        XCTAssertFalse(
+            RuleEvaluator.matches(.threadNameMatchesRegex(pattern: #"(?i)project"#), in: ctx),
+            "pattern 'project' must not match thread named 'Soccer Team'"
+        )
+    }
+
+    func testThreadNameInvalidRegexThrows() {
+        let rule = SmartRule(
+            name: "bad regex",
+            when: .threadNameMatchesRegex(pattern: "[invalid"),
+            then: .archive
+        )
+        XCTAssertThrowsError(try SmartRule.validatePredicateRegexes(rule.when)) { error in
+            guard case RuleValidationError.invalidRegex(let pattern, _) = error else {
+                XCTFail("expected RuleValidationError.invalidRegex, got \(error)")
+                return
+            }
+            XCTAssertEqual(pattern, "[invalid")
+        }
+    }
+
+    func testThreadNameMatchesRegexCodableRoundTrip() throws {
+        let original = RulePredicate.threadNameMatchesRegex(pattern: #"^Work:"#)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+        XCTAssertEqual(decoded, original, "threadNameMatchesRegex must round-trip through JSON unchanged")
     }
 }

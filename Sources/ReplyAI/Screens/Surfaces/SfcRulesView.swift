@@ -142,6 +142,8 @@ struct SfcRulesView: View {
             return "has unread messages"
         case .timeOfDay(let s, let e):
             return "time of day \(s):00–\(e):00"
+        case .threadNameMatchesRegex(let r):
+            return "thread name matches /\(r)/"
         }
     }
 

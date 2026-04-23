@@ -20,6 +20,9 @@ struct RuleContext: Sendable {
     /// the thread source cannot supply a real date, so `messageAgeOlderThan`
     /// does not accidentally fire on threads with unknown ages.
     var lastMessageDate: Date = Date()
+    /// Display name of the thread (contact name or group name). Used by
+    /// `threadNameMatchesRegex` predicate.
+    var threadDisplayName: String = ""
 
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
@@ -37,7 +40,8 @@ struct RuleContext: Sendable {
                 "+0123456789 ()-".contains($0)
             },
             chatIdentifier: thread.id,
-            hasAttachment: thread.hasAttachment
+            hasAttachment: thread.hasAttachment,
+            threadDisplayName: thread.name
         )
     }
 }
@@ -107,6 +111,11 @@ enum RuleEvaluator {
                 // late portion OR the early portion of the next morning.
                 return hour >= startHour || hour <= endHour
             }
+
+        case .threadNameMatchesRegex(let pattern):
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+            let range = NSRange(ctx.threadDisplayName.startIndex..., in: ctx.threadDisplayName)
+            return regex.firstMatch(in: ctx.threadDisplayName, range: range) != nil
         }
     }
 
