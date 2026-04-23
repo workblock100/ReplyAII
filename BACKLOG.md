@@ -72,6 +72,21 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` after merge to confirm all green.
 
+### REP-200 — human: review and merge wip/2026-04-23-085959-stats-session-acceptance
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`, `Tests/ReplyAITests/RulesTests.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: Worker-085959 implemented REP-135 (Stats.sessionStartedAt + sessionDuration), REP-177 (Stats.overallAcceptanceRate), REP-179 (RuleEvaluator equal-priority determinism), REP-183 (Preferences wipe-exempt regression guard), and REP-187 (Stats.snapshot() JSON validation) but was blocked by MLX full-project build time exceeding the 13-min worker budget. All 5 implementations are on branch `wip/2026-04-23-085959-stats-session-acceptance`. Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm new tests pass; (5) mark REP-135, REP-177, REP-179, REP-183, REP-187 as done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-23-085959-stats-session-acceptance merged into main
+  - REP-135, REP-177, REP-179, REP-183, REP-187 all marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
+
+
 ---
 
 ## P2 — stretch / backlog depth
@@ -314,19 +329,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 
-### REP-142 — InboxViewModel: watcher-driven sync updates existing thread previewText
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-025721
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: When `ChatDBWatcher` fires, `syncFromIMessage` fetches fresh threads and merges them into `threads`. For a thread already in the inbox, if a new message arrived, its `previewText` and `lastMessageDate` should update in place. Add a test using a mutable mock channel: initially returns thread A with preview "hello"; after sync, mutate the channel to return thread A with "world" as preview; sync again. Assert `threads.first?.previewText == "world"` and thread count is unchanged. Guards the upsert/merge behavior.
-- success_criteria:
-  - `testSyncUpdatesExistingThreadPreviewText` — re-sync with new preview updates thread in place
-  - `testSyncPreservesUnchangedThreadCount` — count does not grow on re-sync of same thread IDs
-  - No production code changes expected
-- test_plan: 2 new tests in `InboxViewModelTests.swift`; extend the mock channel to support per-call result mutation.
+
 
 
 
@@ -346,19 +349,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
 
 
-### REP-155 — InboxViewModel: re-selecting same thread does not double-prime
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-025721
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: `InboxViewModel.selectThread(_:)` primes a draft via the injected `primeHandler`. Calling it twice with the same thread should invoke the prime handler exactly once, not twice — the second call is a no-op when the thread is already selected. This guards against duplicate draft requests on tap-heavy UI interactions. Tests: set up `InboxViewModel` with a call-counting `primeHandler`; call `selectThread(thread)` twice; assert prime count == 1. Also verify `selectedThread` reflects the correct thread.
-- success_criteria:
-  - `testReselectSameThreadDoesNotDoublePrime` — prime handler invoked once on double-select
-  - `testSelectedThreadIsCorrectAfterDoubleSelect` — `selectedThread` reflects the thread
-  - Existing InboxViewModelTests remain green
-- test_plan: 2 new tests in `InboxViewModelTests.swift`; use the existing `StaticMockChannel` + call-counting closure.
+
 
 ### REP-156 — ContactsResolver: `name(for:)` fallback to raw handle when store returns nil
 - priority: P2
@@ -455,36 +446,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing SearchIndexTests remain green
 - test_plan: 3 new tests in `SearchIndexTests.swift` using in-memory `SearchIndex`.
 
-### REP-167 — Preferences: all AppStorage key strings are distinct (regression guard)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-025721
-- files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
-- scope: Duplicate `UserDefaults` key strings silently shadow each other — a future typo (e.g. reusing `"replyai.inbox.threadLimit"` for a new pref) would cause silent data loss. Add a test that explicitly lists all string keys defined in `Preferences` and asserts their uniqueness. The test should enumerate the constants via a hand-maintained array (not reflection) so adding a new key forces the engineer to add it here too. No production code changes.
-- success_criteria:
-  - `testAllPreferenceKeysAreUnique` — no duplicate key strings in the known-keys array
-  - If a new key is added to `Preferences` without updating the test, the test fails at review
-  - Existing PreferencesTests remain green
-- test_plan: 1 new test in `PreferencesTests.swift`; maintain the key array alongside `Preferences.swift`.
 
-### REP-168 — InboxViewModel: `isSyncing` flag transitions during syncFromIMessage
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-025721
-- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: `InboxViewModel.syncFromIMessage()` has no observable loading state — the UI has no way to know a sync is in progress (useful for showing a spinner or disabling the sync button). Add `isSyncing: Bool` (default false) that is set to true at the top of `syncFromIMessage` and reset to false in the defer block. Tests: `isSyncing` is true while sync is in progress; `isSyncing` is false after success; `isSyncing` is false after a channel throw.
-- success_criteria:
-  - `InboxViewModel.isSyncing: Bool` added
-  - Set true at sync start, false in defer
-  - `testIsSyncingTrueWhileSyncing` — flag is true during a slow sync
-  - `testIsSyncingFalseAfterSuccess` — flag reset after normal completion
-  - `testIsSyncingFalseAfterError` — flag reset after channel throws
-  - Existing InboxViewModelTests remain green
-- test_plan: 3 new tests in `InboxViewModelTests.swift`; use a slow-completion mock channel to observe the in-progress state.
+
+
 
 ### REP-169 — DraftEngine: N-concurrent-thread primes don't leak in-flight tasks (stress test)
 - priority: P2
@@ -517,19 +481,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing RulesTests remain green
 - test_plan: 5 new tests in `RulesTests.swift`; mock `contactGroupNames` in `RuleContext` directly without CNContactStore.
 
-### REP-171 — Stats: `snapshot()` dictionary contains all expected counter keys (regression guard)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-025721
-- files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
-- scope: `Stats.snapshot()` returns a `[String: Any]` summary dictionary used by `writeWeeklyLog()`. No test pins which keys are present. A future rename could silently drop a key and break the weekly log format without a test failure. Add a test asserting that a freshly-initialized Stats instance's snapshot contains all expected top-level keys. Maintain a `knownKeys` array in the test that matches the keys actually written by `snapshot()`.
-- success_criteria:
-  - `testSnapshotContainsAllExpectedKeys` — snapshot dict has all known key strings
-  - If a key is renamed, this test fails; engineer updates both Stats and the test
-  - Existing StatsTests remain green
-- test_plan: 1 new test in `StatsTests.swift`; use isolated `Stats(statsFileURL: nil)`.
+
 
 
 
@@ -748,6 +700,124 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testEqualTimestampSortUsesIdAsSecondaryKey` — tiebreaker is thread ID (deterministic)
   - Existing InboxViewModelTests remain green
 - test_plan: 2 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` with two threads sharing a timestamp.
+
+
+### REP-191 — DraftStore: concurrent read+write does not corrupt draft file
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
+- scope: `DraftStore` writes atomically via a temp-file rename, but a concurrent read during a write could theoretically return an empty or partial file. Test with `DispatchQueue.concurrentPerform(iterations: 20)` performing alternating writes and reads on the same thread ID using an injected temp directory. Assert: no empty string returned from `read()`; no crash; final `read()` after all concurrency returns the last-written draft text. No production code changes expected (atomic write should be sufficient).
+- success_criteria:
+  - `testConcurrentReadWriteNoCrash` — 20 concurrent read+write cycles complete without crash
+  - `testConcurrentReadWriteNoEmptyResult` — `read()` never returns empty string mid-write
+  - Existing DraftStoreTests remain green
+- test_plan: 2 new tests in `DraftStoreTests.swift` using temp directory injection and `DispatchQueue.concurrentPerform`.
+
+### REP-192 — RulesStore: 100-rule cap boundary — 100th add succeeds, 101st throws
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: REP-069 added a 100-rule hard cap via `RulesStore.addValidating(_:)`. Pin the exact boundary: adding rule #100 succeeds (no throw); adding rule #101 throws `tooManyRules`. Also: the store count must remain at 100 after the failed add (no partial state). No production code changes expected.
+- success_criteria:
+  - `testHundredthRuleAddSucceeds` — rule #100 added without throwing
+  - `testHundredAndFirstRuleThrowsTooManyRules` — rule #101 throws `tooManyRules`
+  - `testStoreCountUnchangedAfterFailedAdd` — count stays at 100 after throw
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift` using isolated `RulesStore` with injected `UserDefaults`.
+
+### REP-193 — IMessageSender: 4096-char boundary — 4096 succeeds, 4097 throws
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: REP-064 added a 4096-char message length guard in `IMessageSender.send()`. Pin the boundary: a 4096-char ASCII message sends (no throw); a 4097-char message throws `SenderError.messageTooLong`. Also: a 4096-char message composed of multi-byte Unicode chars (emoji) uses Swift `String.count` (char count), not byte count — verify a 10-emoji string that is >4096 bytes but <4096 chars passes. Uses the injectable `executeHook` seam — no real AppleScript.
+- success_criteria:
+  - `testMessageAtExactLimitSucceeds` — 4096-char ASCII message sends without throw
+  - `testMessageOverLimitThrows` — 4097-char message throws `messageTooLong`
+  - `testMultiByteCharsUseCharCount` — 10-emoji string (>4096 bytes, <4096 chars) passes
+  - Existing IMessageSenderTests remain green
+- test_plan: 3 new tests in `IMessageSenderTests.swift` using dry-run hook.
+
+### REP-194 — Preferences: threadLimit clamped to valid range [1, 200]
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: `pref.inbox.threadLimit` is used as a SQL LIMIT clause. If stored as 0, negative, or an unreasonably large value, the query produces no results or hangs on very large result sets. Add a computed getter that clamps the raw stored value to `max(1, min(200, rawValue))`. The setter writes the raw value as-is (clamping happens at read time). Tests: raw value -1 → getter returns 1; raw value 0 → getter returns 1; raw value 201 → getter returns 200; raw value 50 → getter returns 50; raw value 200 → getter returns 200.
+- success_criteria:
+  - `Preferences.threadLimit` getter clamps raw value to [1, 200]
+  - `testThreadLimitClampsNegativeToOne` — -1 → 1
+  - `testThreadLimitClampsZeroToOne` — 0 → 1
+  - `testThreadLimitClampsOverMaxToMax` — 201 → 200
+  - `testThreadLimitPassesThroughValidValue` — 50 → 50
+  - Existing PreferencesTests remain green
+- test_plan: 4 new tests in `PreferencesTests.swift` using injected `UserDefaults`.
+
+### REP-195 — DraftEngine: dismiss on an unprimed thread is a silent no-op
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftEngine.dismiss(threadID:tone:)` transitions a `.ready` draft to `.idle` and clears the `DraftStore` entry. If called on a `threadID` that was never primed (no cache entry at all), the call should silently return — no crash, no state change, no `DraftStore` delete attempted on a non-existent file. Tests: fresh engine, call `dismiss("never-primed-id", tone: .casual)`; assert no crash; assert state for that thread is `.idle`. Also test dismiss after prime → ready succeeds as usual.
+- success_criteria:
+  - `testDismissOnUnprimedThreadIsNoop` — no crash, state remains `.idle`
+  - `testDismissAfterPrimeTransitionsToIdle` — normal dismiss path still works
+  - Existing DraftEngineTests remain green
+- test_plan: 2 new tests in `DraftEngineTests.swift`; first test requires no prior prime calls.
+
+### REP-196 — SearchIndex: repeated search with unchanged index returns identical order
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: FTS5 BM25 ranking is deterministic for a fixed index state. Pin the contract: index 3 threads with different relevance levels for the query "hello"; search once → get order [A, B, C]; search again without any writes → get identical [A, B, C]. A third search after a no-op `upsert` of an unrelated thread also returns [A, B, C]. Unstable ordering would cause visible jump in ⌘K palette results.
+- success_criteria:
+  - `testRepeatedSearchReturnsSameOrder` — two identical searches on unchanged index return same order
+  - `testSearchOrderStableAfterUnrelatedUpsert` — upsert of different thread doesn't reorder prior results
+  - Existing SearchIndexTests remain green
+- test_plan: 2 new tests in `SearchIndexTests.swift` using in-memory FTS5 with 3 seeded threads.
+
+### REP-197 — PromptBuilder: each supported tone produces a distinct non-empty system instruction
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.systemPrompt(tone:)` is called for each `Tone` case. Pin the distinctness contract: iterate all `Tone` cases via `CaseIterable`, collect the system strings, assert every string is non-empty, assert all strings are pairwise distinct (no two tones share identical instruction text). Guards against a future refactor that accidentally maps multiple tones to the same prompt.
+- success_criteria:
+  - `testAllTonesProduceNonEmptySystemInstruction` — every tone yields a non-empty string
+  - `testToneSystemInstructionsAreDistinct` — no two tones share identical instruction text
+  - Existing PromptBuilderTests remain green
+- test_plan: 2 new tests in `PromptBuilderTests.swift`; `Tone.allCases` must be `CaseIterable`.
+
+### REP-198 — IMessageChannel: threads with no messages are excluded from recentThreads
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `recentThreads(limit:)` joins `chat` and `message` tables. A chat with zero associated messages (draft group, invite pending) should not appear in the result. Test with in-memory SQLite fixture: one thread with 3 messages, one thread with 0 messages. Assert: only the thread with messages appears in the returned list. Also assert: the returned thread's `messageCount` equals 3 (not 0).
+- success_criteria:
+  - `testEmptyThreadExcludedFromRecentThreads` — thread with 0 messages not returned
+  - `testThreadWithMessagesIncluded` — thread with messages returns with correct messageCount
+  - Existing IMessageChannelTests remain green
+- test_plan: 2 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture.
 
 
 ## Done / archived
@@ -1839,3 +1909,38 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-22-111201
+
+### REP-142 — InboxViewModel: watcher-driven sync updates existing thread previewText
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-025721
+
+### REP-155 — InboxViewModel: re-selecting same thread does not double-prime
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-025721
+
+### REP-167 — Preferences: all AppStorage key strings are distinct (regression guard)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-025721
+
+### REP-168 — InboxViewModel: isSyncing flag transitions during syncFromIMessage
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-025721
+
+### REP-171 — Stats: snapshot() dictionary contains all expected counter keys
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-23-025721
