@@ -273,4 +273,48 @@ final class PreferencesTests: XCTestCase {
             uniqueKeys.count, knownKeys.count,
             "every PreferenceKey constant must be a unique string; update knownKeys when adding a new preference")
     }
+
+    // MARK: - REP-194: threadLimit clamping
+
+    func testThreadLimitDefaultIsWithinRange() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        let clamped = defaults.clampedThreadLimit()
+        XCTAssertGreaterThanOrEqual(clamped, PreferenceRange.threadLimit.lowerBound,
+                                    "default threadLimit must be at least 1")
+        XCTAssertLessThanOrEqual(clamped, PreferenceRange.threadLimit.upperBound,
+                                 "default threadLimit must be at most 200")
+        XCTAssertEqual(clamped, PreferenceDefaults.inboxThreadLimit,
+                       "default is 50 which is already within range")
+    }
+
+    func testThreadLimitZeroClampedToOne() {
+        defaults.set(0, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.clampedThreadLimit(), 1,
+                       "zero must be clamped up to 1 to avoid empty SQL LIMIT")
+    }
+
+    func testThreadLimitNegativeClampedToOne() {
+        defaults.set(-99, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.clampedThreadLimit(), 1,
+                       "negative value must be clamped up to 1")
+    }
+
+    func testThreadLimitOversizedClampedTo200() {
+        defaults.set(999, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.clampedThreadLimit(), 200,
+                       "value above 200 must be clamped down to 200")
+    }
+
+    func testThreadLimitAtBoundaryLowAccepted() {
+        defaults.set(1, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.clampedThreadLimit(), 1,
+                       "value exactly at lower bound must pass through unchanged")
+    }
+
+    func testThreadLimitAtBoundaryHighAccepted() {
+        defaults.set(200, forKey: PreferenceKey.inboxThreadLimit)
+        XCTAssertEqual(defaults.clampedThreadLimit(), 200,
+                       "value exactly at upper bound must pass through unchanged")
+    }
+
 }

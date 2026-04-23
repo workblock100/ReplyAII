@@ -53,7 +53,24 @@ enum Preferences {
     }
 }
 
+/// Valid range for `pref.inbox.threadLimit`. The lower bound prevents a zero
+/// LIMIT clause that would return no rows; the upper bound avoids query hangs
+/// on very large databases.
+enum PreferenceRange {
+    static let threadLimit = 1...200
+}
+
 extension UserDefaults {
+    /// Returns the stored `inboxThreadLimit` clamped to [1, 200]. A value
+    /// outside this range (e.g. 0 or -5 written by a bug or migration) would
+    /// produce an empty result set or an unbounded SQL query respectively.
+    func clampedThreadLimit() -> Int {
+        let raw = integer(forKey: PreferenceKey.inboxThreadLimit)
+        let lo = PreferenceRange.threadLimit.lowerBound
+        let hi = PreferenceRange.threadLimit.upperBound
+        return max(lo, min(hi, raw))
+    }
+
     /// Seed every ReplyAI preference to its shipping default. Idempotent
     /// — `register(defaults:)` never overwrites a user-set value.
     ///

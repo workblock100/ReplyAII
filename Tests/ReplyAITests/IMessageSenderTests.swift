@@ -539,6 +539,51 @@ final class IMessageSenderEscapeTests: XCTestCase {
         XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral(input), input,
                        "emoji must pass through escaping without modification")
     }
+
+    // MARK: - REP-193: 4096-char boundary with multi-byte Unicode
+
+    func testExactLimitWithEmoji() {
+        // Swift String.count uses grapheme clusters. A 4096-emoji string has
+        // .count == 4096 even though it is far more than 4096 bytes. The guard
+        // must pass because it checks .count (grapheme clusters), not byte length.
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        // Each "😀" is one grapheme cluster; 4096 of them = .count == 4096.
+        let emojiAtLimit = String(repeating: "😀", count: IMessageSender.maxMessageLength)
+        XCTAssertEqual(emojiAtLimit.count, IMessageSender.maxMessageLength,
+                       "precondition: emoji string must have exactly maxMessageLength grapheme clusters")
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send(emojiAtLimit, to: thread),
+                         "4096-grapheme emoji string must not throw — limit is cluster-based not byte-based")
+    }
+
+    func testOneOverLimitWithEmojiThrows() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        let emojiOverLimit = String(repeating: "😀", count: IMessageSender.maxMessageLength + 1)
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertThrowsError(try IMessageSender.send(emojiOverLimit, to: thread)) { error in
+            guard let sendError = error as? IMessageSender.SendError,
+                  case .messageTooLong = sendError else {
+                XCTFail("Expected messageTooLong, got \(error)")
+                return
+            }
+        }
+    }
+
 }
 
 // MARK: - REP-210: combined newline + backslash escaping boundary cases

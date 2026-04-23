@@ -1164,4 +1164,72 @@ final class SearchIndexSnippetTests: XCTestCase {
         XCTAssertEqual(goodbyeHits.count, 1, "'goodbye' should still return thread C unaffected")
         XCTAssertEqual(goodbyeHits.first?.threadID, "rep205-i")
     }
+
+    // MARK: - REP-196: repeated search returns identical order
+
+    func testRepeatedSearchReturnsSameOrder() async {
+        // BM25 ranking is deterministic for a fixed index. Two identical searches
+        // on an unchanged index must return results in the same order.
+        let index = SearchIndex()
+        let threads = [
+            MessageThread(id: "rep196-a", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "rep196-b", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "", time: "", unread: 0),
+            MessageThread(id: "rep196-c", channel: .imessage, name: "Carol",
+                          avatar: "C", preview: "", time: "", unread: 0),
+        ]
+        // Different relevance levels: A has 3 occurrences of "hello", B has 1, C has 2.
+        await index.upsert(thread: threads[0], messages: [
+            Message(from: .them, text: "hello hello hello world", time: "t"),
+        ])
+        await index.upsert(thread: threads[1], messages: [
+            Message(from: .them, text: "hello there", time: "t"),
+        ])
+        await index.upsert(thread: threads[2], messages: [
+            Message(from: .them, text: "hello hello sunshine", time: "t"),
+        ])
+
+        let first  = await index.search("hello")
+        let second = await index.search("hello")
+
+        XCTAssertEqual(first.map(\.threadID), second.map(\.threadID),
+                       "repeated search on unchanged index must return identical order")
+        XCTAssertEqual(first.count, 3, "all three threads must match")
+    }
+
+    func testSearchOrderStableAfterUnrelatedUpsert() async {
+        // An upsert for a thread that does not match the query must not
+        // disturb the ranking of threads that do match.
+        let index = SearchIndex()
+        let matchA = MessageThread(id: "rep196-stab-a", channel: .imessage, name: "A",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        let matchB = MessageThread(id: "rep196-stab-b", channel: .imessage, name: "B",
+                                   avatar: "B", preview: "", time: "", unread: 0)
+        let unrelated = MessageThread(id: "rep196-stab-x", channel: .imessage, name: "X",
+                                      avatar: "X", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: matchA, messages: [
+            Message(from: .them, text: "quarterly report review hello hello", time: "t"),
+        ])
+        await index.upsert(thread: matchB, messages: [
+            Message(from: .them, text: "hello one mention", time: "t"),
+        ])
+
+        let before = await index.search("hello")
+
+        // Upsert a thread whose content has nothing to do with "hello".
+        await index.upsert(thread: unrelated, messages: [
+            Message(from: .them, text: "completely different topic — no keyword", time: "t"),
+        ])
+
+        let after = await index.search("hello")
+
+        // The matching threads must appear in the same order; the unrelated
+        // thread must not appear in results.
+        XCTAssertEqual(before.map(\.threadID), after.map(\.threadID),
+                       "unrelated upsert must not disturb ranking of existing matches")
+        XCTAssertFalse(after.map(\.threadID).contains("rep196-stab-x"),
+                       "unrelated thread must not appear in results for 'hello'")
+    }
 }

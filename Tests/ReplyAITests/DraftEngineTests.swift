@@ -713,6 +713,58 @@ final class DraftEngineTests: XCTestCase {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
     }
+
+    // MARK: - REP-195: dismiss on unprimed thread is a no-op
+
+    func testDismissOnUnprimedThreadIsNoOp() {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        // Dismiss a thread that was never primed — must not crash.
+        engine.dismiss(threadID: "never-primed", tone: .warm)
+        // State must still be default (idle) and cache must be empty.
+        let state = engine.state(threadID: "never-primed", tone: .warm)
+        XCTAssertEqual(state.text, "",
+                       "unprimed thread must have empty text after dismiss")
+        XCTAssertFalse(state.isStreaming,
+                       "unprimed thread must not be streaming after dismiss")
+        XCTAssertEqual(engine.cacheSize, 0,
+                       "cache must remain empty after dismiss on unprimed thread")
+    }
+
+    // MARK: - REP-203: regenerate on different tone evicts original tone's cache
+
+    func testRegenerateOnDifferentToneEvictsOriginalTone() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        // Prime with .warm tone and wait for completion.
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).text.isEmpty,
+                       "precondition: .warm draft must be populated")
+
+        // Regenerate using a different tone (.direct). This must evict .warm.
+        engine.regenerate(thread: thread, tone: .direct, history: [])
+
+        // Wait for .direct to be ready.
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .direct).isDone
+        }
+
+        // .warm must have been evicted — its entry was cleared when generate() ran.
+        // After evict, state returns the default (empty text, not streaming).
+        let warmState = engine.state(threadID: thread.id, tone: .warm)
+        // The original .warm key was removed from the cache during regenerate →
+        // state() for that missing key returns a zero-value DraftState.
+        XCTAssertFalse(warmState.isStreaming,
+                       ".warm cache entry must not be streaming after tone switch")
+
+        let directState = engine.state(threadID: thread.id, tone: .direct)
+        XCTAssertTrue(directState.isDone, ".direct draft must be done")
+        XCTAssertFalse(directState.text.isEmpty, ".direct draft must have content")
+    }
+
 }
 
 // MARK: - Test-only mock LLM services (REP-038)

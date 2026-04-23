@@ -49,6 +49,20 @@ final class DraftStore: Sendable {
         try? FileManager.default.removeItem(at: fileURL(for: threadID))
     }
 
+    /// Returns the thread IDs of every persisted draft. Each .md filename stem
+    /// is the sanitized thread ID; callers can cross-reference against live
+    /// threads to detect orphaned entries whose threads have been deleted.
+    func listStoredDraftIDs() -> [String] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: draftsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return [] }
+        return (enumerator.allObjects as? [URL] ?? [])
+            .filter { $0.pathExtension == "md" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+    }
+
     // MARK: - Prune
 
     /// Remove draft files that are older than 7 days. Called once in init so

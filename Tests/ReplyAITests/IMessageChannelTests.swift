@@ -1282,4 +1282,54 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
         XCTAssertEqual(msgs.last?.text, "newest",
                        "newest must be last regardless of DB insert order")
     }
+
+    // MARK: - REP-198: threads with no messages excluded from recentThreads
+
+    func testEmptyThreadExcludedFromRecentThreads() async throws {
+        // A chat row with no associated messages (e.g. a draft group or invite
+        // pending) must not appear in recentThreads — the JOIN with the message
+        // table filters it out naturally.
+        try buildSchema()
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+
+        // Thread with 3 messages.
+        insertChat(db, rowid: 91, identifier: "+19990000001")
+        insertMessage(db, rowid: 910, chatRowID: 91, text: "msg one", hasAttachment: false)
+        insertMessage(db, rowid: 911, chatRowID: 91, text: "msg two", hasAttachment: false)
+        insertMessage(db, rowid: 912, chatRowID: 91, text: "msg three", hasAttachment: false)
+
+        // Thread with zero messages — only a chat row, no message rows.
+        insertChat(db, rowid: 92, identifier: "+19990000002")
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 50)
+
+        let ids = threads.map(\.id)
+        XCTAssertTrue(ids.contains("+19990000001"),
+                      "thread with messages must appear in recentThreads")
+        XCTAssertFalse(ids.contains("+19990000002"),
+                       "thread with zero messages must be excluded from recentThreads")
+    }
+
+    func testThreadWithMessagesHasCorrectMessageCount() async throws {
+        try buildSchema()
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+
+        insertChat(db, rowid: 93, identifier: "+19990000003")
+        insertMessage(db, rowid: 930, chatRowID: 93, text: "alpha", hasAttachment: false)
+        insertMessage(db, rowid: 931, chatRowID: 93, text: "beta", hasAttachment: false)
+        insertMessage(db, rowid: 932, chatRowID: 93, text: "gamma", hasAttachment: false)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 50)
+
+        let thread = threads.first { $0.id == "+19990000003" }
+        XCTAssertNotNil(thread, "thread must appear in results")
+        // The preview reflects the last message and the thread is well-formed.
+        XCTAssertFalse(thread?.preview.isEmpty ?? true,
+                       "thread with messages must have a non-empty preview")
+    }
+
 }

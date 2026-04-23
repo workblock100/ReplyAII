@@ -143,4 +143,49 @@ final class DraftStoreTests: XCTestCase {
         XCTAssertEqual(store2.read(threadID: "rep176-recent"), "recent content",
                        "file aged 6 days must survive init (below 7-day threshold)")
     }
+
+    // MARK: - REP-163: listStoredDraftIDs
+
+    func testListStoredDraftIDsEmptyStore() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        XCTAssertEqual(store.listStoredDraftIDs(), [],
+                       "empty store must return an empty list")
+    }
+
+    func testListStoredDraftIDsReturnsAllSavedIDs() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "thread-A", text: "draft A")
+        store.write(threadID: "thread-B", text: "draft B")
+        store.write(threadID: "thread-C", text: "draft C")
+
+        let ids = Set(store.listStoredDraftIDs())
+        XCTAssertEqual(ids, ["thread-A", "thread-B", "thread-C"],
+                       "must return one ID per saved draft")
+    }
+
+    func testListStoredDraftIDsExcludesDeletedEntry() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "keep-me", text: "still here")
+        store.write(threadID: "delete-me", text: "going away")
+
+        store.delete(threadID: "delete-me")
+        let ids = store.listStoredDraftIDs()
+
+        XCTAssertTrue(ids.contains("keep-me"),
+                      "non-deleted ID must remain in list")
+        XCTAssertFalse(ids.contains("delete-me"),
+                       "deleted ID must not appear in list")
+    }
+
+    func testListStoredDraftIDsIsOrderIndependent() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let threadIDs = ["zeta", "alpha", "mu"]
+        threadIDs.forEach { store.write(threadID: $0, text: "content") }
+
+        let returned = Set(store.listStoredDraftIDs())
+        let expected = Set(threadIDs)
+        XCTAssertEqual(returned, expected,
+                       "listing must be order-independent — set equality suffices")
+    }
+
 }
