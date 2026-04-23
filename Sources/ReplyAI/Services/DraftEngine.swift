@@ -37,10 +37,12 @@ final class DraftEngine {
     /// silently accumulating dangling tasks.
     private var primingTasks: [String: Task<Void, Never>] = [:]
     private let stats: Stats?
+    let store: DraftStore?
 
-    init(service: LLMService = StubLLMService(), stats: Stats? = nil) {
+    init(service: LLMService = StubLLMService(), stats: Stats? = nil, store: DraftStore? = nil) {
         self.service = service
         self.stats = stats
+        self.store = store
     }
 
     func state(threadID: String, tone: Tone) -> DraftState {
@@ -147,6 +149,7 @@ final class DraftEngine {
             s.isStreaming = false
             s.isDone = true
             modelLoadStatus = nil
+            store?.write(threadID: key.threadID, text: s.text)
         }
         drafts[key] = s
     }

@@ -90,6 +90,10 @@ final class InboxViewModel {
     /// Injected at init time for test isolation; production uses `.standard`.
     private let defaults: UserDefaults
 
+    /// Persists completed drafts to disk so the composer can be pre-populated
+    /// on the next launch without waiting for LLM re-generation. Nil in tests.
+    var draftStore: DraftStore?
+
     /// Called from `selectThread` when `pref.drafts.autoPrime` is true.
     /// Production wires the DraftEngine here; tests inject a recording closure.
     var primeHandler: ((MessageThread, Tone, [Message]) -> Void)?
@@ -158,6 +162,11 @@ final class InboxViewModel {
         // Only prime on a genuine thread switch; DraftEngine handles tone
         // changes via ComposerView's .task(id:).
         if isNewSelection && defaults.bool(forKey: PreferenceKey.autoPrime) {
+            // Pre-populate the composer from the persisted draft store so the
+            // user sees their last edit immediately, before the LLM re-primes.
+            if let stored = draftStore?.read(threadID: id) {
+                setEdit(threadID: id, tone: activeTone, text: stored)
+            }
             primeHandler?(selectedThread, activeTone, messages(for: selectedThread))
         }
     }
