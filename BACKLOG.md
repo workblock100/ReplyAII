@@ -819,6 +819,21 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageChannelTests remain green
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture.
 
+### REP-199 — InboxViewModelAutoPrimeTests: fix non-deterministic crashes under Swift 6 + macOS 26.3
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Reviewer-2026-04-23-1012 flagged that `InboxViewModelAutoPrimeTests` and nearby test classes crash non-deterministically under Swift 6 strict-concurrency + macOS 26.3. Worker-2026-04-23-025721 noted this in their log but did not add a backlog item. The crash is likely a data-race or sendability violation surfaced by Swift 6's actor isolation checker at test time. Diagnose the root cause: (1) run `swift test --sanitize=thread` to capture the stack trace; (2) identify which shared mutable state is accessed across concurrency domains; (3) add `@MainActor` isolation or `nonisolated(unsafe)` annotations or migrate to a `Locked<T>`-guarded backing store to satisfy Swift 6 strict sendability; (4) confirm zero crashes across 10 test reruns after the fix. This is a stability and correctness concern — tests that crash non-deterministically produce false negatives in CI.
+- success_criteria:
+  - Root cause of non-deterministic crash identified in code and documented in commit body
+  - `InboxViewModelAutoPrimeTests` (and any other affected test classes) run without crash across 10 consecutive `swift test` invocations
+  - No new Swift concurrency warnings in the affected test files
+  - All existing `InboxViewModelTests` remain green
+- test_plan: (1) Run `swift test --sanitize=thread` to capture the race; (2) fix the isolation issue; (3) run `swift test` 10 times to confirm no non-deterministic failures.
+
 
 ## Done / archived
 

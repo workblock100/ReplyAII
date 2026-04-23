@@ -78,6 +78,14 @@ From review-2026-04-23-0403.md:
 3. ✅ REP-162 cross-channel GUID: already in backlog from previous planner, no duplicate added
 4. Hash-fixup protocol: standing suggestion, not a planner-controlled item
 
+## Late-addition: review-2026-04-23-1012 (4/5) addressed
+
+The reviewer commit landed while this planner run was in progress. Key action items:
+- ✅ AGENTS.md test count (465 → 463) fixed by reviewer commit itself
+- ✅ Stale SHA `904b0e7` already absent from AGENTS.md
+- ✅ Added REP-199 (M, P2): Fix non-deterministic `InboxViewModelAutoPrimeTests` crashes under Swift 6 + macOS 26.3 (reviewer promoted this from worker flag to planner task)
+- wip/quality branches from 2026-04-21 are now 2 days from the 7-day P1 threshold — human should review before 2026-04-28
+
 ## Notes for next planner run
 
 - Worker pool of 32 auto-merge-eligible tasks is healthy for 2h cycle (worker ships ~4-8 tasks)
