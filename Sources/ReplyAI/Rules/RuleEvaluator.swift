@@ -97,6 +97,16 @@ enum RuleEvaluator {
 
         case .hasUnread:
             return ctx.unreadCount > 0
+
+        case .timeOfDay(let startHour, let endHour):
+            let hour = Calendar.current.component(.hour, from: currentDate)
+            if startHour <= endHour {
+                return hour >= startHour && hour <= endHour
+            } else {
+                // Overnight wrap-around (e.g. 22–06): matches if hour is in the
+                // late portion OR the early portion of the next morning.
+                return hour >= startHour || hour <= endHour
+            }
         }
     }
 

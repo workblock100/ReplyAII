@@ -1591,3 +1591,143 @@ final class HasUnreadPredicateTests: XCTestCase {
         XCTAssertEqual(store.rules.first?.name, "valid")
     }
 }
+
+// MARK: - TimeOfDay predicate (REP-079)
+
+final class TimeOfDayPredicateTests: XCTestCase {
+
+    // Build a minimal RuleContext sufficient for time-based tests.
+    private func makeCtx() -> RuleContext {
+        RuleContext(
+            senderName: "Test",
+            senderHandle: "test",
+            channel: .imessage,
+            lastMessageText: "",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "test-id"
+        )
+    }
+
+    // Helper: make a Date whose Calendar hour is exactly `hour`.
+    private func date(hour: Int) -> Date {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = hour
+        components.minute = 0
+        components.second = 0
+        return Calendar.current.date(from: components)!
+    }
+
+    func testTimeOfDayWithinRangeMatches() {
+        let ctx = makeCtx()
+        // Range 09–17; inject 14:00 — should match.
+        XCTAssertTrue(
+            RuleEvaluator.matches(.timeOfDay(startHour: 9, endHour: 17), in: ctx, currentDate: date(hour: 14)),
+            "hour 14 must be within 09–17"
+        )
+        // Boundary: startHour itself matches.
+        XCTAssertTrue(
+            RuleEvaluator.matches(.timeOfDay(startHour: 9, endHour: 17), in: ctx, currentDate: date(hour: 9)),
+            "startHour boundary must match"
+        )
+        // Boundary: endHour itself matches.
+        XCTAssertTrue(
+            RuleEvaluator.matches(.timeOfDay(startHour: 9, endHour: 17), in: ctx, currentDate: date(hour: 17)),
+            "endHour boundary must match"
+        )
+    }
+
+    func testTimeOfDayOutsideRangeMismatches() {
+        let ctx = makeCtx()
+        // Range 09–17; inject 08:00 and 18:00 — neither should match.
+        XCTAssertFalse(
+            RuleEvaluator.matches(.timeOfDay(startHour: 9, endHour: 17), in: ctx, currentDate: date(hour: 8)),
+            "hour 8 must be outside 09–17"
+        )
+        XCTAssertFalse(
+            RuleEvaluator.matches(.timeOfDay(startHour: 9, endHour: 17), in: ctx, currentDate: date(hour: 18)),
+            "hour 18 must be outside 09–17"
+        )
+    }
+
+    func testOvernightWrapAround() {
+        let ctx = makeCtx()
+        // Overnight range 22–06: hours 22, 23, 0, 3, 6 match; 7, 14 don't.
+        let predicate = RulePredicate.timeOfDay(startHour: 22, endHour: 6)
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 22)), "22 matches overnight")
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 23)), "23 matches overnight")
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 0)),  "0 matches overnight")
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 3)),  "3 matches overnight")
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 6)),  "6 matches overnight boundary")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 7)),  "7 does not match overnight")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 14)), "14 does not match overnight")
+    }
+
+    func testTimeOfDayCodableRoundTrip() throws {
+        let original = RulePredicate.timeOfDay(startHour: 22, endHour: 6)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+        XCTAssertEqual(original, decoded, "timeOfDay must round-trip through JSON")
+
+        // Verify the JSON contains the expected discriminator and fields.
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["kind"] as? String, "time_of_day")
+        XCTAssertEqual(json["start_hour"] as? Int, 22)
+        XCTAssertEqual(json["end_hour"] as? Int, 6)
+    }
+}
+
+// MARK: - Export round-trip covers all predicate kinds (REP-133)
+
+final class ExportAllPredicateKindsTests: XCTestCase {
+
+    private func tmpURL(_ label: String) -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ExportAllPredicates-\(label)-\(UUID().uuidString).json")
+    }
+
+    @MainActor
+    func testExportImportRoundTripAllPredicateKinds() throws {
+        let storeURL  = tmpURL("store")
+        let exportURL = tmpURL("export")
+        let importURL = tmpURL("import-store")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+            try? FileManager.default.removeItem(at: importURL)
+        }
+
+        let store = RulesStore(fileURL: storeURL)
+
+        // One rule per currently-shipped predicate primitive, plus composites.
+        let rules: [SmartRule] = [
+            SmartRule(name: "senderIs",            when: .senderIs("Alice"),                            then: .archive),
+            SmartRule(name: "senderUnknown",        when: .senderUnknown,                               then: .archive),
+            SmartRule(name: "hasAttachment",        when: .hasAttachment,                               then: .archive),
+            SmartRule(name: "isGroupChat",          when: .isGroupChat,                                 then: .archive),
+            SmartRule(name: "textMatchesRegex",     when: .textMatchesRegex(#"\d{6}"#),                 then: .archive),
+            SmartRule(name: "messageAgeOlderThan",  when: .messageAgeOlderThan(hours: 24),              then: .archive),
+            SmartRule(name: "hasUnread",            when: .hasUnread,                                   then: .archive),
+            SmartRule(name: "timeOfDay",            when: .timeOfDay(startHour: 22, endHour: 6),        then: .archive),
+            SmartRule(name: "and-composite",        when: .and([.senderIs("Bob"), .hasUnread]),         then: .pin),
+            SmartRule(name: "or-composite",         when: .or([.senderIs("Carol"), .isGroupChat]),      then: .pin),
+            SmartRule(name: "not-composite",        when: .not(.hasAttachment),                         then: .silentlyIgnore),
+        ]
+
+        for rule in rules { try store.add(rule) }
+
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: importURL)
+        try importStore.import(from: exportURL)
+
+        for original in rules {
+            guard let imported = importStore.rules.first(where: { $0.id == original.id }) else {
+                XCTFail("rule '\(original.name)' missing after import")
+                continue
+            }
+            XCTAssertEqual(imported.when, original.when,
+                           "predicate for '\(original.name)' must survive export/import unchanged")
+        }
+    }
+}

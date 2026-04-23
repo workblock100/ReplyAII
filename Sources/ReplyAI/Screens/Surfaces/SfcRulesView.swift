@@ -140,6 +140,8 @@ struct SfcRulesView: View {
             return "message older than \(hours)h"
         case .hasUnread:
             return "has unread messages"
+        case .timeOfDay(let s, let e):
+            return "time of day \(s):00–\(e):00"
         }
     }
 

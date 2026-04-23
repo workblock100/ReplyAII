@@ -76,6 +76,10 @@ indirect enum RulePredicate: Hashable, Sendable {
     case messageAgeOlderThan(hours: Int)
     /// True when the thread has at least one unread message.
     case hasUnread
+    /// True when the current hour (0–23) falls within [startHour, endHour] inclusive.
+    /// Supports overnight wrap-around: startHour > endHour covers the range that crosses midnight
+    /// (e.g. startHour=22, endHour=6 matches hours 22, 23, 0, 1, 2, 3, 4, 5, 6).
+    case timeOfDay(startHour: Int, endHour: Int)
 }
 
 /// Consequence of a rule matching. Intentionally small for v1 — we add
@@ -104,9 +108,10 @@ extension RulePredicate: Codable {
         case and, or, not
         case messageAgeOlderThan = "message_age_older_than"
         case hasUnread           = "has_unread"
+        case timeOfDay           = "time_of_day"
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours }
+    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour" }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -126,6 +131,10 @@ extension RulePredicate: Codable {
         case .not:              self = .not(try c.decode(RulePredicate.self, forKey: .clause))
         case .messageAgeOlderThan: self = .messageAgeOlderThan(hours: try c.decode(Int.self, forKey: .hours))
         case .hasUnread:           self = .hasUnread
+        case .timeOfDay:           self = .timeOfDay(
+                                       startHour: try c.decode(Int.self, forKey: .startHour),
+                                       endHour:   try c.decode(Int.self, forKey: .endHour)
+                                   )
         }
     }
 
@@ -145,7 +154,8 @@ extension RulePredicate: Codable {
         case .or(let xs):              try c.encode(Kind.or, forKey: .kind);  try c.encode(xs, forKey: .clauses)
         case .not(let x):              try c.encode(Kind.not, forKey: .kind); try c.encode(x, forKey: .clause)
         case .messageAgeOlderThan(let h): try c.encode(Kind.messageAgeOlderThan, forKey: .kind); try c.encode(h, forKey: .hours)
-        case .hasUnread:               try c.encode(Kind.hasUnread, forKey: .kind)
+        case .hasUnread:                  try c.encode(Kind.hasUnread, forKey: .kind)
+        case .timeOfDay(let s, let e):    try c.encode(Kind.timeOfDay, forKey: .kind); try c.encode(s, forKey: .startHour); try c.encode(e, forKey: .endHour)
         }
     }
 }
