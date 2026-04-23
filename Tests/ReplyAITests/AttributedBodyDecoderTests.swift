@@ -87,10 +87,23 @@ final class AttributedBodyDecoderTests: XCTestCase {
         XCTAssertEqual(AttributedBodyDecoder.extractText(from: data), text)
     }
 
-    // MARK: - Fixture 5: empty body
+    // MARK: - Fixture 5: empty body and all-zero / minimal malformed blobs (REP-172)
 
     func testEmptyDataReturnsNil() {
         XCTAssertNil(AttributedBodyDecoder.extractText(from: Data()))
+    }
+
+    func testAllZeroBlobReturnsNil() {
+        // A 32-byte all-zero blob is a common null/empty DB entry — must return nil without crashing.
+        let zeros = Data(repeating: 0x00, count: 32)
+        XCTAssertNil(AttributedBodyDecoder.extractText(from: zeros),
+                     "32-byte all-zero blob (common DB null sentinel) must return nil")
+    }
+
+    func testSingleTagByteWithNoPayloadReturnsNil() {
+        // 0x2B with no length or payload bytes following — malformed minimal input must not crash.
+        XCTAssertNil(AttributedBodyDecoder.extractText(from: Data([0x2B])),
+                     "lone 0x2B tag byte with no length byte must return nil, not crash")
     }
 
     func testTooShortDataReturnsNil() {

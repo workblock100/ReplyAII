@@ -145,6 +145,38 @@ final class ChatDBWatcherTests: XCTestCase {
                        "stop() must cancel the pending work item so callback does not fire")
     }
 
+    // MARK: - stop→reinit cycles (REP-173)
+
+    /// Deallocate and recreate a ChatDBWatcher 5 times on the same source path.
+    /// Guards against DispatchSource retain-cycle accumulation or double-cancel from deinit.
+    func testFiveStopReinitCyclesNoCrash() {
+        for _ in 0..<5 {
+            let watcher = ChatDBWatcher(paths: [], debounce: debounce, onChange: {})
+            watcher.stop()
+            // Watcher falls out of scope here — deinit must not crash.
+        }
+        // Reaching here without trap is the assertion.
+    }
+
+    /// After 5 stop→reinit cycles, a 6th watcher instance must still fire its callback.
+    func testFinalWatcherAfterCyclesFiresCallback() {
+        for _ in 0..<5 {
+            let watcher = ChatDBWatcher(paths: [], debounce: debounce, onChange: {})
+            watcher.stop()
+        }
+
+        let counter = FireCounter()
+        let finalWatcher = ChatDBWatcher(
+            paths: [], debounce: debounce,
+            onChange: { counter.bump() }
+        )
+        finalWatcher.scheduleFire()
+        waitPast(debounce + settle)
+        XCTAssertEqual(counter.value, 1,
+                       "6th watcher instance after 5 reinit cycles must still fire its onChange callback")
+        finalWatcher.stop()
+    }
+
     // MARK: - Helpers
 
     private func waitPast(_ interval: TimeInterval) {

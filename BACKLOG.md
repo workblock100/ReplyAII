@@ -621,7 +621,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-063646
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: No test covers `RuleEvaluator` with an empty rules array, the trivial boundary case. `matching(rules: [], context:)` should return `[]`; `defaultTone(rules: [], context:)` should return nil; `apply(rules: [], to:)` should return `[]`. All are safe no-ops. No production code changes expected.
@@ -712,7 +712,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-063646
 - files_to_touch: `Tests/ReplyAITests/AttributedBodyDecoderTests.swift`
 - scope: `AttributedBodyDecoder.extractText(_:)` returns nil when no 0x2B tag is present. Pin the nil-on-no-tag contract for the two most common edge inputs: empty `Data()` and a 32-byte all-zero blob (a common null/empty DB entry). Both should return nil (not crash, not return empty string). Also test that a 1-byte blob containing only `0x2B` (the tag byte with no following length) returns nil without crashing — malformed minimal input.
@@ -727,7 +727,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-063646
 - files_to_touch: `Tests/ReplyAITests/ChatDBWatcherTests.swift`
 - scope: Restart path: deallocate a `ChatDBWatcher`, create a new instance on the same source path, start, stop. Repeat 5 times. Guards against `DispatchSource` retain-cycle accumulation, handle reuse, or double-cancel from the prior watcher's `deinit`. After 5 cycles, the final watcher should fire callbacks correctly (write a test-file timestamp and verify the callback triggers). Uses a temp file URL as the watched path (no real chat.db needed).
@@ -741,7 +741,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-063646
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: The AppleScript template embeds the message text inside a quoted string: `send "<text>" to <target>`. If `<text>` contains `"` (unescaped), the AppleScript is syntactically broken; a `
@@ -763,7 +763,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-063646
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-035's `import(from:)` has UUID-keyed merge semantics (update existing UUIDs, append new UUIDs, skip malformed). The existing test `testImportMergesRules` may not cover all three merge outcomes simultaneously. Ensure full coverage: (1) store contains rule A and B; import file contains updated rule A (same UUID, new action) and new rule C (fresh UUID) → result has 3 rules, A's action updated, B unchanged, C appended; (2) import of a file with no new UUIDs and no updated UUIDs produces identical store; (3) import of empty rules array is a no-op. No production code changes.

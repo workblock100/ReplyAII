@@ -411,3 +411,34 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(callCount, 1, "non-retriable error must not trigger a second attempt")
     }
 }
+
+// MARK: - REP-174: escapeForAppleScriptLiteral completeness
+
+final class IMessageSenderEscapeTests: XCTestCase {
+
+    func testDoubleQuoteEscapedInAppleScript() {
+        let result = IMessageSender.escapeForAppleScriptLiteral(#"say "hi""#)
+        // Input: say "hi"  →  Output: say \"hi\"
+        XCTAssertEqual(result, #"say \"hi\""#,
+                       "double-quote must be escaped to \\\" in the AppleScript literal")
+    }
+
+    func testNewlineEscapedInAppleScript() {
+        let result = IMessageSender.escapeForAppleScriptLiteral("line one\nline two")
+        XCTAssertEqual(result, "line one\\nline two",
+                       "newline must become the two-char \\n literal so the tell block stays single-line")
+        XCTAssertFalse(result.contains("\n"), "no literal newline must remain after escaping")
+    }
+
+    func testBackslashEscapedInAppleScript() {
+        let result = IMessageSender.escapeForAppleScriptLiteral("path\\file")
+        XCTAssertEqual(result, "path\\\\file",
+                       "backslash must be doubled so it does not escape the following character in AppleScript")
+    }
+
+    func testEmojiPassesThroughUnchanged() {
+        let input = "🐢 shell vibes"
+        XCTAssertEqual(IMessageSender.escapeForAppleScriptLiteral(input), input,
+                       "emoji must pass through escaping without modification")
+    }
+}

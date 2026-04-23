@@ -1879,3 +1879,150 @@ final class RulePredicateAnchoredRegexTests: XCTestCase {
                        "^exact$ must not match a longer string")
     }
 }
+
+// MARK: - REP-166: RuleEvaluator with empty rules array
+
+final class RuleEvaluatorEmptyRulesTests: XCTestCase {
+
+    private func makeCtx() -> RuleContext {
+        RuleContext(
+            senderName: "Alice", senderHandle: "alice@example.com",
+            channel: .imessage, lastMessageText: "hello",
+            isUnread: true, senderKnown: true, chatIdentifier: "alice@example.com"
+        )
+    }
+
+    func testMatchingEmptyRulesReturnsEmpty() {
+        let result = RuleEvaluator.matching([], in: makeCtx())
+        XCTAssertEqual(result.count, 0, "matching([]) must return an empty array")
+    }
+
+    func testDefaultToneEmptyRulesReturnsNil() {
+        let result = RuleEvaluator.defaultTone(for: [], in: makeCtx())
+        XCTAssertNil(result, "defaultTone(for: []) must return nil — no rules, no tone")
+    }
+
+    func testApplyEmptyRulesReturnsEmpty() {
+        let result = RuleEvaluator.apply(rules: [], to: makeCtx())
+        XCTAssertEqual(result.count, 0, "apply(rules: [], to:) must return an empty array")
+    }
+}
+
+// MARK: - REP-175: RulesStore import() all three merge outcomes in one pass
+
+final class RulesStoreImportMergeTests: XCTestCase {
+
+    private func tmpURL(_ tag: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("ImportMerge-\(tag)-\(UUID().uuidString)")
+            .appendingPathComponent("rules.json")
+    }
+
+    /// 2-rule store + import with 1 update + 1 new → net +1 rule, action updated.
+    ///
+    /// Both stores seed the same static `SmartRule.seedRules` (shared UUIDs). The
+    /// export therefore carries the seeds (update-in-place, no delta) + updatedA
+    /// (updates A in-place, no delta) + ruleC (new UUID → +1). ruleB is unaffected.
+    @MainActor
+    func testImportUpdatesExistingAndAppendsNew() throws {
+        let storeURL  = tmpURL("main")
+        let srcURL    = tmpURL("src")
+        let exportURL = tmpURL("export")
+        for url in [storeURL, srcURL, exportURL] {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        defer {
+            for url in [storeURL, srcURL, exportURL] {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+        }
+
+        let store = RulesStore(fileURL: storeURL)
+        let ruleA = SmartRule(name: "A", when: .senderIs("Alice"), then: .pin)
+        let ruleB = SmartRule(name: "B", when: .senderIs("Bob"),   then: .archive)
+        try store.add(ruleA)
+        try store.add(ruleB)
+        let preImportCount = store.rules.count
+
+        // Build an export from a separate store: updated rule A + new rule C.
+        let updatedA = SmartRule(id: ruleA.id, name: ruleA.name,
+                                 when: ruleA.when, then: .silentlyIgnore,
+                                 active: ruleA.active, priority: ruleA.priority)
+        let ruleC = SmartRule(name: "C", when: .isGroupChat, then: .markDone)
+        let srcStore = RulesStore(fileURL: srcURL)
+        try srcStore.add(updatedA)
+        try srcStore.add(ruleC)
+        try srcStore.export(to: exportURL)
+
+        try store.import(from: exportURL)
+
+        // ruleC is the only genuinely new UUID; everything else update-in-place.
+        XCTAssertEqual(store.rules.count, preImportCount + 1,
+                       "import must append exactly ruleC — all other UUIDs update in-place")
+        let importedA = store.rules.first(where: { $0.id == ruleA.id })
+        XCTAssertEqual(importedA?.then, .silentlyIgnore,
+                       "rule A's action must be updated to silentlyIgnore")
+        XCTAssertTrue(store.rules.contains(where: { $0.id == ruleB.id }),
+                      "rule B must survive the import unchanged")
+        XCTAssertTrue(store.rules.contains(where: { $0.id == ruleC.id }),
+                      "rule C must be appended as a new entry")
+    }
+
+    /// Importing a file whose rules are identical to the store produces no change in count or content.
+    @MainActor
+    func testImportWithNoChangesIsNoop() throws {
+        let storeURL  = tmpURL("noop-main")
+        let exportURL = tmpURL("noop-export")
+        for url in [storeURL, exportURL] {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        defer {
+            for url in [storeURL, exportURL] {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+        }
+
+        let store = RulesStore(fileURL: storeURL)
+        let rule = SmartRule(name: "stable", when: .senderIs("Dave"), then: .pin)
+        try store.add(rule)
+        let before = store.rules.count
+
+        // Export the store's current state and import it back — should be a no-op.
+        try store.export(to: exportURL)
+        try store.import(from: exportURL)
+
+        XCTAssertEqual(store.rules.count, before, "importing identical rules must not change store count")
+        // Use the UUID to locate our rule — seed rules occupy the front of the array.
+        XCTAssertEqual(store.rules.first(where: { $0.id == rule.id })?.name, "stable",
+                       "our rule must be unchanged after self-import")
+    }
+
+    /// Importing an empty rules array leaves the store untouched.
+    @MainActor
+    func testImportEmptyArrayIsNoop() throws {
+        let storeURL = tmpURL("empty-main")
+        try FileManager.default.createDirectory(
+            at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeURL.deletingLastPathComponent()) }
+
+        let store = RulesStore(fileURL: storeURL)
+        let rule = SmartRule(name: "existing", when: .senderIs("Eve"), then: .archive)
+        try store.add(rule)
+        let countBefore = store.rules.count
+
+        // Write an empty versioned envelope and import it.
+        let emptyURL = tmpURL("empty-export")
+        try FileManager.default.createDirectory(
+            at: emptyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: emptyURL.deletingLastPathComponent()) }
+        let envelope: [String: Any] = ["version": 1, "rules": [Any]()]
+        let data = try JSONSerialization.data(withJSONObject: envelope)
+        try data.write(to: emptyURL)
+
+        try store.import(from: emptyURL)
+        XCTAssertEqual(store.rules.count, countBefore, "importing [] must leave store count unchanged")
+        XCTAssertTrue(store.rules.contains(where: { $0.id == rule.id }), "existing rule must survive empty import")
+    }
+}
