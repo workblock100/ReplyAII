@@ -431,7 +431,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-195000
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: The predicate DSL currently has no way to match threads based on read state. Add `case hasUnread` to `RulePredicate`. `RuleContext` gains `unreadCount: Int` (from `MessageThread.unread`). `RuleEvaluator` returns true when `unreadCount > 0`. Codable round-trip must preserve the new case (discriminator `"hasUnread"`). Tests: a thread with `unreadCount = 3` matches; a thread with `unreadCount = 0` does not match; Codable round-trip produces the same predicate; `not(hasUnread)` returns true on read thread.
@@ -459,7 +459,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-195000
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: When `InboxViewModel.archive(thread:)` fires, the `DraftEngine` still holds a live draft entry for that threadID. On thread re-activation or next launch (if DraftStore lands via REP-066), a stale draft could surface. Wire a `DraftEngine.dismiss(threadID:tone:)` call (or a full `dismissAll(threadID:)` variant) from within `InboxViewModel.archive`. Test: prime a draft for thread A, archive thread A, assert `DraftEngine` state for thread A is `.idle`. No ui_sensitive — pure ViewModel logic.
@@ -473,7 +473,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-195000
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex.search(query:)` appends the FTS5 `ORDER BY rank` clause but has no `LIMIT`. For very common terms or short queries, this could return hundreds of thread IDs and fill the ⌘K palette with noise. Add a `limit: Int = 50` parameter passed directly into the SQL `LIMIT` clause. All existing callers use the default. Update the FTS5 query function signature. Tests: insert 100 threads all matching the same query, assert result count == 50; insert 5 matching threads, assert result count == 5 (limit doesn't over-truncate short result sets).
@@ -557,7 +557,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-22-195000
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: The incremental FTS5 upsert path (REP-015) updates a thread's indexed content when new messages arrive. If a thread's preview text changes, the old text must no longer be searchable and the new text should be. This round-trip is not explicitly tested. Add a test: insert thread with preview "morning coffee", upsert same threadID with preview "evening tea", search "morning" returns zero results, search "evening" returns the thread. Verifies that FTS5 DELETE + INSERT in the upsert path doesn't leave ghost terms from the old content.

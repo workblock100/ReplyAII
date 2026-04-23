@@ -99,6 +99,10 @@ final class InboxViewModel {
     /// tests inject a recording closure.
     var invalidateHandler: ((String) -> Void)?
 
+    /// Called from `archive` to evict a stale draft from the DraftEngine cache.
+    /// Production wires DraftEngine.dismissAll; tests inject a recording closure.
+    var dismissHandler: ((String) -> Void)?
+
     /// `true` once we've done the initial full rebuild of the FTS index.
     /// Subsequent syncs only upsert the threads that actually have
     /// updated message payloads, which is O(k) instead of O(n).
@@ -543,6 +547,7 @@ final class InboxViewModel {
     /// Hides a thread from the inbox and removes it from the search index.
     func archive(_ threadID: String) {
         archivedThreadIDs.insert(threadID)
+        dismissHandler?(threadID)
         Task { await searchIndex.delete(threadID: threadID) }
     }
 

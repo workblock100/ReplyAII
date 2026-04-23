@@ -677,4 +677,71 @@ final class SearchIndexTests: XCTestCase {
         let hits = await index.search(query: "multichannel", channel: nil)
         XCTAssertEqual(hits.count, 8, "unfiltered search must return all 8 threads across channels")
     }
+
+    // MARK: - REP-119: search result cap at 50
+
+    func testSearchResultCapAt50() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...100 {
+            let t = MessageThread(id: "cap-\(i)", channel: .imessage, name: "Cap\(i)",
+                                  avatar: "C", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "cappedterm unique-\(i)", time: "t")
+            ])
+        }
+        let results = await index.search("cappedterm")
+        XCTAssertEqual(results.count, 50,
+                       "search must cap results at 50 (the default limit) to prevent unbounded palette noise")
+    }
+
+    func testSearchResultBelowCapReturnsAll() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...5 {
+            let t = MessageThread(id: "few-\(i)", channel: .imessage, name: "Few\(i)",
+                                  avatar: "F", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "smallresultset", time: "t")
+            ])
+        }
+        let results = await index.search("smallresultset")
+        XCTAssertEqual(results.count, 5,
+                       "search must not over-truncate when result set is smaller than the cap")
+    }
+
+    // MARK: - REP-125: upsert replaces preview text (no ghost terms)
+
+    func testUpsertReplacesOldPreviewTerms() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "ghost-1", channel: .imessage, name: "Ghost",
+                                   avatar: "G", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "morning coffee", time: "t1")
+        ])
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "evening tea", time: "t2")
+        ])
+
+        let oldHits = await index.search("morning")
+        XCTAssertEqual(oldHits.count, 0,
+                       "old preview terms must not be searchable after upsert (no FTS5 ghost terms)")
+    }
+
+    func testUpsertMakesNewPreviewTermsSearchable() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "ghost-2", channel: .imessage, name: "Ghost2",
+                                   avatar: "G", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "morning coffee", time: "t1")
+        ])
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "evening tea", time: "t2")
+        ])
+
+        let newHits = await index.search("evening")
+        XCTAssertEqual(newHits.count, 1,
+                       "new preview terms must be searchable after upsert")
+        XCTAssertEqual(newHits.first?.threadID, thread.id)
+    }
 }

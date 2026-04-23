@@ -150,7 +150,7 @@ actor SearchIndex {
 
     /// FTS5 match query. Empty input returns an empty array. The caller
     /// is expected to debounce UI input.
-    func search(_ query: String, limit: Int = 20) -> [Result] {
+    func search(_ query: String, limit: Int = 50) -> [Result] {
         search(query: query, channel: nil, limit: limit)
     }
 
@@ -158,7 +158,7 @@ actor SearchIndex {
     /// When `channel` is non-nil, only rows indexed for that channel are returned.
     /// The `channel` column is UNINDEXED so the filter is a post-MATCH WHERE clause,
     /// not a full-text search — this is safe and efficient for small result sets.
-    func search(query: String, channel: Channel?, limit: Int = 20) -> [Result] {
+    func search(query: String, channel: Channel?, limit: Int = 50) -> [Result] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let db else { return [] }
 

@@ -664,3 +664,26 @@ final class InboxViewModelOrderingTests: XCTestCase {
         XCTAssertEqual(vm.threads.last?.id, "t-unpinned")
     }
 }
+
+// MARK: - REP-118: archive evicts DraftEngine cache entry
+
+@MainActor
+final class ArchiveDraftEvictionTests: XCTestCase {
+
+    func testArchiveClearsDraftCacheEntry() {
+        let d = UserDefaults(suiteName: "test.ReplyAI.archive-evict.\(UUID())")!
+        UserDefaults.registerReplyAIDefaults(in: d)
+
+        let thread = MessageThread(id: "evict-1", channel: .imessage, name: "Eve",
+                                   avatar: "E", preview: "hey", time: "now")
+        let vm = InboxViewModel(threads: [thread], contacts: fastContacts(), defaults: d)
+
+        var dismissedID: String?
+        vm.dismissHandler = { id in dismissedID = id }
+
+        vm.archive(thread.id)
+
+        XCTAssertEqual(dismissedID, thread.id,
+                       "archive must invoke dismissHandler with the archived thread ID")
+    }
+}

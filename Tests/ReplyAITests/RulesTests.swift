@@ -1373,3 +1373,49 @@ final class RulesStoreConcurrencyTests: XCTestCase {
                        "All \(taskCount) concurrent adds must land — no rule silently dropped")
     }
 }
+
+// MARK: - REP-116: hasUnread predicate
+
+final class HasUnreadPredicateTests: XCTestCase {
+
+    private func ctx(unread: Int) -> RuleContext {
+        RuleContext(
+            senderName: "Test", senderHandle: "test",
+            channel: .imessage, lastMessageText: "hello",
+            isUnread: unread > 0, unreadCount: unread, senderKnown: true, chatIdentifier: "chat1"
+        )
+    }
+
+    func testHasUnreadMatchesPositiveCount() {
+        XCTAssertTrue(
+            RuleEvaluator.matches(.hasUnread, in: ctx(unread: 3)),
+            "hasUnread must match when unreadCount > 0"
+        )
+    }
+
+    func testHasUnreadDoesNotMatchZeroCount() {
+        XCTAssertFalse(
+            RuleEvaluator.matches(.hasUnread, in: ctx(unread: 0)),
+            "hasUnread must not match when unreadCount == 0"
+        )
+    }
+
+    func testHasUnreadCodableRoundTrip() throws {
+        let pred: RulePredicate = .hasUnread
+        let data = try JSONEncoder().encode(pred)
+        let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+        XCTAssertEqual(pred, decoded, "hasUnread must survive JSON encode/decode round-trip")
+        if case .hasUnread = decoded { } else { XCTFail("decoded predicate has wrong case") }
+    }
+
+    func testNotHasUnreadMatchesReadThread() {
+        XCTAssertTrue(
+            RuleEvaluator.matches(.not(.hasUnread), in: ctx(unread: 0)),
+            "not(hasUnread) must match a thread with zero unread messages"
+        )
+        XCTAssertFalse(
+            RuleEvaluator.matches(.not(.hasUnread), in: ctx(unread: 1)),
+            "not(hasUnread) must not match a thread with unread messages"
+        )
+    }
+}

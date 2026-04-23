@@ -138,6 +138,8 @@ struct SfcRulesView: View {
             return "NOT (\(humanize(predicate: p)))"
         case .messageAgeOlderThan(let hours):
             return "message older than \(hours)h"
+        case .hasUnread:
+            return "has unread messages"
         }
     }
 

@@ -9,6 +9,7 @@ struct RuleContext: Sendable {
     var channel: Channel
     var lastMessageText: String
     var isUnread: Bool
+    var unreadCount: Int = 0
     var senderKnown: Bool
     /// Raw chat identifier from chat.db — "chat1234567890" for group chats,
     /// "+14155551234" or "user@example.com" for 1:1 threads.
@@ -31,6 +32,7 @@ struct RuleContext: Sendable {
             channel: thread.channel,
             lastMessageText: thread.preview,
             isUnread: thread.unread > 0,
+            unreadCount: thread.unread,
             senderKnown: !thread.name.hasPrefix("+") && !thread.name.contains("@") || !thread.name.allSatisfy {
                 "+0123456789 ()-".contains($0)
             },
@@ -92,6 +94,9 @@ enum RuleEvaluator {
 
         case .messageAgeOlderThan(let hours):
             return currentDate.timeIntervalSince(ctx.lastMessageDate) > Double(hours) * 3600
+
+        case .hasUnread:
+            return ctx.unreadCount > 0
         }
     }
 
