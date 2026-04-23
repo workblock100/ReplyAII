@@ -36,15 +36,40 @@ final class ContactsResolverTests: XCTestCase {
     func testCacheRemembersMissesAsEmpty() {
         let fake = FakeContactStore()
         fake.prepopulate(initialAccess: .granted)
-        // no name mapping → lookup returns nil
+        // no name mapping → store returns nil, falls back to the raw handle
 
         let resolver = ContactsResolver(store: fake)
         resolver.overrideAccessForTesting(.granted)
 
-        XCTAssertNil(resolver.name(for: "+15559999999"))
-        XCTAssertNil(resolver.name(for: "+15559999999"))
+        XCTAssertEqual(resolver.name(for: "+15559999999"), "+15559999999")
+        XCTAssertEqual(resolver.name(for: "+15559999999"), "+15559999999")
         XCTAssertEqual(fake.lookupCallCount, 1,
                        "repeat lookup of an unknown handle should not keep hitting the store")
+    }
+
+    // MARK: - REP-156: fallback contract
+
+    func testNameForHandleFallsBackToHandleWhenNotInStore() {
+        let fake = FakeContactStore()
+        fake.prepopulate(initialAccess: .granted)
+        // No contact entry for this handle.
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let result = resolver.name(for: "+15558880001")
+        XCTAssertEqual(result, "+15558880001",
+                       "unresolved handle must fall back to the raw handle string, not nil")
+    }
+
+    func testNameForHandleReturnsContactNameWhenFound() {
+        let fake = FakeContactStore()
+        fake.names["alice@example.com"] = "Alice Smith"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let result = resolver.name(for: "alice@example.com")
+        XCTAssertEqual(result, "Alice Smith",
+                       "resolved handle must return the contact name from the store")
     }
 
     // MARK: - Access gating

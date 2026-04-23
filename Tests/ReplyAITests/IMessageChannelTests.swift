@@ -981,4 +981,69 @@ final class IMessageChannelMessageLimitTests: XCTestCase {
                 nil, nil, nil)
         }
     }
+
+    // MARK: - REP-146: per-thread cap is independent across threads
+
+    // Inserts a chat with an explicit chatID to avoid hash collisions when
+    // multiple threads share one test DB. ROWIDs start at rowIDStart.
+    private func insertThread(chatID: Int64, identifier: String, count: Int, rowIDStart: Int64) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db,
+                              SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let db else { throw NSError(domain: "sqlite", code: -1) }
+        defer { sqlite3_close(db) }
+
+        sqlite3_exec(db, "INSERT INTO chat VALUES (\(chatID), '\(identifier)', '', 'iMessage', '');",
+                     nil, nil, nil)
+
+        for i in 0..<count {
+            let msgID = rowIDStart + Int64(i)
+            var stmt: OpaquePointer?
+            let msql = "INSERT INTO message(ROWID,text,attributedBody,is_from_me,is_read,date,associated_message_type) VALUES (?1,?2,NULL,0,0,?3,0);"
+            sqlite3_prepare_v2(db, msql, -1, &stmt, nil)
+            sqlite3_bind_int64(stmt, 1, msgID)
+            let txt = "\(identifier)-\(i + 1)"
+            sqlite3_bind_text(stmt, 2, txt, -1, Self.TRANSIENT)
+            sqlite3_bind_int64(stmt, 3, Int64(i + 1))
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+
+            sqlite3_exec(db,
+                "INSERT INTO chat_message_join VALUES (\(chatID), \(msgID));",
+                nil, nil, nil)
+        }
+    }
+
+    /// Thread A (100 msgs), B (3 msgs), C (50 msgs) with limit=20: each thread is
+    /// capped independently — the under-limit thread B returns all 3, not 0 or 20.
+    func testPerThreadMessageCapAppliedIndependently() async throws {
+        try insertThread(chatID: 101, identifier: "+15556000", count: 100, rowIDStart: 1)
+        try insertThread(chatID: 102, identifier: "+15556001", count: 3,   rowIDStart: 101)
+        try insertThread(chatID: 103, identifier: "+15556002", count: 50,  rowIDStart: 104)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgsA = try await channel.messages(forThreadID: "+15556000", limit: 20)
+        let msgsB = try await channel.messages(forThreadID: "+15556001", limit: 20)
+        let msgsC = try await channel.messages(forThreadID: "+15556002", limit: 20)
+
+        XCTAssertEqual(msgsA.count, 20, "thread A (100 msgs) must be capped at limit=20")
+        XCTAssertEqual(msgsB.count, 3,  "thread B (3 msgs) must return all (below limit)")
+        XCTAssertEqual(msgsC.count, 20, "thread C (50 msgs) must be capped at limit=20")
+    }
+
+    /// Total messages across three threads with per-thread cap=20 must be 43 (20+3+20),
+    /// not 60, confirming the cap is per-thread and not a shared global budget.
+    func testTotalMessageCountRespectsCappedSum() async throws {
+        try insertThread(chatID: 201, identifier: "+15557000", count: 100, rowIDStart: 1)
+        try insertThread(chatID: 202, identifier: "+15557001", count: 3,   rowIDStart: 101)
+        try insertThread(chatID: 203, identifier: "+15557002", count: 50,  rowIDStart: 104)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgsA = try await channel.messages(forThreadID: "+15557000", limit: 20)
+        let msgsB = try await channel.messages(forThreadID: "+15557001", limit: 20)
+        let msgsC = try await channel.messages(forThreadID: "+15557002", limit: 20)
+
+        let total = msgsA.count + msgsB.count + msgsC.count
+        XCTAssertEqual(total, 43, "per-thread cap sums to 20+3+20=43, not 60 (which would mean a global budget)")
+    }
 }

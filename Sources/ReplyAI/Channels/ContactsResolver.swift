@@ -148,13 +148,13 @@ final class ContactsResolver: @unchecked Sendable {
         let (entry, gate) = locked.withLock { state -> (CacheEntry?, Access) in
             (state.cache[key], state.access)
         }
-        if let entry, isFresh(entry, now: now) { return entry.name.isEmpty ? nil : entry.name }
+        if let entry, isFresh(entry, now: now) { return entry.name.isEmpty ? handle : entry.name }
         if gate != .granted { return nil }
 
         let resolved = store.lookup(handle: key) ?? ""
         let writeAt = Date()
         locked.withLock { $0.cache[key] = CacheEntry(name: resolved, cachedAt: writeAt) }
-        return resolved.isEmpty ? nil : resolved
+        return resolved.isEmpty ? handle : resolved
     }
 
     /// Collapse E.164 variants to a 10-digit canonical form so `+14155551234`,

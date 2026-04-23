@@ -338,7 +338,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-055654
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `IMessageChannel.recentThreads` fetches thread headers, then fetches messages per thread with a per-thread cap. Verify the cap is per-thread, not global: fixture DB with thread A (100 messages), thread B (3 messages), thread C (50 messages), per-thread cap 20. Assert: thread A returns 20, thread B returns 3 (uncapped), thread C returns 20. Total is 43, not 60. Uses the in-memory SQLite fixture pattern.
@@ -355,7 +355,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-055654
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: `ContactsResolver.name(for handle:)` resolves a contact name; when the underlying store returns nil (handle not in address book), it falls back to the raw handle string as the display name. Pin this fallback contract: given a handle not in the mock store, `name(for:)` returns the handle itself (not nil, not empty). Also test the success path: when the mock store returns "Alice Smith" for "alice@example.com", `name(for:)` returns "Alice Smith". This is the display-name contract the inbox relies on.
