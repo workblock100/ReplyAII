@@ -11,6 +11,13 @@ struct ReplyAIApp: App {
         if UserDefaults.standard.object(forKey: PreferenceKey.firstLaunchDate) == nil {
             UserDefaults.standard.set(Date(), forKey: PreferenceKey.firstLaunchDate)
         }
+        // Flush any pending debounced Stats writes before the process exits so
+        // the last session's increments survive a fast quit or Force Quit.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in Stats.shared.flushNow() }
     }
 
     var body: some Scene {

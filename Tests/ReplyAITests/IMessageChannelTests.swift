@@ -1047,3 +1047,120 @@ final class IMessageChannelMessageLimitTests: XCTestCase {
         XCTAssertEqual(total, 43, "per-thread cap sums to 20+3+20=43, not 60 (which would mean a global budget)")
     }
 }
+
+// MARK: - REP-159: MessageThread.hasAttachment from message-level SQL field
+
+/// Verifies that `recentThreads()` sets `MessageThread.hasAttachment` correctly
+/// based on the `cache_has_attachments` value of the thread's most recent message.
+final class IMessageChannelThreadHasAttachmentTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-ThreadHasAtt-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private func openDB() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else {
+            throw ChannelError.databaseError(code: 1, message: "test db open failed")
+        }
+        return handle
+    }
+
+    private func buildSchema() throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (
+            ROWID INTEGER PRIMARY KEY,
+            text TEXT,
+            attributedBody BLOB,
+            is_from_me INTEGER,
+            is_read INTEGER,
+            date INTEGER,
+            associated_message_type INTEGER DEFAULT 0,
+            cache_has_attachments INTEGER DEFAULT 0,
+            date_delivered INTEGER DEFAULT 0
+        );
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertChat(_ db: OpaquePointer, rowid: Int64, identifier: String) {
+        let sql = "INSERT INTO chat VALUES (?1, ?2, '', 'iMessage', ?3);"
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, identifier, -1, Self.TRANSIENT)
+        sqlite3_bind_text(s, 3, "iMessage;-;\(identifier)", -1, Self.TRANSIENT)
+        sqlite3_step(s)
+        sqlite3_finalize(s)
+    }
+
+    private func insertMessage(_ db: OpaquePointer, rowid: Int64, chatRowID: Int64,
+                               text: String, hasAttachment: Bool, date: Int64 = 700_000_000) {
+        let sql = """
+        INSERT INTO message(ROWID, text, attributedBody, is_from_me, is_read, date,
+                            associated_message_type, cache_has_attachments)
+        VALUES (?1, ?2, NULL, 0, 0, ?3, 0, ?4);
+        """
+        var m: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &m, nil)
+        sqlite3_bind_int64(m, 1, rowid)
+        sqlite3_bind_text(m, 2, text, -1, Self.TRANSIENT)
+        sqlite3_bind_int64(m, 3, date)
+        sqlite3_bind_int(m, 4, hasAttachment ? 1 : 0)
+        sqlite3_step(m)
+        sqlite3_finalize(m)
+        let link = "INSERT INTO chat_message_join VALUES (?1, ?2);"
+        var l: OpaquePointer?
+        sqlite3_prepare_v2(db, link, -1, &l, nil)
+        sqlite3_bind_int64(l, 1, chatRowID)
+        sqlite3_bind_int64(l, 2, rowid)
+        sqlite3_step(l)
+        sqlite3_finalize(l)
+    }
+
+    /// A thread whose latest message has `cache_has_attachments=1` must surface
+    /// as `MessageThread.hasAttachment == true` from `recentThreads()`.
+    func testThreadHasAttachmentTrueWhenMessageHasAttachment() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 1, identifier: "+15550100")
+        insertMessage(db, rowid: 10, chatRowID: 1, text: "here's the doc", hasAttachment: true)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertTrue(threads[0].hasAttachment,
+                      "thread whose most-recent message has cache_has_attachments=1 must have hasAttachment=true")
+    }
+
+    /// A thread whose messages all have `cache_has_attachments=0` must surface
+    /// as `MessageThread.hasAttachment == false` from `recentThreads()`.
+    func testThreadHasAttachmentFalseWhenNoMessagesHaveAttachment() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 2, identifier: "+15550101")
+        insertMessage(db, rowid: 20, chatRowID: 2, text: "just text", hasAttachment: false)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertFalse(threads[0].hasAttachment,
+                       "thread with no attachment messages must have hasAttachment=false")
+    }
+}

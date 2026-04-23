@@ -7,13 +7,13 @@ import Foundation
 ///
 /// Thread-safety: state is wrapped in `Locked<Snapshot>` so it's callable
 /// from the SQLite worker thread, the DraftEngine's cooperative-queue stream
-/// task, and the main actor without bridging. The JSON write happens after
-/// releasing the lock so a slow write never blocks short reads.
+/// task, and the main actor without bridging. The JSON write is debounced
+/// (2 s window) so rapid-fire increments coalesce into one I/O call.
 final class Stats: @unchecked Sendable {
     /// Process-wide shared instance used by production code paths that
     /// don't have an injected Stats (e.g. RulesStore on load). Tests
     /// construct their own instances to avoid cross-test interference.
-    static let shared = Stats()
+    static let shared = Stats(fileURL: defaultFileURL())
 
     /// Codable snapshot of every counter. Used as both the on-disk
     /// shape and the value callers see through `snapshot()`.
@@ -82,15 +82,24 @@ final class Stats: @unchecked Sendable {
     }
 
     private let state: Locked<Snapshot>
-    private let fileURL: URL
+    /// Nil disables all file I/O — used by tests that only care about
+    /// in-memory state and must not touch the real app support directory.
+    private let fileURL: URL?
 
-    /// - Parameter fileURL: Override the persistence path. Nil picks
-    ///   `~/Library/Application Support/ReplyAI/stats.json`. Tests
-    ///   pass a temp URL so assertions don't fight the running app.
+    /// Serializes pending debounced writes. Two locks kept separate:
+    /// `state` protects counter mutations; `writeLock` protects the
+    /// pending DispatchWorkItem pointer so cancel/replace is race-free.
+    private let writeLock = NSLock()
+    private var pendingWrite: DispatchWorkItem?
+    private static let writeQueue = DispatchQueue(label: "com.replyai.stats.write", qos: .utility)
+
+    /// - Parameter fileURL: Persistence path. Nil disables file I/O entirely
+    ///   (useful for tests that only verify in-memory counters). Non-nil paths
+    ///   are seeded from disk on init and written with a 2 s debounce window.
+    ///   Pass `Stats.defaultFileURL()` explicitly for the production path.
     init(fileURL: URL? = nil) {
-        let url = fileURL ?? Self.defaultFileURL()
-        self.fileURL = url
-        self.state = Locked(Self.load(from: url) ?? Snapshot())
+        self.fileURL = fileURL
+        self.state = Locked(fileURL.flatMap(Self.load(from:)) ?? Snapshot())
     }
 
     // MARK: - Reads
@@ -194,7 +203,10 @@ final class Stats: @unchecked Sendable {
 
     // MARK: - Persistence
 
-    private static func defaultFileURL() -> URL {
+    /// Resolves the default on-disk path for production use.
+    /// Call explicitly when constructing `Stats.shared` so that `init(fileURL: nil)`
+    /// can mean "no persistence" rather than "use default".
+    static func defaultFileURL() -> URL {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
@@ -206,6 +218,19 @@ final class Stats: @unchecked Sendable {
     private static func load(from url: URL) -> Snapshot? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(Snapshot.self, from: data)
+    }
+
+    /// Cancel the pending debounce write and flush current counters to
+    /// disk synchronously. Call on app shutdown to avoid losing the last
+    /// session's increments before the 2 s window expires.
+    /// No-op when `fileURL` is nil.
+    func flushNow() {
+        writeLock.lock()
+        pendingWrite?.cancel()
+        pendingWrite = nil
+        writeLock.unlock()
+        guard let url = fileURL else { return }
+        writeToDisk(to: url)
     }
 
     // MARK: - Weekly log
@@ -237,16 +262,30 @@ final class Stats: @unchecked Sendable {
         try data.write(to: url, options: .atomic)
     }
 
-    // MARK: - Persistence (internal JSON)
+    // MARK: - Internal write helpers
+
+    /// Schedules a debounced write: cancels any pending write and queues a
+    /// new one 2 s from now. Rapid increments coalesce into a single I/O call.
+    private func persist() {
+        guard let url = fileURL else { return }
+        writeLock.lock()
+        pendingWrite?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.writeToDisk(to: url)
+        }
+        pendingWrite = item
+        writeLock.unlock()
+        Self.writeQueue.asyncAfter(deadline: .now() + 2, execute: item)
+    }
 
     /// Atomic write. Errors are swallowed — an observability failure
-    /// must never break the caller. Snapshot is copied out of the lock
-    /// first so the encode doesn't hold the lock across I/O.
-    private func persist() {
+    /// must never break the caller.
+    private func writeToDisk(to url: URL) {
         let snap = snapshot()
         guard let data = try? JSONEncoder().encode(snap) else { return }
-        let dir = fileURL.deletingLastPathComponent()
+        let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: fileURL, options: .atomic)
+        try? data.write(to: url, options: .atomic)
     }
 }

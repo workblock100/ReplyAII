@@ -241,7 +241,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.shared` resets all in-memory counters to zero on every app launch. Persist cumulative counters to `~/Library/Application Support/ReplyAI/stats-lifetime.json` (separate from the per-session weekly file REP-056 produces). On `Stats.init`, read the JSON file and seed the in-memory counters from it. On each `increment*` call, schedule an atomic write of the updated totals (debounced 2s to avoid write-per-increment overhead). Use an injectable `statsFileURL: URL?` (nil = skip persistence, for tests). Tests: `testLifetimeCountersSeedFromDisk` — init with pre-written JSON, verify counters start at correct value; `testLifetimeCountersAccumulateAcrossInits` — write to disk in first instance, init second instance, verify accumulation; `testNilURLSkipsPersistence` — ensure tests using nil URL never read/write files.
@@ -314,7 +314,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: The debounced write added by REP-105 may not fire if the app terminates before the 2s debounce window expires, causing the last session's increments to be lost. Add `Stats.flushNow()` that cancels the pending debounce task and writes current counters to disk synchronously. Wire it to `ReplyAIApp.applicationWillTerminate` (or equivalent scene lifecycle). Tests using injectable URL: increment counter + call `flushNow()` + re-init Stats from same URL → counter reflects all increments; calling `flushNow()` twice is idempotent; `flushNow()` on nil-URL Stats is a no-op.
@@ -369,7 +369,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-064432
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `MessageThread.hasAttachment` is derived from `cache_has_attachments` in the message SQL query. No test verifies the thread-level aggregation: a thread with at least one message where `cache_has_attachments=1` should produce `MessageThread.hasAttachment == true`; a thread with no such messages should produce `false`. Uses the in-memory SQLite fixture pattern. Two tests: one thread with attachment → `hasAttachment: true`; one thread without → `hasAttachment: false`.

@@ -63,8 +63,10 @@ final class StatsTests: XCTestCase {
         first.recordDraftSent()
         first.recordMessagesIndexed(17)
 
+        // Writes are debounced; flushNow() bypasses the delay for the test.
+        first.flushNow()
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path),
-                      "stats.json should be written on each increment")
+                      "stats.json should be written after flushNow()")
 
         // Reload through a fresh instance — everything should survive.
         let second = Stats(fileURL: url)
@@ -188,6 +190,7 @@ final class StatsTests: XCTestCase {
         let first = Stats(fileURL: url)
         first.incrementIndexed(channel: .imessage, count: 10)
         first.incrementIndexed(channel: .teams, count: 4)
+        first.flushNow()
 
         let second = Stats(fileURL: url)
         let snap = second.snapshot()
@@ -224,6 +227,7 @@ final class StatsTests: XCTestCase {
         first.recordDraftGenerated(tone: .playful)
         first.recordDraftSent(tone: .playful)
         first.recordDraftGenerated(tone: .direct)
+        first.flushNow()
 
         let second = Stats(fileURL: url)
         let snap = second.snapshot()
@@ -285,6 +289,7 @@ final class StatsTests: XCTestCase {
         first.incrementRulesMatched()
         first.incrementRulesMatched()
         first.incrementRulesMatched()
+        first.flushNow()
 
         let second = Stats(fileURL: url)
         XCTAssertEqual(second.snapshot().rulesMatchedCount, 3,
@@ -460,5 +465,155 @@ extension StatsTests {
         XCTAssertEqual(
             Set(dict.keys), Set(knownKeys),
             "snapshot JSON must contain exactly the expected counter keys — update knownKeys when adding a new counter")
+    }
+}
+
+// MARK: - REP-105: lifetime counter persistence across inits
+
+final class StatsLifetimePersistenceTests: XCTestCase {
+    private var tempDir: URL!
+
+    override func setUpWithError() throws {
+        tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("StatsLifetimeTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    private func tempURL(_ name: String = "stats.json") -> URL {
+        tempDir.appendingPathComponent(name)
+    }
+
+    /// Pre-write a JSON file representing previous-session counters, then init a
+    /// fresh Stats — it must seed from the file rather than starting at zero.
+    func testLifetimeCountersSeedFromDisk() throws {
+        let url = tempURL()
+        let seed = Stats.Snapshot(
+            rulesFiredByAction: ["archive": 7],
+            draftsGenerated: 12,
+            draftsSent: 3,
+            messagesIndexed: 500
+        )
+        let data = try JSONEncoder().encode(seed)
+        try data.write(to: url, options: .atomic)
+
+        let stats = Stats(fileURL: url)
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.rulesFiredByAction["archive"], 7,
+                       "must seed rulesFiredByAction from disk on init")
+        XCTAssertEqual(snap.draftsGenerated, 12,
+                       "must seed draftsGenerated from disk on init")
+        XCTAssertEqual(snap.draftsSent, 3,
+                       "must seed draftsSent from disk on init")
+        XCTAssertEqual(snap.messagesIndexed, 500,
+                       "must seed messagesIndexed from disk on init")
+    }
+
+    /// First instance writes counters, second instance loads them and keeps
+    /// incrementing — total must reflect both sessions cumulatively.
+    func testLifetimeCountersAccumulateAcrossInits() throws {
+        let url = tempURL()
+
+        let session1 = Stats(fileURL: url)
+        session1.recordDraftGenerated()
+        session1.recordDraftGenerated()
+        session1.recordDraftSent()
+        session1.flushNow()
+
+        let session2 = Stats(fileURL: url)
+        XCTAssertEqual(session2.snapshot().draftsGenerated, 2,
+                       "second session must start from first session's persisted count")
+        session2.recordDraftGenerated()
+        XCTAssertEqual(session2.snapshot().draftsGenerated, 3,
+                       "second session increments on top of inherited count")
+        XCTAssertEqual(session2.snapshot().draftsSent, 1,
+                       "draftsSent from first session must persist into second")
+    }
+
+    /// Stats with nil fileURL must never create or read any file — safe for
+    /// tests that only care about in-memory counters.
+    func testNilURLSkipsPersistence() {
+        let stats = Stats(fileURL: nil)
+        stats.recordDraftGenerated()
+        stats.recordDraftGenerated()
+        stats.recordRuleFired(action: "pin")
+
+        // In-memory counters still work correctly.
+        XCTAssertEqual(stats.snapshot().draftsGenerated, 2)
+        XCTAssertEqual(stats.snapshot().rulesFiredByAction["pin"], 1)
+
+        // flushNow() must be a no-op — no crash and no files created.
+        stats.flushNow()
+
+        // No stats file should exist anywhere in the temp dir.
+        let items = (try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? []
+        XCTAssertTrue(items.isEmpty,
+                      "nil-URL Stats must not create any files — found: \(items)")
+    }
+}
+
+// MARK: - REP-139: flushNow() for clean-shutdown persistence
+
+final class StatsFlushNowTests: XCTestCase {
+    private var tempDir: URL!
+
+    override func setUpWithError() throws {
+        tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("StatsFlushNowTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    private func tempURL(_ name: String = "stats.json") -> URL {
+        tempDir.appendingPathComponent(name)
+    }
+
+    /// Increment counters, call flushNow() immediately (before the 2 s debounce
+    /// fires), then init a fresh Stats — all increments must be reflected.
+    func testFlushNowPersistsBeforeDebounce() throws {
+        let url = tempURL()
+        let stats = Stats(fileURL: url)
+        stats.recordDraftGenerated()
+        stats.recordDraftGenerated()
+        stats.recordDraftGenerated()
+        stats.recordDraftSent()
+        stats.flushNow()
+
+        let reloaded = Stats(fileURL: url)
+        XCTAssertEqual(reloaded.snapshot().draftsGenerated, 3,
+                       "flushNow() must write all increments before the debounce window expires")
+        XCTAssertEqual(reloaded.snapshot().draftsSent, 1,
+                       "draftsSent must also survive a synchronous flush")
+    }
+
+    /// Calling flushNow() twice must leave counters correct — no double-zero,
+    /// no corrupt encoding from concurrent writes.
+    func testFlushNowIsIdempotent() throws {
+        let url = tempURL()
+        let stats = Stats(fileURL: url)
+        stats.recordMessagesIndexed(42)
+        stats.flushNow()
+        stats.flushNow()
+
+        let reloaded = Stats(fileURL: url)
+        XCTAssertEqual(reloaded.snapshot().messagesIndexed, 42,
+                       "two consecutive flushNow() calls must not corrupt the persisted count")
+    }
+
+    /// Stats with nil fileURL — flushNow() must silently do nothing.
+    func testFlushNowWithNilURLIsNoop() {
+        let stats = Stats(fileURL: nil)
+        stats.recordDraftGenerated()
+        // Must not crash and must not create any file.
+        stats.flushNow()
+        stats.flushNow()
+        XCTAssertEqual(stats.snapshot().draftsGenerated, 1,
+                       "in-memory counter must still be correct after no-op flushes")
     }
 }
