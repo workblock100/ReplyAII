@@ -6,6 +6,62 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-23 04:03 – 2026-04-23 10:12 UTC (last 6h) — ⭐⭐⭐⭐
+
+**Rating: 4/5**
+
+Strong substance, minor accounting slips. **3 substantive worker commits closing 21 REP tickets** (REP-142, -148, -149, -150, -151, -152, -153, -154, -155, -157, -158, -160, -161, -166, -167, -168, -171, -172, -173, -174, -175), **4 claim commits**, **3 AGENTS.md hash-fixup commits**, **1 blocked-batch commit** (worker-2026-04-23-085959 exceeded MLX fresh-clone build budget and parked work on `wip/2026-04-23-085959-stats-session-acceptance`), and **1 planner refresh** (second of the day). Test suite grew **404 → 463 (+59 tests)** — verified by `grep -c "func test" Tests/ReplyAITests/*.swift` = 463. Two production touches, both narrow and well-covered: `IMessageSender.escapeForAppleScriptLiteral` now maps `\n` → `\\n` (REP-174, 4 paired tests) and `InboxViewModel.isSyncing` flipped from `private` → `private(set)` so tests can observe the sync state machine (REP-168, 3 paired tests). Zero banned-action violations across the window: no `Package.swift` / `project.yml` / `Info.plist` / `scripts/*` / `*.entitlements` / `design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes or rebases.
+
+Rating docked from 5 → 4 on three accounting slips, each minor but real: (a) AGENTS.md still references a non-existent SHA `904b0e7` for the contract-tests commit — the real SHA is `7512321`, and the worker's hash-fixup commit (`094a066`) cited the fake SHA without `git cat-file`-validating; (b) AGENTS.md header says "465 tests" but the actual grep count is 463, a +2 overclaim this window; (c) `f40ed9d` was co-authored as "Claude Sonnet 4.6" where the surrounding worker commits use "Claude Autonomous Worker" — worth confirming the scheduled-task model pin is still Opus 4.7 + effortLevel=high per the user's documented automation-model rule.
+
+### Shipped this window (substantive worker commits, newest first)
+
+- **REP-142 / -155 / -167 / -168 / -171** (`f40ed9d`) — `InboxViewModel.isSyncing` visibility widened from `private` to `private(set)` so tests can observe the flag transition during `syncFromIMessage` (REP-168, production + 3 tests). Watcher-driven sync upserts a thread's `previewText` instead of appending duplicates (REP-142, 2 tests). Selecting the same thread twice no longer double-primes the draft engine (REP-155, 2 tests). `Preferences` `AppStorage` keys pinned as set-unique (REP-167). `Stats.snapshot()` regression guard verifies all expected counter keys are present (REP-171). +277/-8 across 7 files, +11 tests claimed (grep shows +9 in this commit; worker wrote "+11").
+- **REP-166 / -172 / -173 / -174 / -175** (`42b518c`) — `IMessageSender.escapeForAppleScriptLiteral` now escapes `\n` → `\\n` so embedded newlines no longer produce multi-line AppleScript `tell` blocks that break the parser (REP-174, 4 pinning tests for `"`, `\`, `\n`, emoji). Rule evaluator boundary: `matching` / `defaultTone` / `apply` all return safe empty values for an empty rules array (REP-166). `AttributedBodyDecoder` returns nil for the 32-byte all-zero blob (common DB null sentinel) and a lone `0x2B` tag with no length payload (REP-172). `ChatDBWatcher` survives 5 stop→reinit cycles without `DispatchSource` accumulation, and a 6th watcher still fires cleanly afterward (REP-173). `RulesStore.import` merge-not-replace semantics: update A, preserve B, append C in one round-trip, plus self-import and empty-array no-ops (REP-175). Tests: 440 → 454 (+14), 0 failures.
+- **REP-148 / -149 / -150 / -151 / -152 / -153 / -154 / -157 / -158 / -160 / -161** (`7512321`) — 11-ticket contract-test bundle. Pure test pins, zero production change. Invariants now locked: `RuleEvaluator.apply()` returns `(ruleID, action)` pairs ordered priority-desc, inactive excluded, empty on no match (REP-148). `Stats.acceptanceRate(for:)` distinguishes nil (no data) / 0.0 (no sends) / ratio (REP-149). `SearchIndex.Result` fields populated correctly from upsert data, outgoing messages use "me" as `senderName` (REP-150). `IMessageChannel.secondsSinceReferenceDate` boundary: exactly 1e12 → seconds, 1e12+1 → nanoseconds (REP-151). `PromptBuilder` handles all-`.me` and all-`.them` history without crash (REP-152). `DraftEngine.invalidate()` on uncached thread is idempotent (REP-153). `RulesStore.update()` with unknown UUID is a no-op, no spurious write (REP-154). `RulePredicate.and([])` is vacuous-true, dual of the already-pinned `or([]) = false` (REP-157). `IMessageSender.chatGUID`: nil → synthesizes `iMessage;-;<id>`, non-nil → returned verbatim (REP-158). `Stats` survives `DispatchQueue.concurrentPerform(100)` mixed-counter stress (REP-160). `textMatchesRegex` with `^`/`$` anchors respects `NSRegularExpression` range matching, not `String.contains` (REP-161). Tests: 409 → 440 (+31).
+
+### Test coverage delta
+
+- **+59 tests (404 → 463).** Verified locally by `grep -c "func test" Tests/ReplyAITests/*.swift`. AGENTS.md header says 465 — a +2 overclaim; possibly helpers counted as tests by the worker's procedure.
+- Test files expanded: `RulesTests.swift` (+435), `InboxViewModelTests.swift` (+165), `StatsTests.swift` (+129), `SearchIndexTests.swift` (+70), `IMessageSenderTests.swift` (+55), `DraftEngineTests.swift` (+35), `ChatDBWatcherTests.swift` (+32), `PromptBuilderTests.swift` (+30), `PreferencesTests.swift` (+25), `IMessageChannelTests.swift` (+22), `AttributedBodyDecoderTests.swift` (+14/-1). **Zero test files shrunk.**
+- Source: ~+7 LOC of production Swift across 2 modified files (`IMessageSender.swift` +2, `InboxViewModel.swift` +5). Test LOC ≈ +1,012. Test:source line ratio this window ≈ **145:1** — even heavier than the prior window because this queue was almost entirely test-pinning work.
+
+### Concerns
+
+- **Stale AGENTS.md SHA (`904b0e7`).** Worker's hash-fixup commit (`094a066`) cited a SHA that does not exist. The contract-tests commit is `7512321`. Second stale SHA in the done-log: `05e7035` (pre-existing, from 2026-04-22-174500). All other 20+ SHAs in AGENTS.md validate. Corrodes the done-log as a bisect artifact. Needs a one-liner correction next worker cycle.
+- **Test-count overclaim of +2.** AGENTS.md header 465 vs grep 463. Worker's run-log for `f40ed9d` also says "After: 465". Suggests the worker's counting method occasionally double-counts helpers or parameterized cases. Not a correctness issue, but AGENTS.md is a handoff document — the number should be grep-accurate.
+- **Co-author tag switch on `f40ed9d` to "Claude Sonnet 4.6".** The prior two substantive worker commits in this window used "Claude Autonomous Worker". Per the user's documented automation rule, the worker must run Opus 4.7 + effortLevel=high. A Sonnet-4.6 tag suggests the pin may have drifted (or this is just an attribution convention the worker chose on this run). Human should confirm the cron-task model pin is still correct.
+- **Blocked batch on MLX build budget.** `worker-2026-04-23-085959` blocked REP-135, -177, -179, -183, -187 because a fresh-clone MLX compile exceeded the time budget. Correct protocol behavior (worker pushed partial work to a `wip/` branch), but the planner added REP-177, -183, -187 two hours earlier in the same window — which means the planner is not weighting MLX-adjacency against fresh-clone build cost. Worth tagging MLX-touching tickets in BACKLOG.md so the worker can skip them when it detects a cold cache.
+- **Pre-existing non-deterministic test crashes** noted in the `worker-2026-04-23-025721` log: `InboxViewModelAutoPrimeTests` and nearby classes crash non-deterministically under Swift 6 + macOS 26.3. Worker flagged this but did not add a backlog item. Should be promoted to a P1 stability task.
+- **12-ticket bundle standing item.** Prior two reviews flagged bundle size. `7512321` is 11 tickets — still above the suggested cap of 8. Not rating-affecting yet, but the signal is consistent.
+- **8 old `wip/quality-*` branches from 2026-04-21** still unreviewed (5+ days; approaching the 7-day human-review threshold flagged by REP-016 / -017 / -048). Reviewer-noted in three consecutive windows now. Human sweep needed before 2026-04-24.
+
+### Suggestions for next planner cycle
+
+1. **Fix stale AGENTS.md SHAs.** Add a trivial S task: "AGENTS.md: correct `904b0e7` → `7512321` and `05e7035` → real SHA (look up the 2026-04-22-174500 merge)." Worker can do this in a single commit. Also add a guardrail: the hash-fixup step should `git cat-file -e` before citing.
+2. **Add test-count regression guard.** An S task: "Test count: derive the 'N tests' line in AGENTS.md from `grep -c "func test" Tests/ReplyAITests/*.swift` (no hand-maintained number)." Or a lightweight `scripts/agents-test-count.sh` that the worker runs before the hash-fixup commit.
+3. **Promote the non-deterministic test crash to a P1 backlog item.** `InboxViewModelAutoPrimeTests` + neighbors crash non-deterministically under Swift 6 + macOS 26.3. Ticket scope: root-cause (cooperative-executor hop timing is the most likely culprit per the worker's notes on REP-168), not band-aid.
+4. **Tag MLX-touching tickets in BACKLOG.md so fresh-clone workers can skip them.** Propose field: `requires_mlx_build: true` on tickets whose tests import MLX modules. Worker skips these when it detects a cold build cache.
+5. **Confirm scheduled-task model pin is Opus 4.7 + effortLevel=high.** The `f40ed9d` "Claude Sonnet 4.6" co-author tag is the first in recent windows; deserves a one-line human check against the cron config.
+6. **Cap bundles at ≤8 tickets.** Third time this has been suggested; ask the planner to enforce.
+
+### Rolling-window pattern
+
+Last eight windows (oldest → newest):
+
+- `review-2026-04-21.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-21-addendum.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-0403.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1003.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-1603.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-22-2210.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-23-0403.md` — ⭐⭐⭐⭐⭐
+- `review-2026-04-23-1012.md` (this) — ⭐⭐⭐⭐
+
+Zero consecutive sub-par (≤⭐⭐) windows. STOP AUTO-MERGE trigger remains disarmed.
+
+---
+
 ## Window 2026-04-22 22:10 – 2026-04-23 04:03 UTC (last 6h) — ⭐⭐⭐⭐⭐
 
 **Rating: 5/5**
