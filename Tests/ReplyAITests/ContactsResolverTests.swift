@@ -305,6 +305,60 @@ final class ContactsResolverTests: XCTestCase {
         )
         _ = resolver  // keep alive through the test
     }
+
+    // MARK: - REP-141: batchResolve result contract
+
+    func testBatchResolveResultKeySetMatchesInputHandles() {
+        let fake = FakeContactStore()
+        fake.names["4155550100"] = "Alice"
+        fake.names["4155550102"] = "Charlie"
+        // bob (4155550101) is not resolvable — will be absent from result.
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let handles = ["+14155550100", "+14155550101", "+14155550102"]
+        let result = resolver.resolveAll(handles: handles)
+
+        XCTAssertEqual(result["+14155550100"], "Alice",
+                       "resolvable alice handle must appear in result")
+        XCTAssertEqual(result["+14155550102"], "Charlie",
+                       "resolvable charlie handle must appear in result")
+        // bob is unresolvable — subscript returns nil for absent key.
+        XCTAssertNil(result["+14155550101"],
+                     "unresolvable handle must return nil via subscript")
+    }
+
+    func testBatchResolveUnresolvableHandleAbsentOrNil() {
+        let fake = FakeContactStore()
+        fake.names["4155550200"] = "Alice"
+        // bob is not in the store.
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        let result = resolver.resolveAll(handles: ["+14155550200", "+14155550201"])
+
+        XCTAssertEqual(result["+14155550200"], "Alice",
+                       "resolvable handle must map to the contact name")
+        // Unresolvable handle is either absent or nil when accessed via subscript.
+        XCTAssertNil(result["+14155550201"],
+                     "unresolvable handle must not appear as a non-nil value in result")
+    }
+
+    func testBatchResolveCacheHitsDoNotInvokeStore() {
+        let fake = FakeContactStore()
+        fake.names["4155550300"] = "Dave"
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        // Warm the cache.
+        _ = resolver.name(for: "+14155550300")
+        let callsAfterWarm = fake.lookupCallCount
+
+        // Batch of the already-cached handle must not call the store again.
+        _ = resolver.resolveAll(handles: ["+14155550300"])
+        XCTAssertEqual(fake.lookupCallCount, callsAfterWarm,
+                       "cached handles must not trigger additional store lookups")
+    }
 }
 
 // MARK: - Test double

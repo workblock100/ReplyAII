@@ -84,7 +84,7 @@ final class InboxViewModel {
     let contacts: ContactsResolver
     private var watcher: ChatDBWatcher?
     let rules: RulesStore
-    let searchIndex = SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())
+    let searchIndex: SearchIndex
     let stats: Stats
 
     /// Injected at init time for test isolation; production uses `.standard`.
@@ -125,8 +125,10 @@ final class InboxViewModel {
         contacts: ContactsResolver? = nil,
         rules: RulesStore? = nil,
         stats: Stats? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        searchIndex: SearchIndex? = nil
     ) {
+        self.searchIndex = searchIndex ?? SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())
         self.defaults = defaults
         self.stats = stats ?? Stats()
         self.threads = threads

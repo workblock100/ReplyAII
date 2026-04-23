@@ -17,6 +17,7 @@ enum IMessageSender {
         case unsupported
         case timedOut
         case messageTooLong(Int)
+        case invalidChatGUID(String)
 
         var errorDescription: String? {
             switch self {
@@ -25,6 +26,7 @@ enum IMessageSender {
             case .unsupported:          "This thread can't be sent to (unsupported channel)."
             case .timedOut:             "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
             case .messageTooLong(let n): "Message too long (\(n) chars, max \(IMessageSender.maxMessageLength))."
+            case .invalidChatGUID(let g): "Invalid chat GUID '\(g)': must match iMessage;[+-];<identifier>."
             }
         }
     }
@@ -83,6 +85,11 @@ enum IMessageSender {
     }
 
     private static func sendRaw(_ text: String, chatGUID: String) throws {
+        // Validate before building the AppleScript so failures produce a clear
+        // diagnostic rather than an opaque errOSAScriptError -1708 from Messages.
+        guard isValidChatGUID(chatGUID) else {
+            throw SendError.invalidChatGUID(chatGUID)
+        }
         guard text.count <= maxMessageLength else {
             throw SendError.messageTooLong(text.count)
         }
@@ -152,6 +159,16 @@ enum IMessageSender {
             throw SendError.timedOut
         }
         if let err = capturedError { throw err }
+    }
+
+    /// Returns true if `guid` matches the pattern `iMessage;[+-];<non-empty>`.
+    /// Exposed as `internal` for unit tests.
+    static func isValidChatGUID(_ guid: String) -> Bool {
+        let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return false }
+        guard parts[0] == "iMessage" else { return false }
+        guard parts[1] == "+" || parts[1] == "-" else { return false }
+        return !parts[2].isEmpty
     }
 
     /// Escape a string for embedding inside AppleScript double-quoted

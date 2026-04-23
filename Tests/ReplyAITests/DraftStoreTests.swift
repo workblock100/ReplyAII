@@ -74,4 +74,39 @@ final class DraftStoreTests: XCTestCase {
         store.write(threadID: "t1", text: "updated")
         XCTAssertEqual(store.read(threadID: "t1"), "updated")
     }
+
+    // MARK: - REP-147: concurrent write+read for same threadID is race-free
+
+    func testConcurrentWriteReadNoCrash() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let texts = (0..<10).map { "concurrent write \($0)" }
+
+        DispatchQueue.concurrentPerform(iterations: 20) { i in
+            if i < 10 {
+                store.write(threadID: "race-thread", text: texts[i])
+            } else {
+                _ = store.read(threadID: "race-thread")
+            }
+        }
+        // Reaching here without crash = pass.
+    }
+
+    func testConcurrentWriteResultIsValid() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+
+        DispatchQueue.concurrentPerform(iterations: 20) { i in
+            if i < 10 {
+                store.write(threadID: "valid-race", text: "write-\(i)")
+            } else {
+                _ = store.read(threadID: "valid-race")
+            }
+        }
+
+        // After all concurrent ops, read must return a non-empty string written by one of the writers.
+        let result = store.read(threadID: "valid-race")
+        XCTAssertNotNil(result, "post-race read must return a valid string")
+        if let r = result {
+            XCTAssertTrue(r.hasPrefix("write-"), "result must be one of the written values, got: \(r)")
+        }
+    }
 }

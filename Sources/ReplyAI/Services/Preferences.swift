@@ -17,9 +17,12 @@ enum PreferenceKey {
     /// Lifetime launch counter. Intentionally excluded from wipe() so
     /// first-run hints aren't shown again after a factory reset.
     static let launchCount = "pref.app.launchCount"
+    /// Date of first ever launch. Set once on first init, never overwritten,
+    /// excluded from wipe() so upgrade banners ("using ReplyAI since…") survive resets.
+    static let firstLaunchDate = "pref.app.firstLaunchDate"
 
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
-    static let wipeExemptions: Set<String> = [launchCount]
+    static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate]
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.

@@ -101,12 +101,15 @@ final class DraftEngine {
     }
 
     /// Clears the in-flight task + state for a specific key (⌘.).
+    /// Also removes any persisted DraftStore entry so the stale draft does
+    /// not reappear on the next launch.
     func dismiss(threadID: String, tone: Tone) {
         let key = Key(threadID: threadID, tone: tone)
         tasks[key]?.cancel()
         tasks[key] = nil
         primingTasks["\(threadID):\(tone.rawValue)"] = nil
         drafts[key] = nil
+        store?.delete(threadID: threadID)
     }
 
     private func generate(thread: MessageThread, tone: Tone, history: [Message], force: Bool = false) {

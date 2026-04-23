@@ -271,34 +271,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: Extend `InboxViewModelTests.swift` with 3 new cases; use injected `Date` for deterministic timer tests.
 
 
-### REP-126 — SearchIndex: file-backed persistence round-trip smoke test
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: REP-041 added on-disk FTS5 persistence via `SearchIndex(databaseURL:)`, but the file-backed path only exercises the in-memory path under `swift test`. Add a round-trip test: create a `SearchIndex` with a temp file URL, index 3 threads, destroy the instance, create a new `SearchIndex` from the same URL, verify all 3 threads are still searchable. Use `tearDownWithError` to delete the temp file. Catches schema migration regressions if the FTS5 schema ever changes without a matching migration. No production code changes.
-- success_criteria:
-  - `testDiskBackedIndexSurvivesReinit` — threads indexed in instance A are findable after instance B opens same URL
-  - `testDiskBackedEmptyReinitDoesNotCrash` — opening an existing empty db URL without prior indexing is safe
-  - No production code touched
-- test_plan: 2 new tests in `SearchIndexTests.swift` using `FileManager.default.temporaryDirectory` for URL injection; `tearDownWithError` removes temp file.
 
-### REP-128 — IMessageSender: chatGUID format pre-flight validation
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
-- scope: Malformed `chatGUID` values (empty string, wrong service prefix, missing separator) produce opaque `errOSAScriptError` from AppleScript with no useful diagnostic. Add a pre-flight validation in `IMessageSender.send(text:toChatGUID:)` before constructing the AppleScript string: chatGUID must match the pattern `^iMessage;[+-];.+$`. Throw a new `SenderError.invalidChatGUID(String)` if the pattern fails. Tests use the dry-run/injectable `executeHook` seam so no AppleScript is invoked. Tests: valid 1:1 GUID passes; valid group GUID passes; empty string throws `invalidChatGUID`; wrong prefix (e.g. `"SMS;-;4155551234"`) throws; missing separator throws.
-- success_criteria:
-  - `SenderError.invalidChatGUID(String)` case added to `SenderError`
-  - Validation runs before AppleScript construction
-  - `testValidOneToOneGUIDPasses`, `testValidGroupGUIDPasses`, `testEmptyGUIDThrowsInvalid`, `testWrongPrefixThrowsInvalid`, `testMissingSeparatorThrowsInvalid`
-  - Existing IMessageSenderTests remain green
-- test_plan: 5 new tests in `IMessageSenderTests.swift`; no production AppleScript invocations (dry-run mode).
 
 ### REP-129 — SmartRule: `threadNameMatchesRegex(pattern:)` predicate
 - priority: P2
@@ -317,21 +290,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing RulesTests remain green
 - test_plan: 4 new tests in `RulesTests.swift` in a `ThreadNameMatchesRegexTests` class.
 
-### REP-130 — Preferences: `pref.app.firstLaunchDate` set-once key
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
-- scope: Companion to `launchCount` (REP-115). Add `pref.app.firstLaunchDate: Date?` (nil = not yet set) to `Preferences`. In `ReplyAIApp.init()`, if `firstLaunchDate == nil`, set it to `Date()` — only ever written once. Key is NOT wiped by `wipe()`. Useful for upgrade banners ("You've been using ReplyAI since…"), feature gating after N days, or analytics. Tests: `testFirstLaunchDateSetOnFirstInit` — nil before first write, then non-nil; `testFirstLaunchDateNotOverwrittenOnSubsequentInit` — calling init again doesn't update the date; `testFirstLaunchDateSurvivesWipe` — date persists after `wipe()`.
-- success_criteria:
-  - `pref.app.firstLaunchDate: Date?` in `Preferences`
-  - Set-once guard in `ReplyAIApp.init()`
-  - Key excluded from `wipe()` sweep
-  - `testFirstLaunchDateSetOnFirstInit`, `testFirstLaunchDateNotOverwrittenOnSubsequentInit`, `testFirstLaunchDateSurvivesWipe`
-  - Existing PreferencesTests remain green
-- test_plan: 3 new tests in `PreferencesTests.swift` using suiteName-isolated UserDefaults; use a fresh suite per test to avoid cross-test date pollution.
 
 ### REP-133 — RulesStore: export round-trip covers all currently-shipped predicate kinds
 - priority: P2
@@ -347,19 +305,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No production code touched
 - test_plan: 1 new test in `RulesTests.swift`; extend if new predicate kinds land (REP-079, REP-129) by adding their cases.
 
-### REP-134 — InboxViewModel: archive removes thread from SearchIndex (integration test)
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: REP-063 wired `SearchIndex.delete(threadID:)` through `InboxViewModel.archive(_:)`. There is no integration test that verifies the end-to-end path: archive a thread via the ViewModel, then confirm it is no longer searchable. Add a test using the existing `StaticMockChannel` + an in-memory `SearchIndex`. Index the thread before sync, run `archive(thread:)`, assert `searchIndex.search(query: someKnownTerm)` returns empty. Guards against future refactors accidentally removing the `delete` call.
-- success_criteria:
-  - `testArchiveRemovesThreadFromSearchIndex` — thread not findable after archive
-  - Uses in-memory `SearchIndex` (not a mock) for realistic FTS5 behavior
-  - No production code changes
-- test_plan: 1 new test in `InboxViewModelTests.swift`; inject `SearchIndex(databaseURL: nil)` into the ViewModel under test.
 
 ### REP-135 — Stats: sessionStartedAt timestamp and sessionDuration computed field
 - priority: P2
@@ -377,36 +322,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing StatsTests remain green
 - test_plan: 3 new tests in `StatsTests.swift` using isolated `Stats` instance (nil URL).
 
-### REP-137 — PromptBuilder: oversized system instruction guard
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Sources/ReplyAI/Services/PromptBuilder.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`
-- scope: `PromptBuilder` enforces a 2000-char message budget by dropping oldest messages first. However, if the tone system instruction itself exceeds the budget (e.g. a user pastes a 3000-char voice description), the current code may produce a prompt that overshoots the budget or silently drops all messages. Add a guard: if the system instruction length ≥ budget, truncate the instruction to `budget - 200` chars (leaving 200 chars minimum for at least the most-recent message). Tests: `testOversizedSystemInstructionTruncatedToFit` — 3000-char instruction + 1 short message produces a prompt ≤ total budget; `testOversizedSystemInstructionPreservesAtLeastOneMessage` — most-recent message still appears in output despite instruction truncation.
-- success_criteria:
-  - Guard added in `PromptBuilder` for system instruction overflow
-  - `testOversizedSystemInstructionTruncatedToFit` — prompt within budget
-  - `testOversizedSystemInstructionPreservesAtLeastOneMessage` — at least one message in output
-  - Existing PromptBuilderTests remain green (short instructions unaffected)
-- test_plan: 2 new tests in `PromptBuilderTests.swift` using a 3000-char fabricated tone instruction.
 
-### REP-138 — DraftEngine: dismiss() deletes corresponding DraftStore entry
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: `DraftStore` (REP-066) persists draft text to disk when the engine reaches `.ready`. If the user explicitly dismisses a draft (⌘. → `DraftEngine.dismiss(threadID:tone:)`), the stored file should be deleted so the stale draft does not reappear on the next launch. Add `store?.delete(threadID:)` in the dismiss path (transition to `.idle`). Tests: after prime→ready→dismiss, `DraftStore.read(threadID:)` returns nil; dismiss on a thread with no stored draft is a no-op (no crash); re-prime after dismiss generates a fresh draft and writes a new store entry.
-- success_criteria:
-  - `DraftEngine.dismiss()` calls `store?.delete(threadID:)` on transition to `.idle`
-  - `testDismissClearsStoredDraft` — `DraftStore.read` returns nil after dismiss
-  - `testDismissWithNoStoredDraftIsNoop` — no crash when dismissing a thread with no stored draft
-  - `testReprimingAfterDismissWritesNewEntry` — fresh draft written after dismiss+prime cycle
-  - Existing DraftEngineTests remain green
-- test_plan: 3 new tests in `DraftEngineTests.swift` using `DraftStore` with injected temp directory.
 
 ### REP-139 — Stats: flushNow() for clean-shutdown counter persistence
 - priority: P2
@@ -425,34 +341,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing StatsTests remain green
 - test_plan: 3 new tests in `StatsTests.swift` using temp-file URL injection; `tearDownWithError` cleans up.
 
-### REP-140 — SearchIndex: concurrent upsert+delete interleaving does not corrupt FTS5 state
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
-- scope: REP-057 added a concurrent search+upsert stress test. A concurrent upsert+delete race for the same `threadID` is not covered. Using `DispatchQueue.concurrentPerform(iterations:)`, fire 10 upserts and 10 deletes of the same thread ID concurrently. After completion, assert: no crash; the index is in a consistent state (thread findable or not — no partial row corruption); `search(query:)` returns `[threadID]` or `[]`, never throws. No production code changes expected (SQLite WAL serialization should handle this).
-- success_criteria:
-  - `testConcurrentUpsertDeleteNoCrash` — 10 upserts + 10 deletes of same thread complete without crash
-  - `testConcurrentUpsertDeleteConsistentState` — post-race search returns array or empty, never throws
-  - No production code touched
-- test_plan: 2 new tests in `SearchIndexTests.swift`; use in-memory FTS5 (`SearchIndex(databaseURL: nil)`).
 
-### REP-141 — ContactsResolver: batchResolve result has one entry per input handle, including nil
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
-- scope: `batchResolve([String])` (REP-037) resolves handles via cache then store. Pin the mixed-case result contract: given handles `["alice@example.com", "bob@example.com", "charlie@example.com"]` where alice and charlie are resolvable and bob is not, the result dict must have exactly 3 keys — alice: non-nil, bob: nil, charlie: non-nil. Also verify that cached handles do NOT cause a second store lookup (store call count ≤ number of uncached handles). Catches any result-keyset bugs or extra store hits.
-- success_criteria:
-  - `testBatchResolveResultKeySetMatchesInputHandles` — result has one key per input handle
-  - `testBatchResolveUnresolvableHandleMapsToNil` — unresolvable handle present as nil, not absent
-  - `testBatchResolveCacheHitsDoNotInvokeStore` — cached handles bypass store lookup
-  - Existing ContactsResolverTests remain green
-- test_plan: 3 new tests in `ContactsResolverTests.swift` using mock `ContactsStoring` with call-count tracking.
 
 ### REP-142 — InboxViewModel: watcher-driven sync updates existing thread previewText
 - priority: P2
@@ -468,49 +357,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No production code changes expected
 - test_plan: 2 new tests in `InboxViewModelTests.swift`; extend the mock channel to support per-call result mutation.
 
-### REP-143 — RulesStore: `rules` backing array preserves insertion order independent of priority
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RulesStore.rules` is the insertion-order backing array. `RuleEvaluator.matching` sorts by priority at evaluation time and must not affect `rules` order. Pin this invariant: adding rule A (priority 0) then rule B (priority 5) results in `rules = [A, B]`, not `[B, A]`. The UI relies on `rules` for creation-order display. Tests: rules appended not inserted by priority; persist+reload preserves file order; `update()` changes fields without reordering.
-- success_criteria:
-  - `testRulesArrayPreservesInsertionOrder` — lower-priority rule added first stays at `rules[0]`
-  - `testLoadFromJSONPreservesFileOrder` — persist+reload order matches original
-  - `testUpdateDoesNotReorderRules` — updating a rule's priority does not move it in the array
-  - Existing RulesTests remain green
-- test_plan: 3 new tests in `RulesTests.swift` using isolated `RulesStore` with injectable `UserDefaults`.
 
-### REP-144 — SmartRule: unknown RuleAction `kind` decoded gracefully without crash
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
-- scope: `RuleAction` uses a `kind` discriminator. If a future version introduces a new action and an older decoder encounters it, the app should not crash. REP-024 covers malformed-rule skipping at the `RulesStore` level; this task tests the Codable layer directly: decode JSON with `"kind": "unknown_future_action"`, assert a `DecodingError` is thrown (not a trap), and verify `RulesStore.load()` with such a JSON skips the offending rule and loads all remaining rules cleanly. Documents the forward-compatibility contract.
-- success_criteria:
-  - `testUnknownRuleActionKindThrowsDecodingError` — unknown kind throws `DecodingError`, not crash
-  - `testRulesStoreSkipsRuleWithUnknownAction` — load with unknown-action JSON skips that rule, loads rest
-  - Existing RulesTests remain green
-- test_plan: 2 new tests in `RulesTests.swift` using hand-crafted JSON fixtures.
 
-### REP-145 — PromptBuilder: empty message list produces non-empty valid prompt
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
-- scope: `PromptBuilder.buildPrompt(messages:tone:)` is always called with at least one message in production, but a newly-created thread or a thread whose messages all failed to load could pass an empty array. Verify: empty messages + a tone → no crash, non-empty prompt string containing the tone instruction. Also pin: single-message input → prompt contains that message body. No production code changes expected.
-- success_criteria:
-  - `testEmptyMessagesProducesNonEmptyPrompt` — non-empty string returned, no crash
-  - `testEmptyMessagesPromptContainsToneInstruction` — returned prompt includes tone text
-  - `testSingleMessagePromptContainsMessageText` — single message body appears in output
-  - Existing PromptBuilderTests remain green
-- test_plan: 3 new tests in `PromptBuilderTests.swift` using fabricated tone and empty/single-element message arrays.
 
 ### REP-146 — IMessageChannel: per-thread message cap applied independently across threads
 - priority: P2
@@ -526,19 +374,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No production code changes expected
 - test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
 
-### REP-147 — DraftStore: concurrent write+read for same threadID is race-free
-- priority: P2
-- effort: S
-- ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-22-213000
-- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
-- scope: `DraftStore.write` and `read` operate on files in a shared directory. Concurrent calls from async `DraftEngine` operations could race. Using `DispatchQueue.concurrentPerform`, fire 10 concurrent writes of different text values and 10 concurrent reads for the same `threadID`. Assert: no crash; after all operations complete, `read(threadID:)` returns a valid non-empty String; the file is not corrupted. No production code changes expected if APFS `write(to:atomically:)` is used.
-- success_criteria:
-  - `testConcurrentWriteReadNoCrash` — 10 concurrent writes + 10 reads complete without crash
-  - `testConcurrentWriteResultIsValid` — post-race read returns a valid string, not nil or garbled
-  - No production code touched
-- test_plan: 2 new tests in `DraftStoreTests.swift`; injected temp directory; `tearDownWithError` cleans up.
 
 ---
 
@@ -558,6 +393,184 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No source files touched
   - Reviewer no longer flags dual test-count lines
 - test_plan: N/A (docs-only).
+
+
+### REP-126 — SearchIndex: file-backed persistence round-trip smoke test
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-041 added on-disk FTS5 persistence via `SearchIndex(databaseURL:)`, but the file-backed path only exercises the in-memory path under `swift test`. Add a round-trip test: create a `SearchIndex` with a temp file URL, index 3 threads, destroy the instance, create a new `SearchIndex` from the same URL, verify all 3 threads are still searchable. Use `tearDownWithError` to delete the temp file. Catches schema migration regressions if the FTS5 schema ever changes without a matching migration. No production code changes.
+- success_criteria:
+  - `testDiskBackedIndexSurvivesReinit` — threads indexed in instance A are findable after instance B opens same URL
+  - `testDiskBackedEmptyReinitDoesNotCrash` — opening an existing empty db URL without prior indexing is safe
+  - No production code touched
+- test_plan: 2 new tests in `SearchIndexTests.swift` using `FileManager.default.temporaryDirectory` for URL injection; `tearDownWithError` removes temp file.
+
+### REP-128 — IMessageSender: chatGUID format pre-flight validation
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: Malformed `chatGUID` values (empty string, wrong service prefix, missing separator) produce opaque `errOSAScriptError` from AppleScript with no useful diagnostic. Add a pre-flight validation in `IMessageSender.send(text:toChatGUID:)` before constructing the AppleScript string: chatGUID must match the pattern `^iMessage;[+-];.+$`. Throw a new `SenderError.invalidChatGUID(String)` if the pattern fails. Tests use the dry-run/injectable `executeHook` seam so no AppleScript is invoked. Tests: valid 1:1 GUID passes; valid group GUID passes; empty string throws `invalidChatGUID`; wrong prefix (e.g. `"SMS;-;4155551234"`) throws; missing separator throws.
+- success_criteria:
+  - `SenderError.invalidChatGUID(String)` case added to `SenderError`
+  - Validation runs before AppleScript construction
+  - `testValidOneToOneGUIDPasses`, `testValidGroupGUIDPasses`, `testEmptyGUIDThrowsInvalid`, `testWrongPrefixThrowsInvalid`, `testMissingSeparatorThrowsInvalid`
+  - Existing IMessageSenderTests remain green
+- test_plan: 5 new tests in `IMessageSenderTests.swift`; no production AppleScript invocations (dry-run mode).
+
+### REP-130 — Preferences: `pref.app.firstLaunchDate` set-once key
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: Companion to `launchCount` (REP-115). Add `pref.app.firstLaunchDate: Date?` (nil = not yet set) to `Preferences`. In `ReplyAIApp.init()`, if `firstLaunchDate == nil`, set it to `Date()` — only ever written once. Key is NOT wiped by `wipe()`. Useful for upgrade banners ("You've been using ReplyAI since…"), feature gating after N days, or analytics. Tests: `testFirstLaunchDateSetOnFirstInit` — nil before first write, then non-nil; `testFirstLaunchDateNotOverwrittenOnSubsequentInit` — calling init again doesn't update the date; `testFirstLaunchDateSurvivesWipe` — date persists after `wipe()`.
+- success_criteria:
+  - `pref.app.firstLaunchDate: Date?` in `Preferences`
+  - Set-once guard in `ReplyAIApp.init()`
+  - Key excluded from `wipe()` sweep
+  - `testFirstLaunchDateSetOnFirstInit`, `testFirstLaunchDateNotOverwrittenOnSubsequentInit`, `testFirstLaunchDateSurvivesWipe`
+  - Existing PreferencesTests remain green
+- test_plan: 3 new tests in `PreferencesTests.swift` using suiteName-isolated UserDefaults; use a fresh suite per test to avoid cross-test date pollution.
+
+### REP-134 — InboxViewModel: archive removes thread from SearchIndex (integration test)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: REP-063 wired `SearchIndex.delete(threadID:)` through `InboxViewModel.archive(_:)`. There is no integration test that verifies the end-to-end path: archive a thread via the ViewModel, then confirm it is no longer searchable. Add a test using the existing `StaticMockChannel` + an in-memory `SearchIndex`. Index the thread before sync, run `archive(thread:)`, assert `searchIndex.search(query: someKnownTerm)` returns empty. Guards against future refactors accidentally removing the `delete` call.
+- success_criteria:
+  - `testArchiveRemovesThreadFromSearchIndex` — thread not findable after archive
+  - Uses in-memory `SearchIndex` (not a mock) for realistic FTS5 behavior
+  - No production code changes
+- test_plan: 1 new test in `InboxViewModelTests.swift`; inject `SearchIndex(databaseURL: nil)` into the ViewModel under test.
+
+### REP-137 — PromptBuilder: oversized system instruction guard
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Sources/ReplyAI/Services/PromptBuilder.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder` enforces a 2000-char message budget by dropping oldest messages first. However, if the tone system instruction itself exceeds the budget (e.g. a user pastes a 3000-char voice description), the current code may produce a prompt that overshoots the budget or silently drops all messages. Add a guard: if the system instruction length ≥ budget, truncate the instruction to `budget - 200` chars (leaving 200 chars minimum for at least the most-recent message). Tests: `testOversizedSystemInstructionTruncatedToFit` — 3000-char instruction + 1 short message produces a prompt ≤ total budget; `testOversizedSystemInstructionPreservesAtLeastOneMessage` — most-recent message still appears in output despite instruction truncation.
+- success_criteria:
+  - Guard added in `PromptBuilder` for system instruction overflow
+  - `testOversizedSystemInstructionTruncatedToFit` — prompt within budget
+  - `testOversizedSystemInstructionPreservesAtLeastOneMessage` — at least one message in output
+  - Existing PromptBuilderTests remain green (short instructions unaffected)
+- test_plan: 2 new tests in `PromptBuilderTests.swift` using a 3000-char fabricated tone instruction.
+
+### REP-138 — DraftEngine: dismiss() deletes corresponding DraftStore entry
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftStore` (REP-066) persists draft text to disk when the engine reaches `.ready`. If the user explicitly dismisses a draft (⌘. → `DraftEngine.dismiss(threadID:tone:)`), the stored file should be deleted so the stale draft does not reappear on the next launch. Add `store?.delete(threadID:)` in the dismiss path (transition to `.idle`). Tests: after prime→ready→dismiss, `DraftStore.read(threadID:)` returns nil; dismiss on a thread with no stored draft is a no-op (no crash); re-prime after dismiss generates a fresh draft and writes a new store entry.
+- success_criteria:
+  - `DraftEngine.dismiss()` calls `store?.delete(threadID:)` on transition to `.idle`
+  - `testDismissClearsStoredDraft` — `DraftStore.read` returns nil after dismiss
+  - `testDismissWithNoStoredDraftIsNoop` — no crash when dismissing a thread with no stored draft
+  - `testReprimingAfterDismissWritesNewEntry` — fresh draft written after dismiss+prime cycle
+  - Existing DraftEngineTests remain green
+- test_plan: 3 new tests in `DraftEngineTests.swift` using `DraftStore` with injected temp directory.
+
+### REP-140 — SearchIndex: concurrent upsert+delete interleaving does not corrupt FTS5 state
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-057 added a concurrent search+upsert stress test. A concurrent upsert+delete race for the same `threadID` is not covered. Using `DispatchQueue.concurrentPerform(iterations:)`, fire 10 upserts and 10 deletes of the same thread ID concurrently. After completion, assert: no crash; the index is in a consistent state (thread findable or not — no partial row corruption); `search(query:)` returns `[threadID]` or `[]`, never throws. No production code changes expected (SQLite WAL serialization should handle this).
+- success_criteria:
+  - `testConcurrentUpsertDeleteNoCrash` — 10 upserts + 10 deletes of same thread complete without crash
+  - `testConcurrentUpsertDeleteConsistentState` — post-race search returns array or empty, never throws
+  - No production code touched
+- test_plan: 2 new tests in `SearchIndexTests.swift`; use in-memory FTS5 (`SearchIndex(databaseURL: nil)`).
+
+### REP-141 — ContactsResolver: batchResolve result has one entry per input handle, including nil
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: `batchResolve([String])` (REP-037) resolves handles via cache then store. Pin the mixed-case result contract: given handles `["alice@example.com", "bob@example.com", "charlie@example.com"]` where alice and charlie are resolvable and bob is not, the result dict must have exactly 3 keys — alice: non-nil, bob: nil, charlie: non-nil. Also verify that cached handles do NOT cause a second store lookup (store call count ≤ number of uncached handles). Catches any result-keyset bugs or extra store hits.
+- success_criteria:
+  - `testBatchResolveResultKeySetMatchesInputHandles` — result has one key per input handle
+  - `testBatchResolveUnresolvableHandleMapsToNil` — unresolvable handle present as nil, not absent
+  - `testBatchResolveCacheHitsDoNotInvokeStore` — cached handles bypass store lookup
+  - Existing ContactsResolverTests remain green
+- test_plan: 3 new tests in `ContactsResolverTests.swift` using mock `ContactsStoring` with call-count tracking.
+
+### REP-143 — RulesStore: `rules` backing array preserves insertion order independent of priority
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore.rules` is the insertion-order backing array. `RuleEvaluator.matching` sorts by priority at evaluation time and must not affect `rules` order. Pin this invariant: adding rule A (priority 0) then rule B (priority 5) results in `rules = [A, B]`, not `[B, A]`. The UI relies on `rules` for creation-order display. Tests: rules appended not inserted by priority; persist+reload preserves file order; `update()` changes fields without reordering.
+- success_criteria:
+  - `testRulesArrayPreservesInsertionOrder` — lower-priority rule added first stays at `rules[0]`
+  - `testLoadFromJSONPreservesFileOrder` — persist+reload order matches original
+  - `testUpdateDoesNotReorderRules` — updating a rule's priority does not move it in the array
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift` using isolated `RulesStore` with injectable `UserDefaults`.
+
+### REP-144 — SmartRule: unknown RuleAction `kind` decoded gracefully without crash
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RuleAction` uses a `kind` discriminator. If a future version introduces a new action and an older decoder encounters it, the app should not crash. REP-024 covers malformed-rule skipping at the `RulesStore` level; this task tests the Codable layer directly: decode JSON with `"kind": "unknown_future_action"`, assert a `DecodingError` is thrown (not a trap), and verify `RulesStore.load()` with such a JSON skips the offending rule and loads all remaining rules cleanly. Documents the forward-compatibility contract.
+- success_criteria:
+  - `testUnknownRuleActionKindThrowsDecodingError` — unknown kind throws `DecodingError`, not crash
+  - `testRulesStoreSkipsRuleWithUnknownAction` — load with unknown-action JSON skips that rule, loads rest
+  - Existing RulesTests remain green
+- test_plan: 2 new tests in `RulesTests.swift` using hand-crafted JSON fixtures.
+
+### REP-145 — PromptBuilder: empty message list produces non-empty valid prompt
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.buildPrompt(messages:tone:)` is always called with at least one message in production, but a newly-created thread or a thread whose messages all failed to load could pass an empty array. Verify: empty messages + a tone → no crash, non-empty prompt string containing the tone instruction. Also pin: single-message input → prompt contains that message body. No production code changes expected.
+- success_criteria:
+  - `testEmptyMessagesProducesNonEmptyPrompt` — non-empty string returned, no crash
+  - `testEmptyMessagesPromptContainsToneInstruction` — returned prompt includes tone text
+  - `testSingleMessagePromptContainsMessageText` — single message body appears in output
+  - Existing PromptBuilderTests remain green
+- test_plan: 3 new tests in `PromptBuilderTests.swift` using fabricated tone and empty/single-element message arrays.
+
+### REP-147 — DraftStore: concurrent write+read for same threadID is race-free
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-213000
+- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
+- scope: `DraftStore.write` and `read` operate on files in a shared directory. Concurrent calls from async `DraftEngine` operations could race. Using `DispatchQueue.concurrentPerform`, fire 10 concurrent writes of different text values and 10 concurrent reads for the same `threadID`. Assert: no crash; after all operations complete, `read(threadID:)` returns a valid non-empty String; the file is not corrupted. No production code changes expected if APFS `write(to:atomically:)` is used.
+- success_criteria:
+  - `testConcurrentWriteReadNoCrash` — 10 concurrent writes + 10 reads complete without crash
+  - `testConcurrentWriteResultIsValid` — post-race read returns a valid string, not nil or garbled
+  - No production code touched
+- test_plan: 2 new tests in `DraftStoreTests.swift`; injected temp directory; `tearDownWithError` cleans up.
 
 
 ### REP-132 — DraftEngine: rapid regenerate() calls do not spawn parallel LLM streams

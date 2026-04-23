@@ -1442,6 +1442,17 @@ final class RulesStoreConcurrencyTests: XCTestCase {
 
 final class HasUnreadPredicateTests: XCTestCase {
 
+    private func tempURL() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAIHasUnreadTests-\(UUID().uuidString).json")
+    }
+
+    private func validRuleJSON() throws -> String {
+        let rule = SmartRule(name: "valid", when: .isUnread, then: .archive)
+        let data = try JSONEncoder().encode(rule)
+        return String(data: data, encoding: .utf8)!
+    }
+
     private func ctx(unread: Int) -> RuleContext {
         RuleContext(
             senderName: "Test", senderHandle: "test",
@@ -1481,5 +1492,102 @@ final class HasUnreadPredicateTests: XCTestCase {
             RuleEvaluator.matches(.not(.hasUnread), in: ctx(unread: 1)),
             "not(hasUnread) must not match a thread with unread messages"
         )
+    }
+
+    // MARK: - REP-143: rules array preserves insertion order
+
+    @MainActor
+    func testRulesArrayPreservesInsertionOrder() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let store = RulesStore(fileURL: url)
+        // Clear seed rules so we start clean.
+        for rule in store.rules { store.remove(rule.id) }
+
+        let ruleA = SmartRule(name: "A", when: .isUnread, then: .archive, priority: 0)
+        let ruleB = SmartRule(name: "B", when: .isUnread, then: .pin,     priority: 5)
+        try store.add(ruleA)
+        try store.add(ruleB)
+
+        // Insertion order: A first, then B — regardless of B's higher priority.
+        XCTAssertEqual(store.rules.last?.name, "B",
+                       "rules array must preserve insertion order, not sort by priority")
+        XCTAssertEqual(store.rules.first(where: { $0.name == "A" })?.name, "A")
+    }
+
+    @MainActor
+    func testLoadFromJSONPreservesFileOrder() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let r1 = SmartRule(name: "first",  when: .isUnread, then: .archive, priority: 0)
+        let r2 = SmartRule(name: "second", when: .isUnread, then: .pin,     priority: 10)
+        let r3 = SmartRule(name: "third",  when: .isUnread, then: .markDone, priority: 5)
+        let json = try JSONEncoder().encode([r1, r2, r3])
+        try json.write(to: url)
+
+        let store = RulesStore(fileURL: url)
+        let names = store.rules.map(\.name)
+        XCTAssertEqual(names, ["first", "second", "third"],
+                       "RulesStore must load rules in file order, not sorted by priority")
+    }
+
+    @MainActor
+    func testUpdateDoesNotReorderRules() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let store = RulesStore(fileURL: url)
+        for rule in store.rules { store.remove(rule.id) }
+
+        let ruleA = SmartRule(name: "A", when: .isUnread, then: .archive, priority: 0)
+        let ruleB = SmartRule(name: "B", when: .isUnread, then: .pin,     priority: 1)
+        try store.add(ruleA)
+        try store.add(ruleB)
+
+        // Update A's priority to be higher than B's — must not change position.
+        let updated = SmartRule(id: ruleA.id, name: "A", when: .isUnread, then: .archive,
+                                priority: 99)
+        store.update(updated)
+
+        let firstID = store.rules.first(where: { $0.name == "A" }).map(\.id)
+        let secondID = store.rules.first(where: { $0.name == "B" }).map(\.id)
+        XCTAssertNotNil(firstID)
+        XCTAssertNotNil(secondID)
+        XCTAssertEqual(store.rules.map { $0.name }.filter { $0 == "A" || $0 == "B" },
+                       ["A", "B"],
+                       "update must not reorder rules even when priority changes")
+    }
+
+    // MARK: - REP-144: unknown RuleAction kind decoded gracefully
+
+    func testUnknownRuleActionKindThrowsDecodingError() {
+        let json = #"{"kind":"unknown_future_action"}"#.data(using: .utf8)!
+        XCTAssertThrowsError(try JSONDecoder().decode(RuleAction.self, from: json),
+                             "unknown action kind must throw DecodingError, not crash") { error in
+            XCTAssertTrue(error is DecodingError,
+                          "expected DecodingError but got \(type(of: error))")
+        }
+    }
+
+    @MainActor
+    func testRulesStoreSkipsRuleWithUnknownAction() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let valid = try validRuleJSON()
+        // One valid rule, one with an unknown action kind.
+        let unknownActionJSON = """
+        {"id":"00000000-0000-0000-0000-000000000000","name":"future","isActive":true,"priority":0,\
+        "when":{"kind":"is_unread"},"then":{"kind":"unknown_future_action"}}
+        """
+        let json = "[\(valid), \(unknownActionJSON)]"
+        try json.data(using: String.Encoding.utf8)!.write(to: url)
+
+        let store = RulesStore(fileURL: url)
+        XCTAssertEqual(store.rules.count, 1,
+                       "rule with unknown action kind must be skipped, valid rule must load")
+        XCTAssertEqual(store.rules.first?.name, "valid")
     }
 }

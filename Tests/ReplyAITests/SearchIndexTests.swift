@@ -744,4 +744,100 @@ final class SearchIndexTests: XCTestCase {
                        "new preview terms must be searchable after upsert")
         XCTAssertEqual(newHits.first?.threadID, thread.id)
     }
+
+    // MARK: - REP-126: file-backed persistence round-trip smoke test
+
+    func testDiskBackedIndexSurvivesReinit() async throws {
+        let dbURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rep126-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: dbURL) }
+
+        let threads = [
+            MessageThread(id: "r126a", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "r126b", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "", time: "", unread: 0),
+            MessageThread(id: "r126c", channel: .slack, name: "Carol",
+                          avatar: "C", preview: "", time: "", unread: 0),
+        ]
+        let messages: [[Message]] = [
+            [Message(from: .them, text: "persisted alpha", time: "t1")],
+            [Message(from: .them, text: "persisted beta",  time: "t2")],
+            [Message(from: .them, text: "persisted gamma", time: "t3")],
+        ]
+
+        do {
+            let index = SearchIndex(databaseURL: dbURL)
+            for (thread, msgs) in zip(threads, messages) {
+                await index.upsert(thread: thread, messages: msgs)
+            }
+        }
+        // Actor is deinit'd; SQLite file flushed to disk.
+
+        let reopened = SearchIndex(databaseURL: dbURL)
+        let alphaHits = await reopened.search("alpha")
+        let betaHits  = await reopened.search("beta")
+        let gammaHits = await reopened.search("gamma")
+        XCTAssertEqual(alphaHits.count, 1, "alpha thread must survive reinit")
+        XCTAssertEqual(betaHits.count,  1, "beta thread must survive reinit")
+        XCTAssertEqual(gammaHits.count, 1, "gamma thread must survive reinit")
+        XCTAssertEqual(alphaHits.first?.threadID, "r126a")
+        XCTAssertEqual(betaHits.first?.threadID,  "r126b")
+        XCTAssertEqual(gammaHits.first?.threadID, "r126c")
+    }
+
+    func testDiskBackedEmptyReinitDoesNotCrash() async {
+        // Opening an existing (but empty) db file on reinit must not crash.
+        let dbURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rep126-empty-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: dbURL) }
+
+        _ = SearchIndex(databaseURL: dbURL)
+        // Second open of the same file with no data inserted.
+        let index2 = SearchIndex(databaseURL: dbURL)
+        let hits = await index2.search("anything")
+        XCTAssertEqual(hits.count, 0, "empty db on reopen must return no results")
+    }
+
+    // MARK: - REP-140: concurrent upsert+delete interleaving
+
+    func testConcurrentUpsertDeleteNoCrash() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "race-ud", channel: .imessage, name: "RaceUD",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "concurrent race text", time: "t")
+
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<10 {
+                group.addTask {
+                    await index.upsert(thread: thread, messages: [msg])
+                    _ = i
+                }
+                group.addTask {
+                    await index.delete(threadID: thread.id)
+                    _ = i
+                }
+            }
+        }
+        // No crash — success.
+    }
+
+    func testConcurrentUpsertDeleteConsistentState() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "race-state", channel: .imessage, name: "RaceState",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "state consistency check", time: "t")
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<10 {
+                group.addTask { await index.upsert(thread: thread, messages: [msg]) }
+                group.addTask { await index.delete(threadID: thread.id) }
+            }
+        }
+
+        // Post-race: search must return a clean array (possibly empty), never throw.
+        let results = await index.search("consistency")
+        XCTAssertTrue(results.count == 0 || results.count == 1,
+                      "post-race search must return 0 or 1 results, never a corrupt state")
+    }
 }

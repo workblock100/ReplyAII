@@ -8,6 +8,9 @@ struct ReplyAIApp: App {
         UserDefaults.registerReplyAIDefaults()
         let count = UserDefaults.standard.integer(forKey: PreferenceKey.launchCount)
         UserDefaults.standard.set(count + 1, forKey: PreferenceKey.launchCount)
+        if UserDefaults.standard.object(forKey: PreferenceKey.firstLaunchDate) == nil {
+            UserDefaults.standard.set(Date(), forKey: PreferenceKey.firstLaunchDate)
+        }
     }
 
     var body: some Scene {

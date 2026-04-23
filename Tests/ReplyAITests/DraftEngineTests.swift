@@ -454,6 +454,73 @@ final class DraftEngineTests: XCTestCase {
                        "final text must come from one stream, not two concatenated")
     }
 
+    // MARK: - REP-138: dismiss() deletes corresponding DraftStore entry
+
+    func testDismissClearsStoredDraft() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0),
+                                 store: store)
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertNotNil(store.read(threadID: thread.id), "draft must be stored after prime+ready")
+
+        engine.dismiss(threadID: thread.id, tone: .warm)
+
+        XCTAssertNil(store.read(threadID: thread.id),
+                     "dismiss must delete the stored draft entry")
+    }
+
+    func testDismissWithNoStoredDraftIsNoop() {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let engine = DraftEngine(service: StubLLMService(), store: store)
+        let thread = Fixtures.threads[0]
+
+        // No prime — no stored draft. dismiss must not crash.
+        engine.dismiss(threadID: thread.id, tone: .warm)
+        XCTAssertNil(store.read(threadID: thread.id), "no crash and no draft for a thread never primed")
+    }
+
+    func testReprimingAfterDismissWritesNewEntry() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0),
+                                 store: store)
+        let thread = Fixtures.threads[0]
+
+        // Prime → dismiss → prime again.
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        engine.dismiss(threadID: thread.id, tone: .warm)
+        XCTAssertNil(store.read(threadID: thread.id), "store must be empty after dismiss")
+
+        engine.regenerate(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        XCTAssertNotNil(store.read(threadID: thread.id),
+                        "re-prime after dismiss must write a new store entry")
+    }
+
     // MARK: - helper
 
     private func waitUntil(

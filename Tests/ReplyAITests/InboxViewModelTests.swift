@@ -687,3 +687,35 @@ final class ArchiveDraftEvictionTests: XCTestCase {
                        "archive must invoke dismissHandler with the archived thread ID")
     }
 }
+
+// MARK: - REP-134: archive removes thread from SearchIndex (integration test)
+
+@MainActor
+final class ArchiveSearchIndexTests: XCTestCase {
+
+    func testArchiveRemovesThreadFromSearchIndex() async {
+        let d = UserDefaults(suiteName: "test.ReplyAI.archive-search.\(UUID())")!
+        UserDefaults.registerReplyAIDefaults(in: d)
+
+        let thread = MessageThread(id: "srch-archive-1", channel: .imessage, name: "SearchUser",
+                                   avatar: "S", preview: "hello world", time: "now")
+        let msgs = [Message(from: .them, text: "hello world uniqueterm", time: "t1")]
+        let index = SearchIndex(databaseURL: nil)
+        let vm = InboxViewModel(threads: [thread], contacts: fastContacts(), defaults: d,
+                                searchIndex: index)
+
+        // Index the thread before archiving.
+        await index.upsert(thread: thread, messages: msgs)
+
+        let hitsBefore = await index.search("uniqueterm")
+        XCTAssertEqual(hitsBefore.count, 1, "thread must be findable before archive")
+
+        vm.archive(thread.id)
+
+        // Give the async Task inside archive() time to complete.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let hitsAfter = await index.search("uniqueterm")
+        XCTAssertEqual(hitsAfter.count, 0, "archived thread must not be findable in SearchIndex")
+    }
+}

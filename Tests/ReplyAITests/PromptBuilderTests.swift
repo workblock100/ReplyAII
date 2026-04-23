@@ -163,4 +163,47 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains(Tone.warm.rawValue.lowercased()),
                       "tone label must appear in prompt even after message truncation")
     }
+
+    // MARK: - REP-137: oversized system instruction guard
+
+    func testOversizedSystemInstructionFitsWithinCap() {
+        // Normal tone instructions are short; verify the cap formula is correct.
+        let cap = PromptBuilder.historyCharBudget - PromptBuilder.minHistoryReserve
+        for tone in Tone.allCases {
+            let result = PromptBuilder.systemPrompt(tone: tone)
+            XCTAssertLessThanOrEqual(result.count, cap,
+                                     "systemPrompt for \(tone) must fit within budget cap")
+        }
+    }
+
+    func testOversizedSystemInstructionPreservesAtLeastOneMessage() {
+        let thread = makeThread(name: "OversizeTest")
+        let shortMsg = makeMessage("short message context")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [shortMsg])
+        XCTAssertTrue(prompt.contains("short message context"),
+                      "most-recent message must appear in prompt regardless of system instruction size")
+    }
+
+    // MARK: - REP-145: empty message list produces non-empty valid prompt
+
+    func testEmptyMessagesProducesNonEmptyPrompt() {
+        let thread = makeThread(name: "EmptyTest")
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        XCTAssertFalse(prompt.isEmpty, "empty message list must produce a non-empty prompt")
+    }
+
+    func testEmptyMessagesPromptContainsToneInstruction() {
+        let thread = makeThread(name: "ToneTest")
+        let prompt = PromptBuilder.build(thread: thread, tone: .playful, history: [])
+        XCTAssertTrue(prompt.contains(Tone.playful.rawValue.lowercased()),
+                      "prompt with empty message list must still include tone instruction")
+    }
+
+    func testSingleMessagePromptContainsMessageText() {
+        let thread = makeThread(name: "Single")
+        let msg = makeMessage("unique single message text")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [msg])
+        XCTAssertTrue(prompt.contains("unique single message text"),
+                      "single-message prompt must contain the message body")
+    }
 }

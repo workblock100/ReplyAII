@@ -315,6 +315,49 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(callCount, 2, "executor must be invoked exactly twice on a -1708 retry")
     }
 
+    // MARK: - REP-128: chatGUID format pre-flight validation
+
+    func testValidOneToOneGUIDPasses() {
+        XCTAssertTrue(IMessageSender.isValidChatGUID("iMessage;-;+15551234567"),
+                      "valid 1:1 iMessage GUID must pass validation")
+    }
+
+    func testValidGroupGUIDPasses() {
+        XCTAssertTrue(IMessageSender.isValidChatGUID("iMessage;+;chat1234567890"),
+                      "valid group iMessage GUID must pass validation")
+    }
+
+    func testInvalidGUIDThrowsInvalid() {
+        // Empty string is filtered by chatGUID(for:) — use an explicitly invalid GUID
+        // so the validation inside sendRaw is exercised.
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        XCTAssertThrowsError(try IMessageSender.send("hello", to:
+            MessageThread(id: "x", channel: .imessage, name: "X",
+                          avatar: "X", preview: "", time: "", chatGUID: "INVALID_NO_SEPARATORS"))) { error in
+            guard case IMessageSender.SendError.invalidChatGUID = error else {
+                XCTFail("Expected invalidChatGUID, got \(error)"); return
+            }
+        }
+    }
+
+    func testEmptyGUIDIsValidationFailed() {
+        XCTAssertFalse(IMessageSender.isValidChatGUID(""),
+                       "empty string must fail GUID validation")
+    }
+
+    func testWrongPrefixThrowsInvalid() {
+        XCTAssertFalse(IMessageSender.isValidChatGUID("SMS;-;4155551234"),
+                       "SMS GUID must fail iMessage prefix check")
+    }
+
+    func testMissingSeparatorThrowsInvalid() {
+        XCTAssertFalse(IMessageSender.isValidChatGUID("iMessageNoseparator"),
+                       "GUID without semicolons must fail validation")
+    }
+
     func testNonRetriableErrorFailsImmediately() {
         let prevTimeout = IMessageSender.sendTimeout
         let prevHook = IMessageSender.executeHook

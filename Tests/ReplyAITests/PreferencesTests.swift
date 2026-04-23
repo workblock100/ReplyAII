@@ -207,4 +207,45 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(defaults.integer(forKey: PreferenceKey.launchCount), 5,
                        "launchCount must survive factory wipe — it is exempt from reset")
     }
+
+    // MARK: - REP-130: pref.app.firstLaunchDate set-once key
+
+    func testFirstLaunchDateSetOnFirstInit() {
+        // Nil before any write.
+        XCTAssertNil(defaults.object(forKey: PreferenceKey.firstLaunchDate),
+                     "firstLaunchDate must be nil before first write")
+
+        // Simulate app init: write if not yet set.
+        if defaults.object(forKey: PreferenceKey.firstLaunchDate) == nil {
+            defaults.set(Date(), forKey: PreferenceKey.firstLaunchDate)
+        }
+
+        XCTAssertNotNil(defaults.object(forKey: PreferenceKey.firstLaunchDate),
+                        "firstLaunchDate must be set after first init")
+    }
+
+    func testFirstLaunchDateNotOverwrittenOnSubsequentInit() {
+        let first = Date(timeIntervalSince1970: 1_000_000)
+        defaults.set(first, forKey: PreferenceKey.firstLaunchDate)
+
+        // Simulate second init: must not overwrite.
+        if defaults.object(forKey: PreferenceKey.firstLaunchDate) == nil {
+            defaults.set(Date(), forKey: PreferenceKey.firstLaunchDate)
+        }
+
+        let stored = defaults.object(forKey: PreferenceKey.firstLaunchDate) as? Date
+        XCTAssertEqual(stored, first,
+                       "firstLaunchDate must not be overwritten on subsequent init")
+    }
+
+    func testFirstLaunchDateSurvivesWipe() {
+        let launchDate = Date(timeIntervalSince1970: 2_000_000)
+        defaults.set(launchDate, forKey: PreferenceKey.firstLaunchDate)
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+
+        let stored = defaults.object(forKey: PreferenceKey.firstLaunchDate) as? Date
+        XCTAssertEqual(stored, launchDate,
+                       "firstLaunchDate must survive factory wipe — it is exempt from reset")
+    }
 }

@@ -37,8 +37,22 @@ struct PromptBuilder {
         return lines.joined(separator: "\n")
     }
 
+    /// Minimum chars reserved for message history even when the system prompt is large.
+    static let minHistoryReserve = 200
+
     /// System-turn prompt describing the assistant's role and tone.
+    /// If the raw instruction exceeds the history budget, it is truncated so at
+    /// least `minHistoryReserve` chars remain for message context.
     static func systemPrompt(tone: Tone) -> String {
+        let raw = rawSystemPrompt(tone: tone)
+        let cap = historyCharBudget - minHistoryReserve
+        guard raw.count > cap else { return raw }
+        return String(raw.prefix(cap))
+    }
+
+    // MARK: - Private
+
+    private static func rawSystemPrompt(tone: Tone) -> String {
         let base = """
         You are ReplyAI, a drafting assistant embedded in the user's messaging inbox. \
         You write the user's next reply in their own voice. Output ONLY the reply text \
@@ -54,8 +68,6 @@ struct PromptBuilder {
             return base + " Be playful and witty with dry humor; occasional emoji are welcome."
         }
     }
-
-    // MARK: - Private
 
     /// Trims the history from the oldest end so the total character count of
     /// all message texts stays at or below `budget` (defaults to `historyCharBudget`).
