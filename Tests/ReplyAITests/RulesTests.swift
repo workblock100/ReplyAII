@@ -1590,6 +1590,44 @@ final class HasUnreadPredicateTests: XCTestCase {
                        "rule with unknown action kind must be skipped, valid rule must load")
         XCTAssertEqual(store.rules.first?.name, "valid")
     }
+
+    // MARK: - REP-188: disk round-trip preserves insertion order
+
+    @MainActor
+    func testDiskRoundTripPreservesInsertionOrder() throws {
+        let storeURL  = tempURL()
+        let exportURL = tempURL()
+        let importURL = tempURL()
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+            try? FileManager.default.removeItem(at: importURL)
+        }
+
+        let store = RulesStore(fileURL: storeURL)
+        for rule in store.rules { store.remove(rule.id) }
+
+        let ruleA = SmartRule(name: "A", when: .isUnread, then: .archive, priority: 0)
+        let ruleB = SmartRule(name: "B", when: .isUnread, then: .pin,     priority: 5)
+        try store.add(ruleA)
+        try store.add(ruleB)
+
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: importURL)
+        for rule in importStore.rules { importStore.remove(rule.id) }
+        try importStore.import(from: exportURL)
+
+        let names = importStore.rules.map(\.name)
+        let aIndex = names.firstIndex(of: "A")
+        let bIndex = names.firstIndex(of: "B")
+        XCTAssertNotNil(aIndex, "rule A must survive export+import")
+        XCTAssertNotNil(bIndex, "rule B must survive export+import")
+        if let a = aIndex, let b = bIndex {
+            XCTAssertLessThan(a, b,
+                "insertion order must be preserved: A before B even though B has higher priority")
+        }
+    }
 }
 
 // MARK: - TimeOfDay predicate (REP-079)

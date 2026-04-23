@@ -12,6 +12,8 @@ actor SearchIndex {
         let senderName: String?
         let text: String
         let time: String
+        /// FTS5 snippet with «matched» terms highlighted, nil when query was empty.
+        let snippet: String?
     }
 
     private var db: OpaquePointer?
@@ -178,7 +180,8 @@ actor SearchIndex {
         let sql: String
         if channel != nil {
             sql = """
-            SELECT thread_id, thread_name, sender, text, time
+            SELECT thread_id, thread_name, sender, text, time,
+                   snippet(messages_fts, 3, '«', '»', '…', 8)
             FROM messages_fts
             WHERE messages_fts MATCH ?1
             AND channel = ?2
@@ -187,7 +190,8 @@ actor SearchIndex {
             """
         } else {
             sql = """
-            SELECT thread_id, thread_name, sender, text, time
+            SELECT thread_id, thread_name, sender, text, time,
+                   snippet(messages_fts, 3, '«', '»', '…', 8)
             FROM messages_fts
             WHERE messages_fts MATCH ?1
             ORDER BY rank
@@ -214,7 +218,8 @@ actor SearchIndex {
                 threadName: Self.text(stmt, 1) ?? "",
                 senderName: Self.text(stmt, 2),
                 text:       Self.text(stmt, 3) ?? "",
-                time:       Self.text(stmt, 4) ?? ""
+                time:       Self.text(stmt, 4) ?? "",
+                snippet:    Self.text(stmt, 5)
             ))
         }
         return results

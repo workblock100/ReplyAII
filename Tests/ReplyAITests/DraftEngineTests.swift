@@ -588,6 +588,114 @@ final class DraftEngineTests: XCTestCase {
         // Reaching here without a crash or assertion failure = pass.
     }
 
+    // MARK: - REP-169: N concurrent primes on distinct threads
+
+    func testConcurrentPrimesOnDistinctThreadsAllReachReady() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let threads = (0..<10).map { i in
+            MessageThread(id: "concurrent-thread-\(i)", channel: .imessage, name: "T\(i)",
+                          avatar: "T", preview: "", time: "", unread: 0)
+        }
+
+        // Prime 10 distinct threads concurrently — each gets its own task slot.
+        await withTaskGroup(of: Void.self) { group in
+            for thread in threads {
+                let t = thread
+                group.addTask { @MainActor in
+                    engine.prime(thread: t, tone: .warm, history: [])
+                }
+            }
+        }
+
+        for thread in threads {
+            try await waitUntil(timeout: 5.0) {
+                engine.state(threadID: thread.id, tone: .warm).isDone
+            }
+        }
+
+        for thread in threads {
+            let state = engine.state(threadID: thread.id, tone: .warm)
+            XCTAssertTrue(state.isDone,
+                          "thread \(thread.id) must reach ready after concurrent prime")
+            XCTAssertFalse(state.isStreaming,
+                           "thread \(thread.id) must not remain in streaming state")
+        }
+    }
+
+    func testNoPrimingStateLeaksAfterConcurrentPrimes() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let threads = (0..<10).map { i in
+            MessageThread(id: "leak-thread-\(i)", channel: .imessage, name: "L\(i)",
+                          avatar: "L", preview: "", time: "", unread: 0)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for thread in threads {
+                let t = thread
+                group.addTask { @MainActor in
+                    engine.prime(thread: t, tone: .warm, history: [])
+                }
+            }
+        }
+
+        for thread in threads {
+            try await waitUntil(timeout: 5.0) {
+                !engine.state(threadID: thread.id, tone: .warm).isStreaming
+            }
+        }
+
+        let leaking = threads.filter {
+            engine.state(threadID: $0.id, tone: .warm).isStreaming
+        }
+        XCTAssertEqual(leaking.count, 0,
+                       "no thread must remain stuck in streaming/priming after concurrent primes complete")
+    }
+
+    // MARK: - REP-189: error state must not block re-priming
+
+    func testPrimeErrorLeavesEngineInIdleNotErrorState() async throws {
+        // FailOnceThenSucceedService throws on first call, succeeds on second.
+        let engine = DraftEngine(service: FailOnceThenSucceedService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).error != nil
+        }
+
+        // Engine must not be stuck — a second prime() call must clear the error
+        // and eventually reach ready.
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertNil(state.error,
+                     "error must be cleared after second prime succeeds — not stuck in error state")
+        XCTAssertTrue(state.isDone, "engine must reach ready after recovering from error via prime()")
+    }
+
+    func testPrimeSucceedsAfterPreviousError() async throws {
+        let engine = DraftEngine(service: FailOnceThenSucceedService())
+        let thread = Fixtures.threads[1]
+
+        engine.prime(thread: thread, tone: .direct, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .direct).error != nil
+        }
+        XCTAssertNotNil(engine.state(threadID: thread.id, tone: .direct).error,
+                        "pre-condition: first prime must have errored")
+
+        engine.prime(thread: thread, tone: .direct, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .direct).isDone
+        }
+        XCTAssertTrue(engine.state(threadID: thread.id, tone: .direct).isDone,
+                      "prime() must succeed after prior error on the same (thread, tone) key")
+        XCTAssertNil(engine.state(threadID: thread.id, tone: .direct).error)
+    }
+
     // MARK: - helper
 
     private func waitUntil(

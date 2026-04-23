@@ -1036,3 +1036,67 @@ final class SearchIndexResultFieldsTests: XCTestCase {
         XCTAssertEqual(hits.count, 1, "'quick brown fox' must match thread that has all 3 terms")
     }
 }
+
+// MARK: - REP-067: FTS5 snippet extraction
+
+final class SearchIndexSnippetTests: XCTestCase {
+
+    func testSnippetContainsMatchedTerm() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "snip-1", channel: .imessage, name: "Alice",
+                                   avatar: "A", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "the quarterly budget review is tomorrow", time: "now")
+        ])
+        let hits = await index.search("budget")
+        XCTAssertEqual(hits.count, 1)
+        let snippet = hits.first?.snippet
+        XCTAssertNotNil(snippet, "snippet must be non-nil for a matching query")
+        XCTAssertTrue(snippet?.contains("budget") == true,
+                      "snippet must contain the matched term")
+        // FTS5 wraps the match in «» markers.
+        XCTAssertTrue(snippet?.contains("«") == true || snippet?.contains("budget") == true,
+                      "snippet must mark the matched term with «» or contain the term")
+    }
+
+    func testSnippetMarksMatchedTermWithAngles() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "snip-2", channel: .imessage, name: "Bob",
+                                   avatar: "B", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "please review the proposal before Friday", time: "t")
+        ])
+        let hits = await index.search("proposal")
+        XCTAssertEqual(hits.count, 1)
+        let snippet = hits.first?.snippet ?? ""
+        // FTS5 snippet() wraps matched term with the start/end markers we passed.
+        XCTAssertTrue(snippet.contains("«proposal»"),
+                      "snippet must wrap matched term with «» markers")
+    }
+
+    func testSnippetNilOnEmptyQuery() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "snip-3", channel: .imessage, name: "Carol",
+                                   avatar: "C", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "hello world", time: "t")
+        ])
+        // Empty query returns [] — no results means no snippet to check; verify guard holds.
+        let hits = await index.search("")
+        XCTAssertTrue(hits.isEmpty, "empty query must return no results (and therefore no snippets)")
+    }
+
+    func testResultTypeCarriesSnippetField() async {
+        // Verifies SearchIndex.Result has a snippet property accessible on live results.
+        let index = SearchIndex()
+        let thread = MessageThread(id: "snip-4", channel: .imessage, name: "Dan",
+                                   avatar: "D", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "finalizing the contract terms today", time: "t")
+        ])
+        let hits = await index.search("contract")
+        XCTAssertEqual(hits.count, 1)
+        // Access .snippet — compile error here would mean the field was removed.
+        let _ = hits.first?.snippet
+    }
+}

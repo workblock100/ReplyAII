@@ -186,8 +186,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-111853
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5's `snippet()` auxiliary function returns a short excerpt of the matching text with terms marked. Currently `SearchIndex.search(query:)` returns `[String]` (thread IDs). Change the return type to `[SearchResult]` where `SearchResult: Equatable { threadID: String, snippet: String? }`. The snippet SQL: `snippet(thread_search, 1, '«', '»', '…', 8)` (column 1 = preview text, 8 token context window). snippet is nil when the query is empty. ⌘K palette can display the snippet as a secondary row under the thread name. Tests: snippet is non-empty for matching query; snippet contains the matched term; empty query returns empty snippets.
 - success_criteria:
@@ -357,8 +357,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-111853
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: Prime 10 different thread IDs concurrently from a `DispatchQueue.concurrentPerform` loop using `StubLLMService`. After all primes complete (wait using `waitUntil`), verify that every thread is `.ready` and none are stuck in `.priming`. Guards against a task-leak where a concurrent invalidate+prime race leaves an orphaned `Task` whose completion updates are silently discarded, starving the state machine.
 - success_criteria:
@@ -472,8 +472,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-111853
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-143 verified `rules` array insertion order. Extend to cover the on-disk serialization round-trip: add rule A (priority 0) then rule B (priority 5), export to temp URL, import back, assert order is `[A, B]` (insertion order preserved in JSON, not sorted by priority at serialization time). This guards the UI display contract: users see rules in creation order, not priority order.
 - success_criteria:
@@ -485,8 +485,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-111853
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: The existing `ThrowingStubLLMService` verifies error state from REP-114. Extend: after a prime that throws, assert state is `.idle` (error cleared), not `.error(...)` — the error state is transient and the engine should be primeable again. A second `prime()` call after an error should reach `.ready` with the new stub. Guards against a stuck error state that prevents future priming.
 - success_criteria:
