@@ -89,6 +89,16 @@ actor SearchIndex {
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
 
+    /// Wipes the entire index and resets the per-channel indexed-message
+    /// counter in Stats to zero. Called on preference wipe or schema
+    /// migration so the counter reflects actual content rather than cumulative
+    /// history.
+    func clear(stats: Stats? = nil) {
+        guard let db else { return }
+        sqlite3_exec(db, "DELETE FROM messages_fts", nil, nil, nil)
+        stats?.resetIndexedCounters()
+    }
+
     /// Remove all index rows for a thread. Called when a thread is archived
     /// so it no longer appears in search results.
     func delete(threadID: String) {

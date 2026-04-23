@@ -556,6 +556,38 @@ final class DraftEngineTests: XCTestCase {
                         "re-prime after dismiss must write a new store entry")
     }
 
+    // MARK: - REP-182: empty LLM stream
+
+    func testEmptyLLMStreamTransitionsToIdle() async throws {
+        let engine = DraftEngine(service: EmptyStreamService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+
+        // Wait for the stream task to finish (isStreaming returns to false).
+        try await waitUntil(timeout: 2.0) {
+            !engine.state(threadID: thread.id, tone: .warm).isStreaming
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertFalse(state.isStreaming, "empty stream must clear isStreaming flag")
+        XCTAssertFalse(state.isDone, "empty stream must not set isDone (no content)")
+        XCTAssertEqual(state.text, "", "empty stream must leave text empty")
+        XCTAssertNil(state.error, "empty stream must not record an error")
+    }
+
+    func testEmptyLLMStreamDoesNotCrash() async throws {
+        let engine = DraftEngine(service: EmptyStreamService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .direct, history: [])
+
+        try await waitUntil(timeout: 2.0) {
+            !engine.state(threadID: thread.id, tone: .direct).isStreaming
+        }
+        // Reaching here without a crash or assertion failure = pass.
+    }
+
     // MARK: - helper
 
     private func waitUntil(
@@ -717,6 +749,20 @@ private struct SlowFixedTextService: LLMService {
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+/// Immediately closes the stream without yielding any chunks — no .text, no .done.
+/// Used to test that DraftEngine transitions to idle rather than staying in .priming.
+private struct EmptyStreamService: LLMService {
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
         }
     }
 }

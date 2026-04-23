@@ -201,6 +201,17 @@ final class Stats: @unchecked Sendable {
         persist()
     }
 
+    /// Zeroes both the aggregate and per-channel indexed-message counters.
+    /// Called by SearchIndex.clear() so the counter reflects current index
+    /// content rather than cumulative history.
+    func resetIndexedCounters() {
+        state.withLock {
+            $0.messagesIndexed = 0
+            $0.messagesIndexedByChannel = [:]
+        }
+        persist()
+    }
+
     // MARK: - Persistence
 
     /// Resolves the default on-disk path for production use.

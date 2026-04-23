@@ -384,6 +384,38 @@ final class ContactsResolverTests: XCTestCase {
         XCTAssertEqual(fake.lookupCallCount, callsAfterWarm,
                        "cached handles must not trigger additional store lookups")
     }
+
+    // MARK: - REP-185: TTL cache invalidation contract
+
+    func testExpiredTTLForcesRefetch() {
+        // ttl=0 expires every entry immediately — two calls must each hit the store.
+        let fake = FakeContactStore()
+        fake.names["4155550185"] = "Paula"
+        let resolver = ContactsResolver(store: fake, ttl: 0)
+        resolver.overrideAccessForTesting(.granted)
+
+        _ = resolver.name(for: "+14155550185")
+        let afterFirst = fake.lookupCallCount
+        _ = resolver.name(for: "+14155550185")
+
+        XCTAssertEqual(fake.lookupCallCount, afterFirst + 1,
+                       "ttl=0 must re-query the store on the second call (cache expired)")
+    }
+
+    func testActiveTTLUsesCache() {
+        // ttl=9999 keeps entry fresh — two calls must hit the store only once.
+        let fake = FakeContactStore()
+        fake.names["4155550186"] = "Quinn"
+        let resolver = ContactsResolver(store: fake, ttl: 9999)
+        resolver.overrideAccessForTesting(.granted)
+
+        _ = resolver.name(for: "+14155550186")
+        let afterFirst = fake.lookupCallCount
+        _ = resolver.name(for: "+14155550186")
+
+        XCTAssertEqual(fake.lookupCallCount, afterFirst,
+                       "ttl=9999 must not re-query the store on the second call (cache still valid)")
+    }
 }
 
 // MARK: - Test double

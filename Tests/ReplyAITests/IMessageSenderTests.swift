@@ -410,6 +410,61 @@ final class IMessageSenderTests: XCTestCase {
         }
         XCTAssertEqual(callCount, 1, "non-retriable error must not trigger a second attempt")
     }
+
+    // MARK: - REP-181: -1708 retry cap
+
+    func testRetryCapReachedThrowsError() {
+        // When every attempt throws -1708, the sender must eventually give up and
+        // throw an error. The hook is called at most maxRetry+1 = 2 times.
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 3.0
+        var callCount = 0
+        IMessageSender.executeHook = { _ in
+            callCount += 1
+            throw IMessageSender.SendError.scriptFailure("AppleScript error -1708: Event not handled")
+        }
+        let thread = MessageThread(
+            id: "+15559876543", channel: .imessage, name: "RetryTest",
+            avatar: "R", preview: "", time: "",
+            chatGUID: "iMessage;-;+15559876543"
+        )
+        XCTAssertThrowsError(try IMessageSender.send("cap test", to: thread),
+                             "all-failing -1708 hook must throw after retry cap is reached")
+        XCTAssertLessThanOrEqual(callCount, 3,
+            "hook must be called at most maxRetry+1 times, got \(callCount)")
+        XCTAssertGreaterThanOrEqual(callCount, 1, "hook must be called at least once")
+    }
+
+    func testRetrySucceedsOnSecondAttempt() {
+        // One -1708 failure then success: send must succeed and hook is called exactly twice.
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook = IMessageSender.executeHook
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+        }
+        IMessageSender.sendTimeout = 3.0
+        var callCount = 0
+        IMessageSender.executeHook = { _ in
+            callCount += 1
+            if callCount == 1 {
+                throw IMessageSender.SendError.scriptFailure("AppleScript error -1708: Event not handled")
+            }
+        }
+        let thread = MessageThread(
+            id: "+15557654321", channel: .imessage, name: "RetryOK",
+            avatar: "R", preview: "", time: "",
+            chatGUID: "iMessage;-;+15557654321"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("retry success", to: thread),
+                         "single -1708 followed by success must not throw")
+        XCTAssertEqual(callCount, 2, "hook must be called exactly twice: initial + one retry")
+    }
 }
 
 // MARK: - REP-174: escapeForAppleScriptLiteral completeness

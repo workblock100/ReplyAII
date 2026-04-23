@@ -109,4 +109,38 @@ final class DraftStoreTests: XCTestCase {
             XCTAssertTrue(r.hasPrefix("write-"), "result must be one of the written values, got: \(r)")
         }
     }
+
+    // MARK: - REP-176: 7-day prune threshold boundary
+
+    func testPruneRemovesFilesOlderThanSevenDays() throws {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "rep176-old", text: "stale content")
+
+        let fileURL = tmpDir.appendingPathComponent("rep176-old.md")
+        let eightDaysAgo = Date().addingTimeInterval(-8 * 86_400)
+        try FileManager.default.setAttributes(
+            [.modificationDate: eightDaysAgo],
+            ofItemAtPath: fileURL.path
+        )
+
+        let store2 = DraftStore(draftsDirectory: tmpDir)
+        XCTAssertNil(store2.read(threadID: "rep176-old"),
+                     "file aged 8 days must be pruned on init (threshold is 7 days)")
+    }
+
+    func testPrunePreservesFilesNewerThanSevenDays() throws {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "rep176-recent", text: "recent content")
+
+        let fileURL = tmpDir.appendingPathComponent("rep176-recent.md")
+        let sixDaysAgo = Date().addingTimeInterval(-6 * 86_400)
+        try FileManager.default.setAttributes(
+            [.modificationDate: sixDaysAgo],
+            ofItemAtPath: fileURL.path
+        )
+
+        let store2 = DraftStore(draftsDirectory: tmpDir)
+        XCTAssertEqual(store2.read(threadID: "rep176-recent"), "recent content",
+                       "file aged 6 days must survive init (below 7-day threshold)")
+    }
 }

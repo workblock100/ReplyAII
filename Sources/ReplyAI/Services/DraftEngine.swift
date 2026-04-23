@@ -128,6 +128,15 @@ final class DraftEngine {
                     if Task.isCancelled { return }
                     self.apply(chunk: chunk, to: key)
                 }
+                // Stream finished normally. If no .done chunk was emitted (empty
+                // stream), isStreaming is still true — transition to idle so the
+                // caller isn't stuck waiting for a draft that will never arrive.
+                guard let self, !Task.isCancelled else { return }
+                if let s = self.drafts[key], s.isStreaming {
+                    var cleared = s
+                    cleared.isStreaming = false
+                    self.drafts[key] = cleared
+                }
             } catch {
                 guard let self else { return }
                 // Suppress errors thrown because *this* task was cancelled —

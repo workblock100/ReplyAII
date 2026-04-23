@@ -381,7 +381,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Sources/ReplyAI/Search/SearchIndex.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: Add `clear()` to `SearchIndex` that executes `DELETE FROM thread_search` and resets the per-channel indexed-message counter in `Stats` to zero (so the counter reflects actual indexed content after a rebuild). Called when the user wipes preferences or when a schema migration forces a full rebuild. Tests: upsert 3 threads, call `clear()`, search returns empty; upsert again after clear → searchable; concurrent `clear()` + `upsert()` does not crash.
@@ -436,7 +436,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: `DraftStore.init()` prunes draft files older than 7 days. No test pins the exact expiry threshold: a file timestamped 8 days ago should be deleted, a file from 6 days ago should survive. Using injected temp directory, write two `.md` files with their modification dates set to `Date().addingTimeInterval(-8 * 86400)` (old) and `Date().addingTimeInterval(-6 * 86400)` (recent) respectively via `FileManager.setAttributes`. Create a new `DraftStore` from the same directory. Assert: old file is absent; recent file is still present and readable.
@@ -496,7 +496,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: `PromptBuilder.buildPrompt(messages:tone:)` prepends a tone-specific system instruction before conversation messages. Pin this structural contract: the system instruction appears before the first message line, and the final output is formatted as `[system]\n\n[messages]`. Tests: given any tone + 1 message, `systemPrompt` string appears at the start of the output; given 3 messages, all appear after the system block; empty system prompt (if possible) still doesn't precede non-system lines. No production code changes expected.
@@ -510,7 +510,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added a -1708 retry for the "Messages not ready" OSA error. The retry should be capped (e.g. 3 attempts) to avoid hanging indefinitely. Using the injectable `executeHook` seam, configure a hook that always returns `-1708`. Assert: `send()` eventually throws `SenderError.scriptError` (or equivalent), not hanging forever; the hook was called ≤ 3 times (max retry + 1 initial). Also test: hook returns -1708 once then succeeds → send succeeds after 2 calls. Documents the retry contract without relying on timing.
@@ -524,7 +524,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: If `LLMService.draft(messages:tone:)` returns a stream that yields zero chunks before completing normally (an empty stream), the DraftEngine should transition to `.idle` (no content to show), not remain in `.priming` or transition to `.ready("")`. Use a stub that returns an immediately-closing `AsyncThrowingStream` with no yields. Assert: final state is `.idle`; no crash; priming count incremented once.
@@ -554,7 +554,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: REP-027 added explicit AND semantics for multi-word queries. Extend coverage to 3-word queries and near-miss cases: index thread A ("quick brown fox"), thread B ("quick lazy dog"), thread C ("lazy brown cat"). Query "quick brown" → only A. Query "quick brown fox" → only A. Query "quick lazy fox" → no results (no thread has all 3). Guards the AND-semantics contract against an FTS5 query string that accidentally switches to OR.
@@ -568,7 +568,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: REP-074 added a 30-min TTL and made it injectable for tests. Pin the cache invalidation path: initialize resolver with `ttl=0`; call `name(for: "alice")` once (store queried, result cached); advance clock past TTL (instant with ttl=0); call `name(for: "alice")` again. Assert: store query count == 2 (cache missed on second call). Also test: with `ttl=9999`, second call uses cache (store query count == 1). Documents the explicit TTL contract.
@@ -582,7 +582,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-075700
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `messages(forThreadID:limit:)` fetches messages and returns them sorted for display. Pin the sort order contract: using an in-memory SQLite fixture with 3 messages at Apple reference timestamps T+10, T+20, T+30, assert the first returned message has the largest date (newest first). A secondary test: inserting in reverse date order (T+30 first in DB) still returns newest-first. This guards against a SQL `ORDER BY` direction change.

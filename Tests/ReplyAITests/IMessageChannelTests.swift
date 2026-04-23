@@ -1164,3 +1164,122 @@ final class IMessageChannelThreadHasAttachmentTests: XCTestCase {
                        "thread with no attachment messages must have hasAttachment=false")
     }
 }
+
+// MARK: - REP-186: messages(forThreadID:) sort order
+
+final class IMessageChannelMessageOrderTests: XCTestCase {
+    private var dbURL: URL!
+    private static let TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+
+    override func setUpWithError() throws {
+        dbURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAI-MsgOrder-\(UUID().uuidString).db")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dbURL)
+    }
+
+    private func openDB() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let handle = db else {
+            throw ChannelError.databaseError(code: 1, message: "test db open failed")
+        }
+        return handle
+    }
+
+    private func buildSchema() throws {
+        let db = try openDB()
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        CREATE TABLE message (
+            ROWID INTEGER PRIMARY KEY,
+            text TEXT,
+            attributedBody BLOB,
+            is_from_me INTEGER,
+            is_read INTEGER,
+            date INTEGER,
+            associated_message_type INTEGER DEFAULT 0,
+            cache_has_attachments INTEGER DEFAULT 0,
+            date_delivered INTEGER DEFAULT 0
+        );
+        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func insertChat(_ db: OpaquePointer, rowid: Int64, identifier: String) {
+        let sql = "INSERT INTO chat VALUES (?1, ?2, '', 'iMessage', ?3);"
+        var s: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &s, nil)
+        sqlite3_bind_int64(s, 1, rowid)
+        sqlite3_bind_text(s, 2, identifier, -1, Self.TRANSIENT)
+        sqlite3_bind_text(s, 3, "iMessage;-;\(identifier)", -1, Self.TRANSIENT)
+        sqlite3_step(s); sqlite3_finalize(s)
+    }
+
+    private func insertMsg(_ db: OpaquePointer, rowid: Int64, chatID: Int64,
+                           text: String, date: Int64) {
+        let sql = "INSERT INTO message(ROWID,text,attributedBody,is_from_me,is_read,date,associated_message_type) VALUES (?1,?2,NULL,0,0,?3,0);"
+        var m: OpaquePointer?
+        sqlite3_prepare_v2(db, sql, -1, &m, nil)
+        sqlite3_bind_int64(m, 1, rowid)
+        sqlite3_bind_text(m, 2, text, -1, Self.TRANSIENT)
+        sqlite3_bind_int64(m, 3, date)
+        sqlite3_step(m); sqlite3_finalize(m)
+        let link = "INSERT INTO chat_message_join VALUES (?1, ?2);"
+        var l: OpaquePointer?
+        sqlite3_prepare_v2(db, link, -1, &l, nil)
+        sqlite3_bind_int64(l, 1, chatID)
+        sqlite3_bind_int64(l, 2, rowid)
+        sqlite3_step(l); sqlite3_finalize(l)
+    }
+
+    // messages(forThreadID:) fetches with ORDER BY m.date DESC then calls
+    // .reversed(), so the final array is chronological (oldest first) — suitable
+    // for a chat view where index 0 is at the top and the user reads downward.
+
+    func testMessagesReturnedChronologicallyOldestFirst() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 1, identifier: "+15550186")
+        // Insert in ascending date order: T+10, T+20, T+30
+        insertMsg(db, rowid: 1, chatID: 1, text: "oldest", date: 700_000_010)
+        insertMsg(db, rowid: 2, chatID: 1, text: "middle", date: 700_000_020)
+        insertMsg(db, rowid: 3, chatID: 1, text: "newest", date: 700_000_030)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgs = try await channel.messages(forThreadID: "+15550186", limit: 10)
+
+        XCTAssertEqual(msgs.count, 3, "all 3 messages must be returned")
+        XCTAssertEqual(msgs.first?.text, "oldest",
+                       "messages(forThreadID:) must return oldest message first (chronological for display)")
+        XCTAssertEqual(msgs.last?.text, "newest",
+                       "messages(forThreadID:) must return newest message last")
+    }
+
+    func testMessagesChronologicalRegardlessOfInsertOrder() async throws {
+        try buildSchema()
+        let db = try openDB()
+        insertChat(db, rowid: 2, identifier: "+15550187")
+        // Insert in reverse date order: T+30 first, then T+20, then T+10
+        insertMsg(db, rowid: 4, chatID: 2, text: "newest", date: 700_000_030)
+        insertMsg(db, rowid: 5, chatID: 2, text: "middle", date: 700_000_020)
+        insertMsg(db, rowid: 6, chatID: 2, text: "oldest", date: 700_000_010)
+        sqlite3_close(db)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let msgs = try await channel.messages(forThreadID: "+15550187", limit: 10)
+
+        XCTAssertEqual(msgs.count, 3, "all 3 messages must be returned")
+        XCTAssertEqual(msgs.first?.text, "oldest",
+                       "insert order must not affect chronological result — oldest must come first")
+        XCTAssertEqual(msgs.last?.text, "newest",
+                       "newest must be last regardless of DB insert order")
+    }
+}

@@ -236,4 +236,45 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains(Tone.playful.rawValue.lowercased()),
                       "all-.me prompt must still include the tone instruction")
     }
+
+    // MARK: - REP-180: system prompt structural ordering
+
+    func testSystemPromptPrecedesConversationHistory() {
+        // systemPrompt(tone:) must not contain any message content — it's the
+        // system turn and should be prepended before the conversation block.
+        let thread = makeThread(name: "OrderCheck")
+        let msg = makeMessage("rep180_unique_token")
+        let system = PromptBuilder.systemPrompt(tone: .warm)
+        let conversation = PromptBuilder.build(thread: thread, tone: .warm, history: [msg])
+
+        // System block must not bleed message content into itself.
+        XCTAssertFalse(system.contains("rep180_unique_token"),
+                       "systemPrompt must not contain conversation message text")
+
+        // Combined output: system comes first, then conversation.
+        let combined = system + "\n\n" + conversation
+        let sysRange = combined.range(of: system)!
+        let msgRange = combined.range(of: "rep180_unique_token")!
+        XCTAssertLessThan(sysRange.lowerBound, msgRange.lowerBound,
+                          "system prompt must appear before message content in combined output")
+    }
+
+    func testAllMessagesFollowSystemBlock() {
+        let thread = makeThread(name: "OrderCheck3")
+        let messages = [
+            makeMessage("first_180_msg"),
+            makeMessage("second_180_msg"),
+            makeMessage("third_180_msg"),
+        ]
+        let system = PromptBuilder.systemPrompt(tone: .direct)
+        let conversation = PromptBuilder.build(thread: thread, tone: .direct, history: messages)
+        let combined = system + "\n\n" + conversation
+
+        let sysEnd = combined.range(of: system)!.upperBound
+        for msg in ["first_180_msg", "second_180_msg", "third_180_msg"] {
+            let msgRange = combined.range(of: msg)!
+            XCTAssertGreaterThanOrEqual(msgRange.lowerBound, sysEnd,
+                "'\(msg)' must appear after the system block in combined output")
+        }
+    }
 }

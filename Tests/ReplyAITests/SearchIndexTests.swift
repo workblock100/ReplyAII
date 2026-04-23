@@ -910,4 +910,129 @@ final class SearchIndexResultFieldsTests: XCTestCase {
         XCTAssertEqual(hits.first?.senderName, "me",
                        "Result.senderName must be 'me' for outgoing messages")
     }
+
+    // MARK: - REP-165: SearchIndex.clear()
+
+    func testClearWipesAllIndexedThreads() async {
+        let index = SearchIndex()
+        let threads = (1...3).map { i in
+            MessageThread(id: "clr-t\(i)", channel: .imessage, name: "T\(i)",
+                          avatar: "T", preview: "", time: "", unread: 0)
+        }
+        for (i, t) in threads.enumerated() {
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "cleartest165_unique\(i)", time: "now")
+            ])
+        }
+        let before = await index.search("cleartest165_unique")
+        XCTAssertEqual(before.count, 3, "pre-condition: 3 threads indexed")
+
+        await index.clear()
+
+        let after = await index.search("cleartest165_unique")
+        XCTAssertEqual(after.count, 0, "clear() must wipe all indexed rows")
+    }
+
+    func testClearThenUpsertIsSearchable() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "clr-reup", channel: .imessage, name: "ReUp",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "cleartest165_before", time: "now")
+        ])
+        await index.clear()
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "cleartest165_after", time: "now")
+        ])
+
+        let hits = await index.search("cleartest165_after")
+        XCTAssertEqual(hits.count, 1, "re-indexed content must be searchable after clear()")
+        let stale = await index.search("cleartest165_before")
+        XCTAssertEqual(stale.count, 0, "cleared content must not appear after re-index")
+    }
+
+    func testConcurrentClearAndUpsertNoCrash() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "clr-race", channel: .imessage, name: "Race",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<10 {
+                group.addTask {
+                    await index.upsert(thread: thread, messages: [
+                        Message(from: .them, text: "race\(i)", time: "now")
+                    ])
+                }
+                if i % 3 == 0 {
+                    group.addTask { await index.clear() }
+                }
+            }
+        }
+        // Reaching here without crash = pass.
+    }
+
+    // MARK: - REP-184: 3-word AND semantics
+
+    func testTwoWordQueryFiltersCorrectly() async {
+        let index = SearchIndex()
+        let threads = [
+            MessageThread(id: "and-a", channel: .imessage, name: "A",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "and-b", channel: .imessage, name: "B",
+                          avatar: "B", preview: "", time: "", unread: 0),
+            MessageThread(id: "and-c", channel: .imessage, name: "C",
+                          avatar: "C", preview: "", time: "", unread: 0),
+        ]
+        await index.upsert(thread: threads[0], messages: [
+            Message(from: .them, text: "quick brown fox", time: "now")
+        ])
+        await index.upsert(thread: threads[1], messages: [
+            Message(from: .them, text: "quick lazy dog", time: "now")
+        ])
+        await index.upsert(thread: threads[2], messages: [
+            Message(from: .them, text: "lazy brown cat", time: "now")
+        ])
+
+        let hits = await index.search("quick brown")
+        XCTAssertEqual(hits.count, 1, "'quick brown' must match only thread A")
+        XCTAssertEqual(hits.first?.threadID, "and-a")
+    }
+
+    func testThreeWordQueryRequiresAllTerms() async {
+        let index = SearchIndex()
+        let threads = [
+            MessageThread(id: "and3-a", channel: .imessage, name: "A",
+                          avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "and3-b", channel: .imessage, name: "B",
+                          avatar: "B", preview: "", time: "", unread: 0),
+            MessageThread(id: "and3-c", channel: .imessage, name: "C",
+                          avatar: "C", preview: "", time: "", unread: 0),
+        ]
+        await index.upsert(thread: threads[0], messages: [
+            Message(from: .them, text: "quick brown fox", time: "now")
+        ])
+        await index.upsert(thread: threads[1], messages: [
+            Message(from: .them, text: "quick lazy dog", time: "now")
+        ])
+        await index.upsert(thread: threads[2], messages: [
+            Message(from: .them, text: "lazy brown cat", time: "now")
+        ])
+
+        // "quick lazy fox" — no single thread has all three terms
+        let hits = await index.search("quick lazy fox")
+        XCTAssertEqual(hits.count, 0,
+            "'quick lazy fox' must return empty: no thread contains all 3 terms")
+    }
+
+    func testThreeWordQueryMatchesWhenAllTermsPresent() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "and3-full", channel: .imessage, name: "Full",
+                                   avatar: "F", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "quick brown fox", time: "now")
+        ])
+
+        let hits = await index.search("quick brown fox")
+        XCTAssertEqual(hits.count, 1, "'quick brown fox' must match thread that has all 3 terms")
+    }
 }
