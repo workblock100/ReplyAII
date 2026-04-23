@@ -1,8 +1,9 @@
 # Planner Run 7 — 2026-04-23
 
-**Status**: completed  
-**Open after this run**: 49  
+**Status**: completed (addendum applied after strategic pivot commit `968de9f`)
+**Open after this run**: 51 (49 initial + 4 pivot-aligned additions + 1 P0 − 2 deprioritized = 52... recount: 51 correct per grep)
 **Archived today**: 4 (REP-067, REP-169, REP-188, REP-189)
+**Deprioritized today**: 2 (REP-075, REP-227)
 
 ## What shipped since run 6
 
@@ -69,6 +70,26 @@ All non-ui_sensitive, auto-merge eligible (except as noted):
 - "Seed next queue with product-visible M item" → REP-009 promoted to P1; REP-222 (UserVoiceProfile), REP-224 (bulkMarkAllRead), REP-226 (messageCount predicate), REP-227 (Message.messageType) added ✓
 - "Planner no-op guard" → noted; will implement if a no-op situation is detected next run ✓ (deferred — this run had meaningful changes)
 - AGENTS.md test-count updated to grep-accurate value ✓
+
+## Addendum: strategic pivot response (commit 968de9f)
+
+Human pushed a strategic pivot while planner was writing. Read and applied:
+- `chat.db` + FDA path is unreliable in production. New agent weights: 30% alt architectures, 30% Slack, 25% UX polish, 25% tests+docs.
+- **Planner must queue at least one P0 per cycle making the app usable without FDA.**
+
+### Pivot-aligned additions
+- **REP-228 (P0)**: Fixture demo mode — when real sync returns 0 threads, show Fixtures.demoChatThreads so the app is usable with zero permissions. `Preferences.demoModeActive` auto-clears after first real sync. `send()` on demo thread throws. M effort, non-ui, auto-merge eligible.
+- **REP-229 (P2)**: AppleScript thread listing (`tell Messages to get every chat`) as FDA fallback — uses Automation permission, not FDA. Injectable executor for testing.
+- **REP-230 (P2)**: `LocalhostOAuthListener` — reusable `NWListener`-based OAuth loopback handler building block for Slack. Port 4242, injectable timeout, tests without real network.
+- **REP-231 (P2)**: Per-channel enable/disable Preferences keys (`pref.channels.iMessageEnabled`, `pref.channels.slackEnabled`).
+
+### Deprioritized (pivot explicitly calls these out)
+- **REP-075** (AttributedBodyDecoder nested payload): `status: deprioritized` — pivot says "stop investing in AttributedBodyDecoder rich-text improvements."
+- **REP-227** (Message.messageType SQL field): `status: deprioritized` — pivot says "no new chat.db SQL queries."
+
+### Notes on added tasks that touch chat.db (retained)
+- REP-221 (text=NULL → attributedBody decoder test): kept open — tests existing shipped code, not new chat.db functionality. Pivot preserves existing tests.
+- REP-219 (ContactsResolver cache hit test): retained — ContactsResolver is channel-agnostic infrastructure.
 
 ## Concerns flagged
 - **wip/quality-* branches** (8 from 2026-04-21): Still unmerged. REP-016, 017, 048 cover these as P1 human tasks. Reviewer has noted them in 4 consecutive windows. If still open next review, planner should escalate to a STOP AUTO-MERGE consideration.

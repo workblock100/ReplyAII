@@ -22,7 +22,24 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 ## P0 — ship-blocking or bug-fix
 
-*(No open P0 items — all resolved. Last P0 closed: REP-003, worker-2026-04-21-173600.)*
+### REP-228 — InboxViewModel: fixture demo mode when no channel provides threads
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Fixtures/Fixtures.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: **Strategic pivot P0: app must be useful with zero permissions.** When `syncFromIMessage()` returns 0 threads AND no other channel provides threads, populate `viewModel.threads` from `Fixtures.demoChatThreads` (a new `static let` on `Fixtures`). Each demo thread carries `isDemoThread: Bool = true`. Demo threads are excluded from `send()` (throws `InboxError.demoModeNotSendable`). Rules do not auto-apply to demo threads. `Preferences.demoModeActive: Bool` (defaults `true`; auto-set to `false` after any real sync returns ≥1 thread; exempt from `wipe()`). Tests: demo threads appear when real sync returns empty; demo mode flag persists to Preferences; demo mode disables after successful real sync; `send()` on demo thread throws `demoModeNotSendable`.
+- success_criteria:
+  - `Fixtures.demoChatThreads: [MessageThread]` — 3–5 realistic seed threads (distinct from the gallery Fixtures.threads)
+  - `InboxViewModel` populates from demo fixtures when threads empty after sync
+  - `Preferences.demoModeActive` key set false after first real sync ≥1 thread
+  - `MessageThread.isDemoThread: Bool` field
+  - `testDemoThreadsAppearsWhenSyncReturnsEmpty`
+  - `testDemoModeFlagClearsAfterRealSync`
+  - `testSendOnDemoThreadThrows`
+  - Existing InboxViewModelTests remain green
+- test_plan: 3 new tests in `InboxViewModelTests.swift`; use `StaticMockChannel` returning empty threads for first test, non-empty threads for second.
 
 ---
 
@@ -201,7 +218,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: deprioritized
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/AttributedBodyDecoder.swift`, `Tests/ReplyAITests/AttributedBodyDecoderTests.swift`
 - scope: AGENTS.md "Better AttributedBodyDecoder" (priority queue item #4) notes that the current 0x2B tag scanner misses nested `NSMutableAttributedString` payloads — common for link previews, app clips, and collaborative iMessage features added in iOS 16+. A nested payload wraps the primary `NSAttributedString` inside another attributed string object graph. Extend the scanner to recognise the class-ref sequence for `NSMutableAttributedString` (byte signature differs from `NSAttributedString`) and recurse into the inner blob's UTF-8 extraction. Add hand-crafted hex fixtures representing the nested case (synthesize a minimal valid typedstream; document the byte layout). Tests: nested payload returns correct inner text; previously-passing single-level payloads remain correct; malformed nested blob returns nil.
@@ -803,6 +820,55 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageSenderTests remain green
 - test_plan: 2 new tests in `IMessageSenderTests.swift`; use `executeHook` seam to capture AppleScript string for assertion rather than executing.
 
+### REP-229 — AppleScript thread listing: `tell Messages to get every chat` fallback when FDA unavailable
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift` (or new `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift`), `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: **Pivot-aligned (alt message-source).** Add `AppleScriptMessageReader.recentChats() -> [MessageThread]` that executes `tell application "Messages" to get every chat` via `NSAppleScript`. Returns a `[MessageThread]` with display name, chat GUID, and a placeholder `previewText` (AppleScript can retrieve `every text chat` with `name` and `id` but not full message history — that's OK for the thread list). No FDA required — uses Automation permission. `IMessageChannel.recentThreads()` uses this as a fallback when `openReadOnly()` fails with `authorizationDenied`. Tests use injectable AppleScript executor (same seam as `IMessageSender`).
+- success_criteria:
+  - `AppleScriptMessageReader.recentChats() -> [MessageThread]` implemented with injectable executor
+  - `IMessageChannel.recentThreads()` calls `AppleScriptMessageReader` when `openReadOnly()` returns `.authorizationDenied`
+  - `testAppleScriptFallbackPopulatesThreadsWhenFDADenied` — mock channel returns `authorizationDenied`; fallback executor returns chat list; `recentThreads()` returns non-empty
+  - `testAppleScriptFallbackExecutorIsInjectable` — custom executor captures AppleScript string for assertion
+  - Existing IMessageChannelTests remain green
+- test_plan: 2 new tests; injectable executor captures and asserts on the AppleScript source string without executing real AppleScript.
+
+### REP-230 — LocalhostOAuthListener: injectable loopback handler for Slack OAuth
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift` (new), `Tests/ReplyAITests/LocalhostOAuthListenerTests.swift` (new)
+- scope: **Pivot-aligned (Slack first).** Building block for REP-010 (Slack OAuth). Extract the loopback listener into a standalone `LocalhostOAuthListener` that: (1) binds an `NWListener` on `127.0.0.1:4242`; (2) resolves a `code` query parameter from the first incoming callback URL; (3) calls a completion handler with `code: String` and shuts down the listener. Injectable port and timeout (`default: 120s`). Tests verify: valid callback URL returns the `code`; timeout fires completion with `OAuthError.timeout`; double-start is a no-op. No Slack-specific logic here — just the reusable plumbing.
+- success_criteria:
+  - `LocalhostOAuthListener(port:timeout:)` type in new file
+  - `start(completion: (Result<String, OAuthError>) -> Void)` and `stop()` methods
+  - `testValidCallbackURLExtractsCode` — mock NW connection delivering `/?code=abc123`  → completion called with `"abc123"`
+  - `testTimeoutFiresWithOAuthError` — no callback within timeout fires `.timeout`
+  - `testDoubleStartIsNoop` — second `start()` while running is safe
+  - Existing tests remain green
+- test_plan: 3 new tests in `LocalhostOAuthListenerTests.swift`; use an injectable `NWListener` factory or connect a real listener to localhost in a test.
+
+### REP-231 — Preferences: per-channel enable/disable keys (iMessage, Slack, demo)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
+- scope: **Pivot-aligned (channel architecture).** Add three Preferences keys: `pref.channels.iMessageEnabled: Bool` (default `true`), `pref.channels.slackEnabled: Bool` (default `false`), `pref.channels.demoModeActive: Bool` (alias of `Preferences.demoModeActive` from REP-228, or consolidate here). These are the channel-level on/off switches that `InboxViewModel.syncFromIMessage` and future `SlackChannel.recentThreads` will check before attempting a sync. Tests: default values; round-trip through UserDefaults; wipe behavior (channels.* keys are NOT wipe-exempt — privacy reset clears channel tokens).
+- success_criteria:
+  - `pref.channels.iMessageEnabled`, `pref.channels.slackEnabled` Preferences keys
+  - Default values correct (`iMessage=true`, `slack=false`)
+  - Neither key is wipe-exempt (both cleared on `wipe()`)
+  - `testIMessageEnabledDefaultsToTrue`, `testSlackEnabledDefaultsToFalse`, `testChannelKeysClearedOnWipe`
+  - Existing PreferencesTests remain green
+- test_plan: 3 new tests in `PreferencesTests.swift` using suiteName-isolated `UserDefaults`.
+
 ### REP-218 — InboxViewModel: archiveThread removes thread from SearchIndex (integration test)
 - priority: P2
 - effort: S
@@ -939,7 +1005,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: deprioritized
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Sources/ReplyAI/Models/MessageThread.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: Tapbacks (`associated_message_type 2000–2005`) and delivery receipts are currently filtered at the SQL level by the thread-preview query. Expose `messageType: MessageType` on `Message` where `MessageType` is an enum: `.standard`, `.tapback`, `.deliveryReceipt`, `.unknown(Int)`. The SQL query for `messages(forThreadID:)` adds the `associated_message_type` column. Tapbacks and receipts are still filtered from thread previews (existing behavior preserved) but are now available to callers who want to show reaction summaries or sync status. Tests: standard message has `.standard` type; a row with `associated_message_type = 2000` has `.tapback`; a row with `associated_message_type = 2002` (read receipt) has `.deliveryReceipt`.
