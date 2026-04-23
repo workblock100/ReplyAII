@@ -476,16 +476,18 @@ final class ChannelErrorResultCodeTests: XCTestCase {
         XCTAssertEqual(err.errorDescription, "database is locked")
     }
 
-    /// Opening a directory as a db reaches sqlite3_open_v2 (fileExists returns
-    /// true for directories) and produces either databaseError or permissionDenied
-    /// — never unavailable — because we passed the fileExists guard.
+    /// An open failure after the file existence guard surfaces a database or
+    /// permission error — never unavailable — because the path exists.
     func testOpenFailureSurfacesDatabaseOrPermissionError() async {
-        let dirURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("replyai-dbtest-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dirURL) }
+        let fileURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("replyai-dbtest-\(UUID().uuidString).db")
+        FileManager.default.createFile(atPath: fileURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: fileURL) }
 
-        let channel = IMessageChannel(dbPathOverride: dirURL.path)
+        let failingOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?) = { _, _ in
+            (SQLITE_ERROR, nil)
+        }
+        let channel = IMessageChannel(dbPathOverride: fileURL.path, dbOpener: failingOpener)
         do {
             _ = try await channel.recentThreads(limit: 1)
             XCTFail("expected throw")
@@ -1295,9 +1297,9 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
 
         // Thread with 3 messages.
         insertChat(db, rowid: 91, identifier: "+19990000001")
-        insertMessage(db, rowid: 910, chatRowID: 91, text: "msg one", hasAttachment: false)
-        insertMessage(db, rowid: 911, chatRowID: 91, text: "msg two", hasAttachment: false)
-        insertMessage(db, rowid: 912, chatRowID: 91, text: "msg three", hasAttachment: false)
+        insertMsg(db, rowid: 910, chatID: 91, text: "msg one", date: 700_000_010)
+        insertMsg(db, rowid: 911, chatID: 91, text: "msg two", date: 700_000_020)
+        insertMsg(db, rowid: 912, chatID: 91, text: "msg three", date: 700_000_030)
 
         // Thread with zero messages — only a chat row, no message rows.
         insertChat(db, rowid: 92, identifier: "+19990000002")
@@ -1318,9 +1320,9 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
         defer { sqlite3_close(db) }
 
         insertChat(db, rowid: 93, identifier: "+19990000003")
-        insertMessage(db, rowid: 930, chatRowID: 93, text: "alpha", hasAttachment: false)
-        insertMessage(db, rowid: 931, chatRowID: 93, text: "beta", hasAttachment: false)
-        insertMessage(db, rowid: 932, chatRowID: 93, text: "gamma", hasAttachment: false)
+        insertMsg(db, rowid: 930, chatID: 93, text: "alpha", date: 700_000_010)
+        insertMsg(db, rowid: 931, chatID: 93, text: "beta", date: 700_000_020)
+        insertMsg(db, rowid: 932, chatID: 93, text: "gamma", date: 700_000_030)
 
         let channel = IMessageChannel(dbPathOverride: dbURL.path)
         let threads = try await channel.recentThreads(limit: 50)
@@ -1332,4 +1334,117 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
                        "thread with messages must have a non-empty preview")
     }
 
+    // MARK: - REP-236: AppleScript fallback when FDA is denied
+
+    func testAppleScriptFallbackCalledWhenFDADenied() async throws {
+        // SQLITE_AUTH (23) triggers the authorization-denied branch in openReadOnly,
+        // which throws permissionDenied and routes execution to the AppleScript fallback.
+        let deniedOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?) = { _, _ in (23, nil) }
+        let mockExecutor: @Sendable (String) throws -> String = { _ in
+            "Zara Smith||iMessage;-;+15559990001\nAlice Jones||iMessage;-;+15559990002\n"
+        }
+        let reader = AppleScriptMessageReader(executor: mockExecutor)
+        // File must exist so FileManager.fileExists passes, then the deniedOpener
+        // returns SQLITE_AUTH so openReadOnly throws permissionDenied.
+        try makeMinimalDB(at: dbURL.path)
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: deniedOpener,
+            appleScriptReader: reader
+        )
+        let threads = try await channel.recentThreads(limit: 50)
+
+        XCTAssertEqual(threads.count, 2, "fallback must return the 2 threads from the mock executor")
+        XCTAssertEqual(threads[0].name, "Alice Jones", "threads must be sorted by displayName ascending")
+        XCTAssertEqual(threads[1].name, "Zara Smith")
+        XCTAssertEqual(threads[0].channel, .imessage)
+    }
+
+    func testAppleScriptFallbackExecutorIsInjectable() async throws {
+        // Verify the executor receives a script string referencing Messages.app
+        // so callers can assert on what was sent without executing real AppleScript.
+        var capturedScript = ""
+        let capturingExecutor: @Sendable (String) throws -> String = { script in
+            capturedScript = script
+            return "Test User||iMessage;-;+15550000001\n"
+        }
+        let reader = AppleScriptMessageReader(executor: capturingExecutor)
+
+        let deniedOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?) = { _, _ in (23, nil) }
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: deniedOpener,
+            appleScriptReader: reader
+        )
+        try makeMinimalDB(at: dbURL.path)
+        _ = try await channel.recentThreads(limit: 50)
+
+        XCTAssertTrue(capturedScript.contains("Messages"),
+                      "executor must receive an AppleScript string referencing Messages.app")
+        XCTAssertFalse(capturedScript.isEmpty, "executor must receive a non-empty script")
+    }
+
+    func testAppleScriptFallbackErrorPropagates() async throws {
+        // When the AppleScript executor throws, the error must surface to the caller.
+        let throwingExecutor: @Sendable (String) throws -> String = { _ in
+            throw AppleScriptReaderError.executionError("Messages not running")
+        }
+        let reader = AppleScriptMessageReader(executor: throwingExecutor)
+        let deniedOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?) = { _, _ in (23, nil) }
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: deniedOpener,
+            appleScriptReader: reader
+        )
+        try makeMinimalDB(at: dbURL.path)
+
+        do {
+            _ = try await channel.recentThreads(limit: 50)
+            XCTFail("expected an error when the AppleScript executor throws")
+        } catch AppleScriptReaderError.executionError(let msg) {
+            XCTAssertEqual(msg, "Messages not running")
+        }
+    }
+
+    func testFDASuccessSkipsFallback() async throws {
+        // When chat.db opens successfully, the AppleScript fallback must never fire.
+        var fallbackCalled = false
+        let sentinelExecutor: @Sendable (String) throws -> String = { _ in
+            fallbackCalled = true
+            return ""
+        }
+        let reader = AppleScriptMessageReader(executor: sentinelExecutor)
+
+        try makeMinimalDB(at: dbURL.path)
+        // Use default dbOpener (real SQLite) pointing at the valid temp db.
+        let channel = IMessageChannel(dbPathOverride: dbURL.path, appleScriptReader: reader)
+        _ = try await channel.recentThreads(limit: 50)
+
+        XCTAssertFalse(fallbackCalled, "AppleScript fallback must not be called when chat.db opens successfully")
+    }
+
+    // MARK: - Helpers
+
+    /// Creates the minimum chat.db schema needed for openReadOnly to succeed
+    /// (all tables referenced by recentThreads must exist).
+    private func makeMinimalDB(at path: String) throws {
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let ddl = """
+        CREATE TABLE IF NOT EXISTS chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT,
+            display_name TEXT, service_name TEXT, guid TEXT);
+        CREATE TABLE IF NOT EXISTS message (ROWID INTEGER PRIMARY KEY, text TEXT, attributedBody BLOB,
+            is_from_me INTEGER, date INTEGER, cache_has_attachments INTEGER, is_read INTEGER,
+            date_delivered INTEGER, associated_message_type INTEGER);
+        CREATE TABLE IF NOT EXISTS chat_message_join (chat_id INTEGER, message_id INTEGER);
+        CREATE TABLE IF NOT EXISTS handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+        CREATE TABLE IF NOT EXISTS chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+        """
+        for stmt in ddl.split(separator: ";").map(String.init) {
+            let trimmed = stmt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            sqlite3_exec(db, trimmed, nil, nil, nil)
+        }
+    }
 }

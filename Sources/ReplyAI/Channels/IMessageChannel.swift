@@ -36,6 +36,11 @@ struct IMessageChannel: ChannelService {
     /// mock that returns SQLITE_BUSY on the first call to verify retry logic.
     let dbOpener: @Sendable (String, Int32) -> (Int32, OpaquePointer?)
 
+    /// Fallback reader used when chat.db is inaccessible due to Full Disk
+    /// Access denial. Queries Messages.app via AppleScript (Automation permission
+    /// only — no FDA required). Injectable for test isolation.
+    let appleScriptReader: AppleScriptMessageReader
+
     init(
         nameFor: @escaping @Sendable (String) -> String? = { _ in nil },
         dbPathOverride: String? = nil,
@@ -43,11 +48,13 @@ struct IMessageChannel: ChannelService {
             var db: OpaquePointer?
             let rc = sqlite3_open_v2(path, &db, flags, nil)
             return (rc, db)
-        }
+        },
+        appleScriptReader: AppleScriptMessageReader = AppleScriptMessageReader()
     ) {
         self.nameFor = nameFor
         self.dbPathOverride = dbPathOverride
         self.dbOpener = dbOpener
+        self.appleScriptReader = appleScriptReader
     }
 
     // SQLite wants transient text to live long enough for bind+step; use
@@ -55,7 +62,14 @@ struct IMessageChannel: ChannelService {
     private static let SQLITE_TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
 
     func recentThreads(limit: Int) async throws -> [MessageThread] {
-        let db = try openReadOnly()
+        let db: OpaquePointer
+        do {
+            db = try openReadOnly()
+        } catch ChannelError.permissionDenied(_) {
+            // chat.db is blocked by Full Disk Access denial — fall back to
+            // AppleScript automation which only needs the Automation permission.
+            return try appleScriptReader.recentChats()
+        }
         defer { sqlite3_close(db) }
 
         let sql = """
@@ -362,7 +376,12 @@ struct IMessageChannel: ChannelService {
             if rc == SQLITE_NOTADB {
                 throw ChannelError.databaseCorrupted
             }
-            if msg.lowercased().contains("authorization") || msg.lowercased().contains("unable to open") {
+            // SQLITE_AUTH (23) is the canonical authorization-denied code.
+            // String matching covers the real-world macOS FDA denial path where
+            // sqlite3_open_v2 returns SQLITE_CANTOPEN with "unable to open database file".
+            if rc == SQLITE_AUTH
+                || msg.lowercased().contains("authorization")
+                || msg.lowercased().contains("unable to open") {
                 throw ChannelError.permissionDenied(hint: """
                     ReplyAI can't read your Messages database yet. Grant Full Disk Access in \
                     System Settings → Privacy & Security → Full Disk Access, then try again.
