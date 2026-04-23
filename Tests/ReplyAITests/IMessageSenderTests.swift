@@ -57,6 +57,30 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;-;handle")
     }
 
+    // MARK: - REP-158: chatGUID format for 1:1 vs group thread
+
+    func testChatGUIDForOneToOneThreadSynthesized() {
+        // 1:1 thread with no pre-populated chatGUID → synthesized from channel + id
+        let t = MessageThread(
+            id: "alice@example.com", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "", time: "",
+            chatGUID: nil
+        )
+        XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;-;alice@example.com",
+                       "1:1 thread with nil chatGUID must synthesize iMessage;-;<id>")
+    }
+
+    func testChatGUIDForGroupThreadUsedVerbatim() {
+        // Group thread with a pre-populated chatGUID → returned unchanged
+        let t = MessageThread(
+            id: "chat123", channel: .imessage, name: "Launch Crew",
+            avatar: "L", preview: "", time: "",
+            chatGUID: "iMessage;+;chat123"
+        )
+        XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;+;chat123",
+                       "group thread with non-nil chatGUID must return it verbatim without synthesis")
+    }
+
     // MARK: - AppleScript literal escaping (REP-006)
 
     // Count unescaped double-quotes: a `"` not immediately preceded by `\`.

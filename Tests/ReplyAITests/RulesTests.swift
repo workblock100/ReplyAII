@@ -1731,3 +1731,151 @@ final class ExportAllPredicateKindsTests: XCTestCase {
         }
     }
 }
+
+// MARK: - REP-148: RuleEvaluator.apply() output contract tests
+
+final class RuleEvaluatorApplyTests: XCTestCase {
+
+    private func makeCtx(sender: String = "Alice", text: String = "hello") -> RuleContext {
+        RuleContext(
+            senderName: sender, senderHandle: sender,
+            channel: .imessage, lastMessageText: text,
+            isUnread: true, senderKnown: true, chatIdentifier: sender
+        )
+    }
+
+    func testApplyReturnsEmptyWhenNoRulesMatch() {
+        let rule = SmartRule(name: "no-match", when: .senderIs("Bob"), then: .archive)
+        let ctx = makeCtx(sender: "Alice")
+        let result = RuleEvaluator.apply(rules: [rule], to: ctx)
+        XCTAssertTrue(result.isEmpty, "no matching rules must produce an empty apply result")
+    }
+
+    func testApplyIncludesAllMatchingRuleIDsAndActions() {
+        let r1 = SmartRule(name: "r1", when: .senderIs("Alice"), then: .archive)
+        let r2 = SmartRule(name: "r2", when: .isUnread,         then: .pin)
+        let ctx = makeCtx(sender: "Alice")
+        let result = RuleEvaluator.apply(rules: [r1, r2], to: ctx)
+        XCTAssertEqual(result.count, 2, "both matching rules must appear in apply output")
+        XCTAssertTrue(result.contains { $0.ruleID == r1.id && $0.action == .archive },
+                      "r1 archive action must be present")
+        XCTAssertTrue(result.contains { $0.ruleID == r2.id && $0.action == .pin },
+                      "r2 pin action must be present")
+    }
+
+    func testApplyOrderFollowsPriorityDescending() {
+        let low  = SmartRule(name: "low",  when: .isUnread, then: .archive,           priority: 0)
+        let high = SmartRule(name: "high", when: .isUnread, then: .setDefaultTone(.warm), priority: 5)
+        let ctx = makeCtx()
+        let result = RuleEvaluator.apply(rules: [low, high], to: ctx)
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result.first?.ruleID, high.id, "higher-priority rule must appear first")
+    }
+
+    func testApplySkipsInactiveRules() {
+        let active   = SmartRule(name: "active",   when: .isUnread, then: .archive,   active: true)
+        let inactive = SmartRule(name: "inactive", when: .isUnread, then: .pin,       active: false)
+        let ctx = makeCtx()
+        let result = RuleEvaluator.apply(rules: [active, inactive], to: ctx)
+        XCTAssertEqual(result.count, 1, "inactive rule must be excluded from apply output")
+        XCTAssertEqual(result.first?.ruleID, active.id)
+    }
+}
+
+// MARK: - REP-154: RulesStore.update() with unknown UUID is a no-op
+
+final class RulesStoreUpdateNoOpTests: XCTestCase {
+
+    @MainActor
+    func testUpdateWithUnknownUUIDIsNoOp() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("UpdateNoOp-\(UUID().uuidString)/rules.json")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let store = RulesStore(fileURL: url)
+        let countBefore = store.rules.count
+
+        let phantom = SmartRule(name: "phantom", when: .isGroupChat, then: .silentlyIgnore)
+        store.update(phantom)
+
+        XCTAssertEqual(store.rules.count, countBefore,
+                       "rule count must not change after update with unknown UUID")
+        XCTAssertNil(store.rules.first(where: { $0.id == phantom.id }),
+                     "phantom rule must not appear in store after failed update")
+
+        let reopened = RulesStore(fileURL: url)
+        XCTAssertEqual(reopened.rules.count, countBefore,
+                       "persisted rule count must not change after update with unknown UUID")
+    }
+}
+
+// MARK: - REP-157: SmartRule empty and([]) evaluates to vacuous true
+
+final class RulePredicateEmptyAndTests: XCTestCase {
+
+    private func makeCtx() -> RuleContext {
+        RuleContext(
+            senderName: "Tester", senderHandle: "Tester",
+            channel: .imessage, lastMessageText: "test",
+            isUnread: false, senderKnown: true, chatIdentifier: "Tester"
+        )
+    }
+
+    func testAndEmptyArrayEvaluatesToVacuousTrue() {
+        let ctx = makeCtx()
+        XCTAssertTrue(RuleEvaluator.matches(.and([]), in: ctx),
+                      "and([]) must evaluate to vacuous true — no sub-predicates can fail")
+    }
+
+    func testAndEmptyVsOrEmptyAreOpposites() {
+        // or([]) is already pinned false; and([]) must be the dual (true).
+        let ctx = makeCtx()
+        let andResult = RuleEvaluator.matches(.and([]), in: ctx)
+        let orResult  = RuleEvaluator.matches(.or([]),  in: ctx)
+        XCTAssertTrue(andResult,  "and([]) must be true")
+        XCTAssertFalse(orResult,  "or([]) must be false")
+        XCTAssertNotEqual(andResult, orResult, "empty and/or must be duals")
+    }
+}
+
+// MARK: - REP-161: SmartRule textMatchesRegex with anchored patterns
+
+final class RulePredicateAnchoredRegexTests: XCTestCase {
+
+    private func ctx(_ text: String) -> RuleContext {
+        RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: text,
+            isUnread: false, senderKnown: true, chatIdentifier: "Alice"
+        )
+    }
+
+    func testStartAnchorMatchesAtBeginning() {
+        XCTAssertTrue(RuleEvaluator.matches(.textMatchesRegex("^Hello"), in: ctx("Hello world")),
+                      "^Hello must match text starting with Hello")
+    }
+
+    func testStartAnchorDoesNotMatchMidString() {
+        XCTAssertFalse(RuleEvaluator.matches(.textMatchesRegex("^Hello"), in: ctx("Say Hello")),
+                       "^Hello must not match when Hello appears mid-string")
+    }
+
+    func testEndAnchorMatchesAtEnd() {
+        XCTAssertTrue(RuleEvaluator.matches(.textMatchesRegex("world$"), in: ctx("Hello world")),
+                      "world$ must match text ending with world")
+    }
+
+    func testEndAnchorDoesNotMatchMidString() {
+        XCTAssertFalse(RuleEvaluator.matches(.textMatchesRegex("world$"), in: ctx("world is great")),
+                       "world$ must not match when world appears at start, not end")
+    }
+
+    func testBothAnchorsRequireFullMatch() {
+        XCTAssertTrue(RuleEvaluator.matches(.textMatchesRegex("^exact$"), in: ctx("exact")),
+                      "^exact$ must match the exact string")
+        XCTAssertFalse(RuleEvaluator.matches(.textMatchesRegex("^exact$"), in: ctx("not exact")),
+                       "^exact$ must not match a longer string")
+    }
+}

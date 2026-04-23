@@ -333,3 +333,93 @@ final class StatsTests: XCTestCase {
                        "zero rule matches must leave rulesMatchedCount at 0")
     }
 }
+
+// MARK: - REP-149: acceptanceRate nil-vs-zero distinction
+
+final class StatsAcceptanceRateTests: XCTestCase {
+    private var tempDir: URL!
+
+    override func setUpWithError() throws {
+        tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("StatsAcceptanceRateTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    private func tempURL(_ name: String = "stats.json") -> URL {
+        tempDir.appendingPathComponent(name)
+    }
+
+    func testAcceptanceRateNilForUntrackedTone() {
+        let stats = Stats(fileURL: tempURL())
+        XCTAssertNil(stats.acceptanceRate(for: .warm),
+                     "fresh Stats with no recorded drafts must return nil — no data yet")
+    }
+
+    func testAcceptanceRateZeroForNoSends() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated(tone: .direct)
+        stats.recordDraftGenerated(tone: .direct)
+        let rate = stats.acceptanceRate(for: .direct)
+        XCTAssertNotNil(rate, "rate must be non-nil when drafts were generated")
+        XCTAssertEqual(rate!, 0.0, accuracy: 1e-9,
+                       "0 sends out of 2 generated must yield 0.0, not nil")
+    }
+
+    func testAcceptanceRateRatioWhenBothPresent() {
+        let stats = Stats(fileURL: tempURL())
+        for _ in 0..<5 { stats.recordDraftGenerated(tone: .playful) }
+        stats.recordDraftSent(tone: .playful)
+        stats.recordDraftSent(tone: .playful)
+        let rate = stats.acceptanceRate(for: .playful)
+        XCTAssertNotNil(rate)
+        XCTAssertEqual(rate!, 0.4, accuracy: 1e-9,
+                       "2 sent / 5 generated must yield 0.4 acceptance rate")
+    }
+
+    func testAcceptanceRateToneIsolation() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated(tone: .warm)
+        XCTAssertNotNil(stats.acceptanceRate(for: .warm), "warm should have data")
+        XCTAssertNil(stats.acceptanceRate(for: .direct), "direct must remain nil with no data")
+    }
+}
+
+// MARK: - REP-160: Stats concurrent mixed-counter stress test
+
+final class StatsConcurrentMixedCounterTests: XCTestCase {
+    private var tempDir: URL!
+
+    override func setUpWithError() throws {
+        tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("StatsConcurrentMixedTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    func testConcurrentMixedCountersNoCrashAndAllUpdatesReflected() {
+        let stats = Stats(fileURL: tempDir.appendingPathComponent("mixed-concurrent.json"))
+        let iterations = 100
+
+        DispatchQueue.concurrentPerform(iterations: iterations) { _ in
+            stats.recordRuleFired(action: "archive")
+            stats.recordMessagesIndexed(1)
+            stats.incrementIndexed(channel: .imessage, count: 1)
+        }
+
+        let snap = stats.snapshot()
+        XCTAssertGreaterThanOrEqual(snap.rulesFiredByAction["archive"] ?? 0, iterations,
+                                    "all \(iterations) rule-fired increments must be reflected")
+        XCTAssertGreaterThanOrEqual(snap.messagesIndexed, iterations,
+                                    "all recordMessagesIndexed calls must be reflected")
+        let imessageCount = snap.messagesIndexedByChannel[Channel.imessage.rawValue] ?? 0
+        XCTAssertGreaterThanOrEqual(imessageCount, iterations,
+                                    "all incrementIndexed calls must be reflected in per-channel count")
+    }
+}

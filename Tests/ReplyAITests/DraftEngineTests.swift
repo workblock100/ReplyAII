@@ -156,6 +156,41 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertTrue(stateB.isDone, "threadB must remain done")
     }
 
+    // MARK: - REP-153: invalidate() on uncached thread is idempotent
+
+    func testInvalidateOnUncachedThreadIsNoOp() {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        XCTAssertEqual(engine.cacheSize, 0, "engine must start with empty cache")
+
+        // Call invalidate on a thread that was never primed — must not crash
+        engine.invalidate(threadID: "never-primed-thread")
+
+        XCTAssertEqual(engine.cacheSize, 0, "cache size must remain 0 after invalidating uncached thread")
+        // Verify state for the uncached thread is still idle (default)
+        let state = engine.state(threadID: "never-primed-thread", tone: .warm)
+        XCTAssertEqual(state.text, "", "uncached thread state must be idle with empty text")
+        XCTAssertFalse(state.isStreaming, "uncached thread must not show as streaming")
+        XCTAssertFalse(state.isDone, "uncached thread must not show as done")
+    }
+
+    func testInvalidateOnUncachedThreadDoesNotAffectCachedThread() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .warm).isDone
+        }
+        let textBefore = engine.state(threadID: thread.id, tone: .warm).text
+        XCTAssertFalse(textBefore.isEmpty, "primed thread must have content")
+
+        // Invalidating a different (uncached) thread must leave the primed thread intact
+        engine.invalidate(threadID: "other-thread-id")
+
+        let stateAfter = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertEqual(stateAfter.text, textBefore, "cached thread draft must be unaffected by invalidating an uncached thread")
+    }
+
     // MARK: - Cache eviction (REP-034)
 
     func testEvictClearsSingleThread() async throws {

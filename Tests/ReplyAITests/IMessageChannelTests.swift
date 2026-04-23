@@ -60,6 +60,28 @@ final class IMessageChannelTests: XCTestCase {
         XCTAssertLessThan(date, Date(), "reference epoch is in the past")
     }
 
+    // MARK: - REP-151: exact magnitude boundary tests
+
+    func testAppleDateAtExactThresholdTreatedAsSeconds() {
+        // The threshold is > 1_000_000_000_000 (1e12). A value exactly equal
+        // to 1e12 is NOT greater than the threshold, so it must be treated as
+        // seconds, not nanoseconds.
+        let boundary: Int64 = 1_000_000_000_000
+        let secs = IMessageChannel.secondsSinceReferenceDate(appleDate: boundary)
+        XCTAssertEqual(secs, Double(boundary), accuracy: 0.001,
+                       "value exactly at 1e12 must be returned as-is (seconds path)")
+    }
+
+    func testAppleDateOneAboveThresholdTreatedAsNanoseconds() {
+        // 1e12 + 1 is strictly greater than the threshold → nanoseconds path.
+        let raw: Int64 = 1_000_000_000_001
+        let secs = IMessageChannel.secondsSinceReferenceDate(appleDate: raw)
+        XCTAssertEqual(secs, Double(raw) / 1_000_000_000, accuracy: 1e-6,
+                       "value one above 1e12 must be divided by 1e9 (nanoseconds path)")
+        XCTAssertLessThan(secs, Double(raw),
+                          "nanosecond-path result must be much smaller than the raw value")
+    }
+
     // MARK: - Query shape
 
     func testThreadsSortedByRecency() async throws {

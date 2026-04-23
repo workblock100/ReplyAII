@@ -841,3 +841,73 @@ final class SearchIndexTests: XCTestCase {
                       "post-race search must return 0 or 1 results, never a corrupt state")
     }
 }
+
+// MARK: - REP-150: Result struct fields populated correctly from upsert data
+
+final class SearchIndexResultFieldsTests: XCTestCase {
+
+    func testResultThreadNameMatchesUpsertedThread() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "t-fields", channel: .imessage, name: "Zara",
+                                   avatar: "Z", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "xylophonetest150a", time: "10:00")
+        await index.upsert(thread: thread, messages: [msg])
+
+        let hits = await index.search("xylophonetest150a")
+        XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
+        XCTAssertEqual(hits.first?.threadName, "Zara",
+                       "Result.threadName must match the thread name supplied to upsert")
+    }
+
+    func testResultThreadIDMatchesUpsertedThread() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "rep150idcheck", channel: .imessage, name: "Kai",
+                                   avatar: "K", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "xylophonetest150b", time: "11:00")
+        await index.upsert(thread: thread, messages: [msg])
+
+        let hits = await index.search("xylophonetest150b")
+        XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
+        XCTAssertEqual(hits.first?.threadID, "rep150idcheck",
+                       "Result.threadID must match the thread id supplied to upsert")
+    }
+
+    func testResultTextContainsMessageBody() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "t-text", channel: .imessage, name: "Sam",
+                                   avatar: "S", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "xylophonetest150c verbatim", time: "12:00")
+        await index.upsert(thread: thread, messages: [msg])
+
+        let hits = await index.search("xylophonetest150c")
+        XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
+        XCTAssertTrue(hits.first?.text.contains("xylophonetest150c") == true,
+                      "Result.text must contain the message body supplied to upsert")
+    }
+
+    func testResultSenderNamePopulatedForIncomingMessage() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "t-sender", channel: .imessage, name: "Jordan",
+                                   avatar: "J", preview: "", time: "", unread: 0)
+        let msg = Message(from: .them, text: "xylophonetest150d", time: "13:00")
+        await index.upsert(thread: thread, messages: [msg])
+
+        let hits = await index.search("xylophonetest150d")
+        XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
+        XCTAssertEqual(hits.first?.senderName, "Jordan",
+                       "Result.senderName must equal thread.name for incoming messages")
+    }
+
+    func testResultSenderNameIsMeForOutgoingMessage() async {
+        let index = SearchIndex(databaseURL: nil)
+        let thread = MessageThread(id: "t-outgoing", channel: .imessage, name: "Pat",
+                                   avatar: "P", preview: "", time: "", unread: 0)
+        let msg = Message(from: .me, text: "xylophonetest150e", time: "14:00")
+        await index.upsert(thread: thread, messages: [msg])
+
+        let hits = await index.search("xylophonetest150e")
+        XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
+        XCTAssertEqual(hits.first?.senderName, "me",
+                       "Result.senderName must be 'me' for outgoing messages")
+    }
+}

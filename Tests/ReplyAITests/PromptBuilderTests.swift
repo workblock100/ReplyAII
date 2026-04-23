@@ -206,4 +206,34 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("unique single message text"),
                       "single-message prompt must contain the message body")
     }
+
+    // MARK: - REP-152: all-messages-from-same-sender produces valid prompt
+
+    func testAllMessagesFromMeProducesNonEmptyPrompt() {
+        let thread = makeThread(name: "AllMe")
+        let history = (0..<3).map { i in makeMessage("message \(i)", from: .me) }
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: history)
+        XCTAssertFalse(prompt.isEmpty,
+                       "all-.me history must produce a non-empty prompt without crashing")
+        XCTAssertTrue(prompt.contains("message 0") || prompt.contains("message 2"),
+                      "at least one message body must appear in all-.me prompt")
+    }
+
+    func testAllMessagesFromThemProducesNonEmptyPrompt() {
+        let thread = makeThread(name: "AllThem")
+        let history = (0..<3).map { i in makeMessage("their message \(i)", from: .them) }
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: history)
+        XCTAssertFalse(prompt.isEmpty,
+                       "all-.them history must produce a non-empty prompt without crashing")
+        XCTAssertTrue(prompt.contains("their message"),
+                      "at least one message body must appear in all-.them prompt")
+    }
+
+    func testAllMessagesFromMeContainsToneInstruction() {
+        let thread = makeThread(name: "ToneCheck")
+        let history = [makeMessage("I said something", from: .me)]
+        let prompt = PromptBuilder.build(thread: thread, tone: .playful, history: history)
+        XCTAssertTrue(prompt.contains(Tone.playful.rawValue.lowercased()),
+                      "all-.me prompt must still include the tone instruction")
+    }
 }
