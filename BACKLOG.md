@@ -62,8 +62,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-191507
 - files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned P0: app must list threads without FDA.** Implement `AppleScriptMessageReader` (from REP-229 spec, consolidated here) with `recentChats() -> [MessageThread]` using an injectable executor that runs `tell application "Messages" to get every chat`. Wire into `IMessageChannel.recentThreads()`: if `openReadOnly()` throws `ChannelError.authorizationDenied`, call `AppleScriptMessageReader.recentChats()` as the fallback. Returns `[MessageThread]` with `displayName`, `chatGUID`, placeholder `previewText`, and `channel: .iMessage`. No FDA required — uses macOS Automation permission. Tests: mock executor returning chat list → threads populated; mock FDA failure → fallback executor called; executor throws → propagates error; successful fallback results sorted by displayName.
 - success_criteria:
