@@ -6,6 +6,8 @@ struct ReplyAIApp: App {
 
     init() {
         UserDefaults.registerReplyAIDefaults()
+        let count = UserDefaults.standard.integer(forKey: PreferenceKey.launchCount)
+        UserDefaults.standard.set(count + 1, forKey: PreferenceKey.launchCount)
     }
 
     var body: some Scene {

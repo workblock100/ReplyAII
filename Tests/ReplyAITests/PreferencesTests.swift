@@ -186,4 +186,25 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(defaults.bool(forKey: PreferenceKey.crashReports), originalDefault,
                        "known key must return registered default after wipe + re-register")
     }
+
+    // MARK: - pref.app.launchCount (REP-115)
+
+    func testLaunchCountStartsAtZero() {
+        // Fresh isolated suite — launchCount must be 0 (unset integer returns 0).
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.launchCount), 0,
+                       "launchCount must default to 0 on a clean install")
+    }
+
+    func testLaunchCountIncrementsOnWrite() {
+        defaults.set(1, forKey: PreferenceKey.launchCount)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.launchCount), 1,
+                       "written launchCount must read back correctly")
+    }
+
+    func testLaunchCountSurvivesWipe() {
+        defaults.set(5, forKey: PreferenceKey.launchCount)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertEqual(defaults.integer(forKey: PreferenceKey.launchCount), 5,
+                       "launchCount must survive factory wipe — it is exempt from reset")
+    }
 }

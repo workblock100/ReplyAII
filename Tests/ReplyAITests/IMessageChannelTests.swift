@@ -129,6 +129,21 @@ final class IMessageChannelTests: XCTestCase {
                        "preview must fall back to the real message when the latest row is both-NULL")
     }
 
+    func testNullTextAndAttributedBodyYieldsNonNilBody() async throws {
+        // REP-117: messages(forThreadID:limit:) must return a non-nil body for rows where
+        // both text and attributedBody are NULL (deleted, unsent, or unsupported extension).
+        try buildSchema()
+        try insertChat(rowid: 1, identifier: "nullmsg", display: "", service: "iMessage", guid: "iMessage;-;nullmsg")
+        try insertMessageBothNull(rowid: 10, chatRowID: 1, fromMe: false, date: 700_000_000)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "nullmsg", limit: 10)
+        XCTAssertEqual(messages.count, 1, "both-NULL row must produce a message, not be silently dropped")
+        let body = try XCTUnwrap(messages.first?.text)
+        XCTAssertFalse(body.isEmpty, "body must be non-empty — expected [deleted] placeholder")
+        XCTAssertEqual(body, "[deleted]", "both-NULL row must use the [deleted] placeholder")
+    }
+
     func testGroupChatGUIDProjection() async throws {
         try buildSchema()
         try insertChat(

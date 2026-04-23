@@ -1186,12 +1186,15 @@ final class RulesTests: XCTestCase {
             try? FileManager.default.removeItem(at: targetURL)
             try? FileManager.default.removeItem(at: malformedURL)
         }
-        // Write a JSON array with one valid rule and one corrupt object.
+        // Write a versioned envelope with one valid rule and one corrupt object.
         let validRule = SmartRule(name: "valid", when: .senderIs("Carol"), then: .archive)
         let validData = try JSONEncoder().encode(validRule)
         let validObj = try JSONSerialization.jsonObject(with: validData)
-        let array: [Any] = [validObj, ["bad_key": "no kind field"]]
-        let mixedData = try JSONSerialization.data(withJSONObject: array)
+        let envelope: [String: Any] = [
+            "version": 1,
+            "rules": [validObj, ["bad_key": "no kind field"]]
+        ]
+        let mixedData = try JSONSerialization.data(withJSONObject: envelope)
         try mixedData.write(to: malformedURL)
 
         let target = RulesStore(fileURL: targetURL)
@@ -1201,6 +1204,67 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(target.rules.count, before + 1,
                        "only the valid rule must be appended; malformed entry skipped")
         XCTAssertTrue(target.rules.contains(where: { $0.id == validRule.id }))
+    }
+
+    // MARK: - RulesStore: export version field (REP-110)
+
+    @MainActor
+    func testExportIncludesVersionField() throws {
+        let storeURL = tmpURL("ver-store")
+        let exportURL = tmpURL("ver-out")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        try store.add(SmartRule(name: "v1 rule", when: .senderIs("Dave"), then: .pin))
+        try store.export(to: exportURL)
+
+        let data = try Data(contentsOf: exportURL)
+        let obj = try XCTUnwrap(try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                "export must produce a JSON object, not a bare array")
+        XCTAssertEqual(obj["version"] as? Int, 1, "export must include version: 1")
+        XCTAssertNotNil(obj["rules"], "export must include a rules key")
+    }
+
+    @MainActor
+    func testImportRoundTripWithVersionField() throws {
+        let storeURL = tmpURL("ver-rt-store")
+        let exportURL = tmpURL("ver-rt-out")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let rule = SmartRule(name: "roundtrip", when: .senderIs("Eve"), then: .archive)
+        try store.add(rule)
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: tmpURL("ver-rt-reimport"))
+        try importStore.import(from: exportURL)
+        XCTAssertTrue(importStore.rules.contains(where: { $0.id == rule.id }),
+                      "versioned export must round-trip correctly via import")
+    }
+
+    @MainActor
+    func testImportUnknownVersionThrows() throws {
+        let targetURL = tmpURL("ver-unknown-target")
+        let badURL = tmpURL("ver-unknown-src")
+        defer {
+            try? FileManager.default.removeItem(at: targetURL)
+            try? FileManager.default.removeItem(at: badURL)
+        }
+        let envelope: [String: Any] = ["version": 99, "rules": []]
+        let data = try JSONSerialization.data(withJSONObject: envelope)
+        try data.write(to: badURL)
+
+        let target = RulesStore(fileURL: targetURL)
+        do {
+            try target.import(from: badURL)
+            XCTFail("import of unknown version must throw")
+        } catch RulesStoreError.unsupportedExportVersion(let v) {
+            XCTAssertEqual(v, 99, "thrown error must carry the actual version number")
+        }
     }
 
     // MARK: - `not` predicate (REP-100)

@@ -1,6 +1,18 @@
 import Foundation
 import Observation
 
+/// Versioned wrapper written by `RulesStore.export(to:)` so future rule
+/// schema changes can be detected on import rather than silently corrupting.
+struct RulesExport: Codable {
+    let version: Int
+    let rules: [SmartRule]
+}
+
+enum RulesStoreError: Error {
+    /// The export file declares a schema version the running build doesn't know how to read.
+    case unsupportedExportVersion(Int)
+}
+
 /// On-disk rules store. JSON file at
 /// `~/Library/Application Support/ReplyAI/rules.json`. Hand-editable.
 ///
@@ -90,26 +102,40 @@ final class RulesStore {
 
     // MARK: - Export / Import
 
-    /// Encodes all current rules to JSON and writes them atomically to `url`.
-    /// Intended for user-initiated backups and cross-device transfer.
+    /// Current export schema version written by `export(to:)`.
+    static let exportVersion = 1
+
+    /// Encodes all current rules to JSON inside a `RulesExport` envelope and
+    /// writes the result atomically to `url`. The version field lets future
+    /// builds detect schema mismatches on import.
     func export(to url: URL) throws {
-        let data = try Self.encoder().encode(rules)
+        let envelope = RulesExport(version: Self.exportVersion, rules: rules)
+        let data = try Self.encoder().encode(envelope)
         try data.write(to: url, options: .atomic)
     }
 
-    /// Merges rules from a JSON file at `url` into the store.
+    /// Merges rules from a versioned JSON file at `url` into the store.
     /// - Rules with a UUID already in the store are updated in place.
     /// - Rules with a new UUID are appended.
     /// - Nothing is deleted from the store.
-    /// - Malformed entries are silently skipped (same policy as REP-024).
-    /// - Throws only if `url` is unreadable or the file is not valid JSON.
+    /// - Malformed rule entries are silently skipped (same policy as REP-024).
+    /// - Throws `RulesStoreError.unsupportedExportVersion` for unknown versions.
+    /// - Throws `CocoaError(.fileReadCorruptFile)` if the JSON structure is invalid.
     func `import`(from url: URL) throws {
         let data = try Data(contentsOf: url)
-        guard let rawArray = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+        guard let rawObj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let version = rawObj["version"] as? Int else {
             throw CocoaError(.fileReadCorruptFile)
         }
+        guard version == Self.exportVersion else {
+            throw RulesStoreError.unsupportedExportVersion(version)
+        }
+        guard let rawRules = rawObj["rules"] as? [Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        // Element-by-element decode preserves the malformed-skip policy from REP-024.
         let dec = Self.decoder()
-        for element in rawArray {
+        for element in rawRules {
             guard let elementData = try? JSONSerialization.data(withJSONObject: element),
                   let incoming = try? dec.decode(SmartRule.self, from: elementData) else {
                 continue

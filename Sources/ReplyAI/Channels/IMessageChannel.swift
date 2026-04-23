@@ -247,16 +247,18 @@ struct IMessageChannel: ChannelService {
         while sqlite3_step(stmt) == SQLITE_ROW {
             let rowID   = sqlite3_column_int64(stmt, 0)
             let textCol = Self.text(stmt, 1)
-            let decoded: String? = {
+            let body: String = {
                 if let t = textCol, !t.isEmpty { return t }
                 if sqlite3_column_type(stmt, 2) == SQLITE_BLOB,
                    let raw = sqlite3_column_blob(stmt, 2) {
                     let len = Int(sqlite3_column_bytes(stmt, 2))
-                    return AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len))
+                    if let rich = AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len)),
+                       !rich.isEmpty { return rich }
                 }
-                return nil
+                // Both text and attributedBody are NULL — deleted message, unsent
+                // draft, or unsupported iMessage extension (Handoff, Digital Touch).
+                return "[deleted]"
             }()
-            guard let body = decoded, !body.isEmpty else { continue }
 
             let fromMe      = sqlite3_column_int(stmt, 3) != 0
             let date        = sqlite3_column_int64(stmt, 4)
@@ -311,16 +313,16 @@ struct IMessageChannel: ChannelService {
         while sqlite3_step(stmt) == SQLITE_ROW {
             let rowID   = sqlite3_column_int64(stmt, 0)
             let textCol = Self.text(stmt, 1)
-            let decoded: String? = {
+            let body: String = {
                 if let t = textCol, !t.isEmpty { return t }
                 if sqlite3_column_type(stmt, 2) == SQLITE_BLOB,
                    let raw = sqlite3_column_blob(stmt, 2) {
                     let len = Int(sqlite3_column_bytes(stmt, 2))
-                    return AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len))
+                    if let rich = AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len)),
+                       !rich.isEmpty { return rich }
                 }
-                return nil
+                return "[deleted]"
             }()
-            guard let body = decoded, !body.isEmpty else { continue }
 
             let date = sqlite3_column_int64(stmt, 3)
             out.append(Message(
