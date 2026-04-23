@@ -110,6 +110,7 @@ Tests/ReplyAITests/                365 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `79fc909` DraftStore: persist completed draft edits to disk between launches (REP-066, worker-2026-04-22-202900)
 - `e33be0d` ContactsResolver cache flush, RulesExport version, launchCount pref, NULL-msg placeholder (REP-108, REP-110, REP-115, REP-117, worker-2026-04-22-201500)
 - `7181beb` hasUnread predicate, archive→dismiss eviction, search cap 50, upsert ghost-term tests (REP-116, REP-118, REP-119, REP-125, worker-2026-04-22-195000)
 - `f5ae41d` concurrent-add stress test, PromptBuilder large-payload, date-boundary, stats-invariant, pinned-sort fix + test (REP-120, REP-121, REP-122, REP-123, REP-124, worker-2026-04-22-191500)

@@ -167,20 +167,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Reviewer no longer flags this as an open human-review item
 - test_plan: Human updates the constants; worker updates the 3 test assertions in `IMessageChannelPreviewTests.swift` that match against the sentinel strings.
 
-### REP-066 — DraftEngine: persist draft edits to disk between launches
-- priority: P2
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-22-202900
-- files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift` (new), `Sources/ReplyAI/Services/DraftEngine.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/DraftStoreTests.swift` (new)
-- scope: When the user edits a draft but doesn't send, the edited text is discarded on app quit — the next launch regenerates from the LLM. Add a `DraftStore` that writes the draft text to `~/Library/Application Support/ReplyAI/drafts/<threadID>.md` whenever `DraftEngine` transitions to `.ready(text:)`. On next launch, `InboxViewModel.selectThread` pre-populates the composer from `DraftStore` before kicking off the LLM prime. `DraftStore` prunes files older than 7 days on startup. Tests: write a draft, re-init DraftStore, read back the same text; verify 7-day prune removes stale files; verify unknown threadID returns nil.
-- success_criteria:
-  - `DraftStore.write(threadID:text:)` and `DraftStore.read(threadID:) -> String?` implemented
-  - DraftEngine calls write on `.ready` transition
-  - InboxViewModel reads store before prime
-  - `testDraftPersistsAcrossReinit`, `testStaleDraftsArePruned`, `testUnknownThreadReturnsNil`
-- test_plan: `Tests/ReplyAITests/DraftStoreTests.swift` using temp-directory URL injection.
 
 ### REP-067 — SearchIndex: FTS5 snippet extraction for search results
 - priority: P2
@@ -442,10 +428,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: in_progress
 - claimed_by: worker-2026-04-22-210000
 - files_to_touch: `AGENTS.md`
-- scope: AGENTS.md currently has the test count in two places: the repo-layout code fence header (`Tests/ReplyAITests/ NNN tests`) and the Testing expectations section ("NNN XCTest cases, all green."). The reviewer flagged this duplication in the 2026-04-22 22:10 review. Remove the hard-coded number from the Testing expectations section and replace with the live-count instruction: `Run \`grep -r "func test" Tests/ | wc -l\` for the current count`. Update the repo-layout header to the current count (349). Docs-only change — no Swift source touches.
+- scope: AGENTS.md has the test count in two hard-coded places: the repo-layout code fence header (`Tests/ReplyAITests/ NNN tests`, currently 365) and the "XCTest cases, all green." line in the architecture section (currently 365). The reviewer flagged this duplication in the 2026-04-22 22:10 review. Additionally, the Testing expectations section still references "(340 as of worker-2026-04-22-191500; kept current in the repo layout header above)" — this parenthetical is stale and should be removed. Task: (1) remove the `"NNN XCTest cases, all green."` sentence entirely or replace with a link to the header count; (2) strip the stale "(340 as of …)" parenthetical from the Testing expectations bullet; (3) leave the repo-layout header at 365 (already correct). Docs-only change — no Swift source touches.
 - success_criteria:
-  - Repo-layout header updated to current count (349)
-  - Testing expectations section uses grep instruction instead of hard-coded number
+  - Repo-layout header confirms current count (365) — do NOT change this line
+  - Duplicate "NNN XCTest cases, all green." sentence removed or merged with header reference
+  - Stale "(340 as of worker-2026-04-22-191500; …)" parenthetical removed from Testing expectations
   - No source files touched
   - Reviewer no longer flags dual test-count lines
 - test_plan: N/A (docs-only).
@@ -465,11 +452,166 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing PromptBuilderTests remain green (short instructions unaffected)
 - test_plan: 2 new tests in `PromptBuilderTests.swift` using a 3000-char fabricated tone instruction.
 
+### REP-138 — DraftEngine: dismiss() deletes corresponding DraftStore entry
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/DraftEngine.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
+- scope: `DraftStore` (REP-066) persists draft text to disk when the engine reaches `.ready`. If the user explicitly dismisses a draft (⌘. → `DraftEngine.dismiss(threadID:tone:)`), the stored file should be deleted so the stale draft does not reappear on the next launch. Add `store?.delete(threadID:)` in the dismiss path (transition to `.idle`). Tests: after prime→ready→dismiss, `DraftStore.read(threadID:)` returns nil; dismiss on a thread with no stored draft is a no-op (no crash); re-prime after dismiss generates a fresh draft and writes a new store entry.
+- success_criteria:
+  - `DraftEngine.dismiss()` calls `store?.delete(threadID:)` on transition to `.idle`
+  - `testDismissClearsStoredDraft` — `DraftStore.read` returns nil after dismiss
+  - `testDismissWithNoStoredDraftIsNoop` — no crash when dismissing a thread with no stored draft
+  - `testReprimingAfterDismissWritesNewEntry` — fresh draft written after dismiss+prime cycle
+  - Existing DraftEngineTests remain green
+- test_plan: 3 new tests in `DraftEngineTests.swift` using `DraftStore` with injected temp directory.
+
+### REP-139 — Stats: flushNow() for clean-shutdown counter persistence
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/StatsTests.swift`
+- scope: The debounced write added by REP-105 may not fire if the app terminates before the 2s debounce window expires, causing the last session's increments to be lost. Add `Stats.flushNow()` that cancels the pending debounce task and writes current counters to disk synchronously. Wire it to `ReplyAIApp.applicationWillTerminate` (or equivalent scene lifecycle). Tests using injectable URL: increment counter + call `flushNow()` + re-init Stats from same URL → counter reflects all increments; calling `flushNow()` twice is idempotent; `flushNow()` on nil-URL Stats is a no-op.
+- success_criteria:
+  - `Stats.flushNow()` cancels debounce and writes synchronously
+  - Called from app lifecycle shutdown hook
+  - `testFlushNowPersistsBeforeDebounce` — re-init reads correct value after flush
+  - `testFlushNowIsIdempotent` — two consecutive flushes don't corrupt state
+  - `testFlushNowWithNilURLIsNoop` — no crash when URL is nil
+  - Existing StatsTests remain green
+- test_plan: 3 new tests in `StatsTests.swift` using temp-file URL injection; `tearDownWithError` cleans up.
+
+### REP-140 — SearchIndex: concurrent upsert+delete interleaving does not corrupt FTS5 state
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
+- scope: REP-057 added a concurrent search+upsert stress test. A concurrent upsert+delete race for the same `threadID` is not covered. Using `DispatchQueue.concurrentPerform(iterations:)`, fire 10 upserts and 10 deletes of the same thread ID concurrently. After completion, assert: no crash; the index is in a consistent state (thread findable or not — no partial row corruption); `search(query:)` returns `[threadID]` or `[]`, never throws. No production code changes expected (SQLite WAL serialization should handle this).
+- success_criteria:
+  - `testConcurrentUpsertDeleteNoCrash` — 10 upserts + 10 deletes of same thread complete without crash
+  - `testConcurrentUpsertDeleteConsistentState` — post-race search returns array or empty, never throws
+  - No production code touched
+- test_plan: 2 new tests in `SearchIndexTests.swift`; use in-memory FTS5 (`SearchIndex(databaseURL: nil)`).
+
+### REP-141 — ContactsResolver: batchResolve result has one entry per input handle, including nil
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
+- scope: `batchResolve([String])` (REP-037) resolves handles via cache then store. Pin the mixed-case result contract: given handles `["alice@example.com", "bob@example.com", "charlie@example.com"]` where alice and charlie are resolvable and bob is not, the result dict must have exactly 3 keys — alice: non-nil, bob: nil, charlie: non-nil. Also verify that cached handles do NOT cause a second store lookup (store call count ≤ number of uncached handles). Catches any result-keyset bugs or extra store hits.
+- success_criteria:
+  - `testBatchResolveResultKeySetMatchesInputHandles` — result has one key per input handle
+  - `testBatchResolveUnresolvableHandleMapsToNil` — unresolvable handle present as nil, not absent
+  - `testBatchResolveCacheHitsDoNotInvokeStore` — cached handles bypass store lookup
+  - Existing ContactsResolverTests remain green
+- test_plan: 3 new tests in `ContactsResolverTests.swift` using mock `ContactsStoring` with call-count tracking.
+
+### REP-142 — InboxViewModel: watcher-driven sync updates existing thread previewText
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: When `ChatDBWatcher` fires, `syncFromIMessage` fetches fresh threads and merges them into `threads`. For a thread already in the inbox, if a new message arrived, its `previewText` and `lastMessageDate` should update in place. Add a test using a mutable mock channel: initially returns thread A with preview "hello"; after sync, mutate the channel to return thread A with "world" as preview; sync again. Assert `threads.first?.previewText == "world"` and thread count is unchanged. Guards the upsert/merge behavior.
+- success_criteria:
+  - `testSyncUpdatesExistingThreadPreviewText` — re-sync with new preview updates thread in place
+  - `testSyncPreservesUnchangedThreadCount` — count does not grow on re-sync of same thread IDs
+  - No production code changes expected
+- test_plan: 2 new tests in `InboxViewModelTests.swift`; extend the mock channel to support per-call result mutation.
+
+### REP-143 — RulesStore: `rules` backing array preserves insertion order independent of priority
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RulesStore.rules` is the insertion-order backing array. `RuleEvaluator.matching` sorts by priority at evaluation time and must not affect `rules` order. Pin this invariant: adding rule A (priority 0) then rule B (priority 5) results in `rules = [A, B]`, not `[B, A]`. The UI relies on `rules` for creation-order display. Tests: rules appended not inserted by priority; persist+reload preserves file order; `update()` changes fields without reordering.
+- success_criteria:
+  - `testRulesArrayPreservesInsertionOrder` — lower-priority rule added first stays at `rules[0]`
+  - `testLoadFromJSONPreservesFileOrder` — persist+reload order matches original
+  - `testUpdateDoesNotReorderRules` — updating a rule's priority does not move it in the array
+  - Existing RulesTests remain green
+- test_plan: 3 new tests in `RulesTests.swift` using isolated `RulesStore` with injectable `UserDefaults`.
+
+### REP-144 — SmartRule: unknown RuleAction `kind` decoded gracefully without crash
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
+- scope: `RuleAction` uses a `kind` discriminator. If a future version introduces a new action and an older decoder encounters it, the app should not crash. REP-024 covers malformed-rule skipping at the `RulesStore` level; this task tests the Codable layer directly: decode JSON with `"kind": "unknown_future_action"`, assert a `DecodingError` is thrown (not a trap), and verify `RulesStore.load()` with such a JSON skips the offending rule and loads all remaining rules cleanly. Documents the forward-compatibility contract.
+- success_criteria:
+  - `testUnknownRuleActionKindThrowsDecodingError` — unknown kind throws `DecodingError`, not crash
+  - `testRulesStoreSkipsRuleWithUnknownAction` — load with unknown-action JSON skips that rule, loads rest
+  - Existing RulesTests remain green
+- test_plan: 2 new tests in `RulesTests.swift` using hand-crafted JSON fixtures.
+
+### REP-145 — PromptBuilder: empty message list produces non-empty valid prompt
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: `PromptBuilder.buildPrompt(messages:tone:)` is always called with at least one message in production, but a newly-created thread or a thread whose messages all failed to load could pass an empty array. Verify: empty messages + a tone → no crash, non-empty prompt string containing the tone instruction. Also pin: single-message input → prompt contains that message body. No production code changes expected.
+- success_criteria:
+  - `testEmptyMessagesProducesNonEmptyPrompt` — non-empty string returned, no crash
+  - `testEmptyMessagesPromptContainsToneInstruction` — returned prompt includes tone text
+  - `testSingleMessagePromptContainsMessageText` — single message body appears in output
+  - Existing PromptBuilderTests remain green
+- test_plan: 3 new tests in `PromptBuilderTests.swift` using fabricated tone and empty/single-element message arrays.
+
+### REP-146 — IMessageChannel: per-thread message cap applied independently across threads
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
+- scope: `IMessageChannel.recentThreads` fetches thread headers, then fetches messages per thread with a per-thread cap. Verify the cap is per-thread, not global: fixture DB with thread A (100 messages), thread B (3 messages), thread C (50 messages), per-thread cap 20. Assert: thread A returns 20, thread B returns 3 (uncapped), thread C returns 20. Total is 43, not 60. Uses the in-memory SQLite fixture pattern.
+- success_criteria:
+  - `testPerThreadMessageCapAppliedIndependently` — each thread capped at limit; under-limit thread returns full count
+  - `testTotalMessageCountRespectsCappedSum` — sum equals min(count, cap) per thread, not a global cap
+  - No production code changes expected
+- test_plan: 2 new tests in `IMessageChannelTests.swift` using multi-thread in-memory SQLite fixture.
+
+### REP-147 — DraftStore: concurrent write+read for same threadID is race-free
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
+- scope: `DraftStore.write` and `read` operate on files in a shared directory. Concurrent calls from async `DraftEngine` operations could race. Using `DispatchQueue.concurrentPerform`, fire 10 concurrent writes of different text values and 10 concurrent reads for the same `threadID`. Assert: no crash; after all operations complete, `read(threadID:)` returns a valid non-empty String; the file is not corrupted. No production code changes expected if APFS `write(to:atomically:)` is used.
+- success_criteria:
+  - `testConcurrentWriteReadNoCrash` — 10 concurrent writes + 10 reads complete without crash
+  - `testConcurrentWriteResultIsValid` — post-race read returns a valid string, not nil or garbled
+  - No production code touched
+- test_plan: 2 new tests in `DraftStoreTests.swift`; injected temp directory; `tearDownWithError` cleans up.
+
 ---
 
 ## Done / archived
 
 *(Planner moves finished items here each day. Worker never modifies this section.)*
+
+### REP-066 — DraftEngine: persist draft edits to disk between launches
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: done
+- claimed_by: worker-2026-04-22-202900
 
 ### REP-115 — Preferences: `pref.app.launchCount` key + increment on startup
 - priority: P2
