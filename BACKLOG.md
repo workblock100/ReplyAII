@@ -349,8 +349,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RuleEvaluator.apply(rules:to:)` returns `[(ruleID: UUID, action: RuleAction)]` for all matching rules — it's the entry point used by `InboxViewModel` to execute rule side-effects. The `matching()` and `defaultTone()` functions have heavy test coverage, but `apply()` itself is untested. Add 4 test cases using isolated `RuleEvaluator` calls: no matching rules returns empty array; two matching rules return two pairs; pairs are ordered priority-descending; inactive rule excluded from apply output. No production code changes.
 - success_criteria:
@@ -365,8 +365,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.acceptanceRate(for tone:)` returns `nil` when no drafts have been generated for that tone (no data), `0.0` when drafts were generated but none accepted, and a real ratio when both generated and sent. This nil-vs-zero distinction is a product contract — nil means "no stats yet" vs 0% acceptance, and a UI should display these differently. Pin the three states: nil (fresh Stats, no casual drafts); 0.0 (1 casual generated, 0 sent); 0.5 (2 casual generated, 1 sent). No production code changes expected.
 - success_criteria:
@@ -380,8 +380,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: `SearchIndex.Result` contains `threadID`, `threadName`, `senderName?`, `text`, and `time`. No existing test verifies that each field is populated from the data supplied to `upsert(thread:messages:)` — tests only check `threadID` presence in results. Add tests: upsert a thread with a known name; search for it; assert `Result.threadName == thread.name`. Also pin `senderName` nil when the thread has no contact name. Multiple-thread search returns all matching threads without omissions.
 - success_criteria:
@@ -395,8 +395,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `IMessageChannel.secondsSinceReferenceDate(appleDate:)` autodetects nanoseconds vs seconds by magnitude: if the value exceeds 1_000_000_000_000_000 (1e15), it divides by 1e9; otherwise treats as seconds. Test the boundary: value exactly 1e15 → treated as nanoseconds (1 million seconds → year ~2032); value 999_999_999_999_999 (one below) → treated as seconds (~year 33,000 which is wrong but defines the contract); value 0 → year 2001; value 1 billion → year ~2032 as seconds. Documents the implicit contract so a future magnitude-threshold change is caught.
 - success_criteria:
@@ -410,8 +410,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: `PromptBuilder.buildPrompt(messages:tone:)` formats each message with a sender role prefix. Edge case: if every message has `from: .me` (user replying to themselves) or every message has `from: .them`, the prompt should still be valid and non-empty — no crash, no assertion failure. Tests: all-`.me` messages → non-empty string; all-`.them` messages → non-empty string. A secondary test pins that the output changes between all-`.me` and all-`.them` inputs (i.e. the author label is actually different in the formatted output).
 - success_criteria:
@@ -425,8 +425,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.invalidate(threadID:)` is called when the watcher fires new messages for a thread — it evicts any in-flight draft so the next prime generates fresh context. If `invalidate` is called for a thread that was never primed (no cache entry), it should be a no-op: no crash, state remains `.idle`, and other cached threads are unaffected. Tests: `invalidate` on a thread with no prior prime → no crash, state `.idle`; `invalidate` on thread A does not affect thread B's `.ready` state. No production code changes expected.
 - success_criteria:
@@ -439,8 +439,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore.update(rule:)` patches an existing rule by UUID. Calling it with a UUID not in the store should be a no-op: no crash, no change to rule count, no spurious write to disk. Existing test `testRemoveNonExistentUUIDIsNoOp` covers the `remove` path; the `update` path is unprotected by an equivalent. Tests: store contains 2 rules; call `update()` with a freshly-generated UUID → count stays 2, no crash; call `update()` on an existing rule UUID → rule's fields changed, count stays 2. Validates both the happy path and the guard.
 - success_criteria:
@@ -481,8 +481,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulePredicate.or([])` (empty disjunction) already has a test pinning it to `false` (`testOrEmptyArrayReturnsFalse`). The dual case, `RulePredicate.and([])` (empty conjunction), should evaluate to `true` by vacuous truth — no sub-predicates, none can fail. This is mathematically correct and guards against a future refactor that accidentally returns `false` for both empty composites. Also test `not(and([]))` which should be `false`. No production code changes expected.
 - success_criteria:
@@ -496,8 +496,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `IMessageSender.chatGUID(for thread:)` returns `thread.chatGUID` verbatim for group chats (where chatGUID is already set by the SQL query), and synthesizes `"iMessage;-;<chatIdentifier>"` for 1:1 threads. This GUID selection is load-bearing — a wrong GUID routes a message to the wrong recipient in AppleScript. Add tests using mock `MessageThread` values: 1:1 thread with `chatGUID: nil`, `id: "alice@example.com"` → `"iMessage;-;alice@example.com"`; group thread with `chatGUID: "iMessage;+;chat123"` → returns GUID verbatim; thread with group-style `chatGUID` → not synthesized. No production code changes.
 - success_criteria:
@@ -524,8 +524,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: REP-097 added a concurrent `recordDraftGenerated` stress test. A mixed-counter concurrent test is missing: `recordRuleFired`, `recordMessagesIndexed`, and `incrementIndexed` called simultaneously from multiple threads. Using `DispatchQueue.concurrentPerform(iterations: 100)`, fire a mix of all three in each iteration. Assert: no crash; `snapshot().rulesMatchedCount` is ≥ 100 (every iteration increments it once via `recordRuleFired + incrementRulesMatched`); total indexed ≥ 100. Guards the `Locked<T>` coverage across all three counter paths simultaneously.
 - success_criteria:
@@ -538,8 +538,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-020741
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RuleEvaluator` uses `NSRegularExpression` for `textMatchesRegex`. Anchored patterns rely on the evaluator calling `.range(of:options:range:)` (which respects `^` and `$`) rather than `.contains`, which would ignore anchors. Tests: pattern `"^Hello"` matches "Hello world" and does not match "Say Hello"; pattern `"world$"` matches "Hello world" and does not match "world is big". Guards against a future refactor that replaces NSRegularExpression with a `.contains`-style shortcut and silently breaks user rules.
 - success_criteria:
