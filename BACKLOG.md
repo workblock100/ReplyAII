@@ -335,7 +335,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift`, `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: Add `listStoredDraftIDs() -> [String]` to `DraftStore`. It reads the drafts directory and returns the stem of every `.md` file (each stem is a thread ID). Useful for future "your drafts" UI and detecting orphaned entries whose threads have been deleted. Tests: empty store returns `[]`; after saving 3 drafts returns all 3 IDs; after deleting one draft, that ID is absent from the list; listing is order-independent.
@@ -493,8 +493,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: `DraftStore` writes atomically via a temp-file rename, but a concurrent read during a write could theoretically return an empty or partial file. Test with `DispatchQueue.concurrentPerform(iterations: 20)` performing alternating writes and reads on the same thread ID using an injected temp directory. Assert: no empty string returned from `read()`; no crash; final `read()` after all concurrency returns the last-written draft text. No production code changes expected (atomic write should be sufficient).
 - success_criteria:
@@ -507,8 +507,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-069 added a 100-rule hard cap via `RulesStore.addValidating(_:)`. Pin the exact boundary: adding rule #100 succeeds (no throw); adding rule #101 throws `tooManyRules`. Also: the store count must remain at 100 after the failed add (no partial state). No production code changes expected.
 - success_criteria:
@@ -522,7 +522,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added a 4096-char message length guard in `IMessageSender.send()`. Pin the boundary: a 4096-char ASCII message sends (no throw); a 4097-char message throws `SenderError.messageTooLong`. Also: a 4096-char message composed of multi-byte Unicode chars (emoji) uses Swift `String.count` (char count), not byte count — verify a 10-emoji string that is >4096 bytes but <4096 chars passes. Uses the injectable `executeHook` seam — no real AppleScript.
@@ -537,7 +537,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: `pref.inbox.threadLimit` is used as a SQL LIMIT clause. If stored as 0, negative, or an unreasonably large value, the query produces no results or hangs on very large result sets. Add a computed getter that clamps the raw stored value to `max(1, min(200, rawValue))`. The setter writes the raw value as-is (clamping happens at read time). Tests: raw value -1 → getter returns 1; raw value 0 → getter returns 1; raw value 201 → getter returns 200; raw value 50 → getter returns 50; raw value 200 → getter returns 200.
@@ -554,7 +554,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.dismiss(threadID:tone:)` transitions a `.ready` draft to `.idle` and clears the `DraftStore` entry. If called on a `threadID` that was never primed (no cache entry at all), the call should silently return — no crash, no state change, no `DraftStore` delete attempted on a non-existent file. Tests: fresh engine, call `dismiss("never-primed-id", tone: .casual)`; assert no crash; assert state for that thread is `.idle`. Also test dismiss after prime → ready succeeds as usual.
@@ -568,7 +568,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 BM25 ranking is deterministic for a fixed index state. Pin the contract: index 3 threads with different relevance levels for the query "hello"; search once → get order [A, B, C]; search again without any writes → get identical [A, B, C]. A third search after a no-op `upsert` of an unrelated thread also returns [A, B, C]. Unstable ordering would cause visible jump in ⌘K palette results.
@@ -582,8 +582,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: `PromptBuilder.systemPrompt(tone:)` is called for each `Tone` case. Pin the distinctness contract: iterate all `Tone` cases via `CaseIterable`, collect the system strings, assert every string is non-empty, assert all strings are pairwise distinct (no two tones share identical instruction text). Guards against a future refactor that accidentally maps multiple tones to the same prompt.
 - success_criteria:
@@ -596,7 +596,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `recentThreads(limit:)` joins `chat` and `message` tables. A chat with zero associated messages (draft group, invite pending) should not appear in the result. Test with in-memory SQLite fixture: one thread with 3 messages, one thread with 0 messages. Assert: only the thread with messages appears in the returned list. Also assert: the returned thread's `messageCount` equals 3 (not 0).
@@ -610,8 +610,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: Forward-compatibility guard: when `RulePredicate` decodes a JSON dict with `"kind": "unknownFutureFeature"`, the decode should either return nil or throw a `DecodingError.dataCorrupted` — never an unhandled crash. Build a test that JSON-decodes a `SmartRule` array containing one rule with an unknown predicate kind and one with a valid kind. Assert: the valid rule decodes correctly; decoding the unknown kind does not crash (may throw or be skipped depending on the implementation). Simulates a user downgrading from a newer app version that added a new predicate.
 - success_criteria:
@@ -624,8 +624,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: Prime thread X with `.casual` → wait for `.ready`. Call `regenerate(threadID: X, tone: .formal)`. Assert: the engine no longer has a valid `.casual` cache entry for thread X (state returns to `.idle` or begins `.priming` for `.formal`); a second wait yields `.ready` with the `.formal` tone. Guards against tone-switch displaying a stale `.casual` draft while the new `.formal` prime runs in the background.
 - success_criteria:
@@ -638,8 +638,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: In-memory fixture with exactly 5 threads. `recentThreads(limit: 1)` → 1 thread; `recentThreads(limit: 3)` → 3 threads; `recentThreads(limit: 10)` → 5 threads (all available). Documents that `limit` is applied strictly (SQL LIMIT) and the query doesn't overshoot or error when fewer rows exist than the requested limit.
 - success_criteria:
@@ -724,7 +724,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `AGENTS.md`
 - scope: Reviewer-2026-04-23-1012 flagged `05e7035` as a non-existent commit SHA in the "What's done" log — identified as pre-existing from the 2026-04-22-174500 worker run. The real SHA is `4035c5a` (covers REP-098/099/101/103/104/109/114). Planner has already corrected this in AGENTS.md during the 2026-04-23 run6 refresh; this task is a verification commit — worker must run `git cat-file -e 4035c5a` to confirm validity, verify the AGENTS.md entry now reads `4035c5a`, and commit a one-line confirmation with the validation result in the commit body.
