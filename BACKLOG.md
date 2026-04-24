@@ -1366,8 +1366,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-163229
+- blocker: code complete on wip/2026-04-24-163229-un-notification-parser (+42 LOC source, +96 LOC tests, 7 tests); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/UNNotificationContentParser.swift` (new), `Tests/ReplyAITests/UNNotificationContentParserTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source, no FDA).** Extract notification payload parsing from `NotificationCoordinator` (REP-235) into a dedicated testable type. `UNNotificationContentParser.parse(_ content: UNNotificationContent) -> ParsedMessageNotification?` where `ParsedMessageNotification` has `senderHandle: String`, `preview: String`, and optional `chatGUID: String?`. Tries `content.userInfo["CKSenderID"]` first, then `content.userInfo["sender"]`, then `content.title` as sender handle. Uses `content.body` as preview. Returns nil if neither sender key is present. Tests: full payload → all fields; missing CKSenderID falls back to sender key; both missing → nil; body-only notification (no userInfo keys) → nil; chatGUID present in userInfo → populated; chatGUID absent → nil.
 - success_criteria:
