@@ -40,6 +40,10 @@ enum IMessageSender {
     /// Defaults to 10 s in production; inject a shorter value in tests.
     nonisolated(unsafe) static var sendTimeout: TimeInterval = 10
 
+    /// Delay between a -1708 failure and the retry attempt.
+    /// Defaults to 0.5 s in production; set to 0.0 in tests to avoid slow paths.
+    nonisolated(unsafe) static var retryDelay: TimeInterval = 0.5
+
     /// Test-only hook: when non-nil, replaces the real NSAppleScript execution.
     /// Receives the compiled AppleScript source string; runs synchronously on a
     /// background thread; may throw a SendError to simulate script failures.
@@ -140,7 +144,7 @@ enum IMessageSender {
                 // -1708 (errAEEventNotHandled) is transient — retry once after
                 // a short wait. All other errors propagate immediately.
                 if case .scriptFailure(let msg) = err, msg.contains("AppleScript error -1708") {
-                    Thread.sleep(forTimeInterval: 0.5)
+                    Thread.sleep(forTimeInterval: Self.retryDelay)
                     do {
                         try executor(source)
                     } catch {

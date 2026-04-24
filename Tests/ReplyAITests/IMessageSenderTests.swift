@@ -316,12 +316,15 @@ final class IMessageSenderTests: XCTestCase {
 
     func testRetriableErrorSucceedsOnSecondAttempt() {
         let prevTimeout = IMessageSender.sendTimeout
-        let prevHook = IMessageSender.executeHook
+        let prevHook    = IMessageSender.executeHook
+        let prevDelay   = IMessageSender.retryDelay
         defer {
             IMessageSender.sendTimeout = prevTimeout
             IMessageSender.executeHook = prevHook
+            IMessageSender.retryDelay  = prevDelay
         }
         IMessageSender.sendTimeout = 3.0
+        IMessageSender.retryDelay  = 0   // no sleep in tests
         var callCount = 0
         // First call throws -1708; second call succeeds.
         IMessageSender.executeHook = { _ in
@@ -417,12 +420,15 @@ final class IMessageSenderTests: XCTestCase {
         // When every attempt throws -1708, the sender must eventually give up and
         // throw an error. The hook is called at most maxRetry+1 = 2 times.
         let prevTimeout = IMessageSender.sendTimeout
-        let prevHook = IMessageSender.executeHook
+        let prevHook    = IMessageSender.executeHook
+        let prevDelay   = IMessageSender.retryDelay
         defer {
             IMessageSender.sendTimeout = prevTimeout
             IMessageSender.executeHook = prevHook
+            IMessageSender.retryDelay  = prevDelay
         }
         IMessageSender.sendTimeout = 3.0
+        IMessageSender.retryDelay  = 0   // no sleep in tests
         var callCount = 0
         IMessageSender.executeHook = { _ in
             callCount += 1
@@ -443,12 +449,15 @@ final class IMessageSenderTests: XCTestCase {
     func testRetrySucceedsOnSecondAttempt() {
         // One -1708 failure then success: send must succeed and hook is called exactly twice.
         let prevTimeout = IMessageSender.sendTimeout
-        let prevHook = IMessageSender.executeHook
+        let prevHook    = IMessageSender.executeHook
+        let prevDelay   = IMessageSender.retryDelay
         defer {
             IMessageSender.sendTimeout = prevTimeout
             IMessageSender.executeHook = prevHook
+            IMessageSender.retryDelay  = prevDelay
         }
         IMessageSender.sendTimeout = 3.0
+        IMessageSender.retryDelay  = 0   // no sleep in tests
         var callCount = 0
         IMessageSender.executeHook = { _ in
             callCount += 1
@@ -464,6 +473,40 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertNoThrow(try IMessageSender.send("retry success", to: thread),
                          "single -1708 followed by success must not throw")
         XCTAssertEqual(callCount, 2, "hook must be called exactly twice: initial + one retry")
+    }
+
+    // MARK: - REP-269: retryDelay injectable
+
+    func testRetryDelayZeroCompletesInstantly() {
+        // With retryDelay=0, a -1708 retry cycle must complete well under 100ms.
+        let prevTimeout = IMessageSender.sendTimeout
+        let prevHook    = IMessageSender.executeHook
+        let prevDelay   = IMessageSender.retryDelay
+        defer {
+            IMessageSender.sendTimeout = prevTimeout
+            IMessageSender.executeHook = prevHook
+            IMessageSender.retryDelay  = prevDelay
+        }
+        IMessageSender.sendTimeout = 3.0
+        IMessageSender.retryDelay  = 0
+        var callCount = 0
+        IMessageSender.executeHook = { _ in
+            callCount += 1
+            if callCount == 1 {
+                throw IMessageSender.SendError.scriptFailure("AppleScript error -1708: Event not handled")
+            }
+        }
+        let thread = MessageThread(
+            id: "+15550000001", channel: .imessage, name: "Speed",
+            avatar: "S", preview: "", time: "",
+            chatGUID: "iMessage;-;+15550000001"
+        )
+        let start = Date()
+        XCTAssertNoThrow(try IMessageSender.send("fast retry", to: thread))
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertLessThan(elapsed, 0.1,
+                          "retryDelay=0 must not add wall-clock time (got \(elapsed)s)")
+        XCTAssertEqual(callCount, 2, "hook must be called twice: initial attempt + one retry")
     }
 }
 
