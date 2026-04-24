@@ -81,8 +81,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-005143
 - files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
 - scope: **Pivot-aligned P0 (enables notification-based thread capture without FDA).** `NotificationCoordinator` already handles inline reply and passive capture (REP-028, REP-235). Without an explicit `requestAuthorization` call, macOS will never show the permission prompt and the UNNotification capture path (REP-235) silently produces zero events. Add `requestPermissionIfNeeded()` to `NotificationCoordinator`: calls `UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])` if the current status is `.notDetermined`. Injectable `UNUserNotificationCenter` protocol for test isolation (same pattern as REP-028). `InboxViewModel.init()` calls `notificationCoordinator.requestPermissionIfNeeded()` — fires early so macOS permission dialog appears at app launch. Tests: `requestAuthorization` called when status is `.notDetermined`; NOT called when status is `.authorized` (idempotent); NOT called when status is `.denied` (no re-prompt).
 - success_criteria:
