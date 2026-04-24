@@ -40,6 +40,12 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     /// Weak reference set by InboxScreen after InboxViewModel is alive.
     weak var inbox: InboxViewModel?
 
+    /// Fires when an incoming message notification arrives and the category is
+    /// not the inline-reply category. Wired by InboxScreen to
+    /// InboxViewModel.applyIncomingNotification so the VM can create/refresh a
+    /// lightweight thread entry when chat.db is unavailable.
+    var onIncomingMessage: ((String, String) -> Void)?
+
     private let center: NotificationCenterProtocol
 
     init(center: NotificationCenterProtocol = UNUserNotificationCenter.current()) {
@@ -86,6 +92,20 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         inbox?.pendingNotificationReply = (threadID: notificationID, text: text)
     }
 
+    // MARK: - Incoming message capture (extracted for direct testability)
+
+    /// Processes a foreground notification arrival. Skips inline-reply category
+    /// notifications (those are handled by handleReply). Fires onIncomingMessage
+    /// and forwards to inbox so it can refresh-or-create a thread entry.
+    ///
+    /// Exposed internally so tests can drive it without constructing a real
+    /// UNNotification (which has no public initializer).
+    func handleIncomingNotification(categoryID: String, senderHandle: String, preview: String) {
+        guard categoryID != Self.categoryID else { return }
+        onIncomingMessage?(senderHandle, preview)
+        inbox?.applyIncomingNotification(senderHandle: senderHandle, preview: preview)
+    }
+
     // MARK: - UNUserNotificationCenterDelegate
 
     nonisolated func userNotificationCenter(
@@ -100,5 +120,21 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
             self.handleReply(actionIdentifier: actionID, userText: userText, notificationID: notifID)
         }
         completionHandler()
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let content = notification.request.content
+        let categoryID = content.categoryIdentifier
+        // Prefer the explicit sender key iMessage/CKSenderID sets; fall back to title.
+        let senderHandle = content.userInfo["sender"] as? String ?? content.title
+        let preview = content.body
+        Task { @MainActor in
+            self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview)
+        }
+        completionHandler([.banner, .sound])
     }
 }

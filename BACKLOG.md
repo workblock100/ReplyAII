@@ -192,7 +192,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-24-015900
 - files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
 - scope: **Pivot-aligned (alt message source, no FDA required).** `NotificationCoordinator` already handles inline reply (REP-028, REP-072). Extend it to passively capture incoming message metadata from `UNNotificationCenter` delegate callbacks — specifically `userNotificationCenter(_:willPresent:)`. Parse `content.userInfo["sender"]` (handle/name) and `content.body` (preview text) from each arriving notification. Call a new `onIncomingMessage: ((senderHandle: String, preview: String) -> Void)?` callback on `NotificationCoordinator`. `InboxViewModel` subscribes to this callback and uses it to refresh-or-create a lightweight thread entry when FDA is unavailable (checking `Preferences.channels.iMessageEnabled && !chatDBAvailable`). No FDA required — uses `UNUserNotificationCenter` which needs only Notification permission. Tests: `onIncomingMessage` fires when a new notification arrives; `senderHandle` and `preview` fields populated correctly; callback is NOT fired for inline-reply notifications (category differs); no FDA entitlement needed (injectable `UNUserNotificationCenter`).
@@ -1371,6 +1371,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-235 — NotificationCoordinator: passive capture of incoming message metadata without FDA
+- status: done
+- claimed_by: worker-2026-04-24-015900
+- scope: Added `onIncomingMessage` callback to `NotificationCoordinator`, `userNotificationCenter(_:willPresent:)` delegate, and `handleIncomingNotification(categoryID:senderHandle:preview:)` extracted method. Added `applyIncomingNotification(senderHandle:preview:)` + `chatDBAvailable` to `InboxViewModel`. 3 new tests in `NotificationCoordinatorTests.swift`. 502→513 tests.
 
 ### REP-234 — SlackChannel: ChannelService conformance stub with Keychain token gate
 - status: done

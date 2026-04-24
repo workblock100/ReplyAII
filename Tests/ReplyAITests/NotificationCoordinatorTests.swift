@@ -192,4 +192,60 @@ final class NotificationCoordinatorTests: XCTestCase {
         // inbox is nil so pendingNotificationReply was never set — no crash is the assertion.
         XCTAssertNil(coordinator.inbox, "inbox must still be nil after handleReply with no inbox set")
     }
+
+    // MARK: - REP-235: incoming message capture
+
+    func testIncomingNotificationFiresCallback() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        var fired = false
+        coordinator.onIncomingMessage = { _, _ in fired = true }
+
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "+15551234567",
+            preview: "Hello there"
+        )
+
+        XCTAssertTrue(fired, "onIncomingMessage must fire for a non-reply-category notification")
+    }
+
+    func testIncomingNotificationParsesFields() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        var capturedHandle: String?
+        var capturedPreview: String?
+        coordinator.onIncomingMessage = { handle, preview in
+            capturedHandle = handle
+            capturedPreview = preview
+        }
+
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "+15559876543",
+            preview: "Hey, are you free tonight?"
+        )
+
+        XCTAssertEqual(capturedHandle, "+15559876543",
+            "onIncomingMessage must receive the senderHandle passed to handleIncomingNotification")
+        XCTAssertEqual(capturedPreview, "Hey, are you free tonight?",
+            "onIncomingMessage must receive the preview body passed to handleIncomingNotification")
+    }
+
+    func testReplyNotificationDoesNotFireIncomingCallback() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        var fired = false
+        coordinator.onIncomingMessage = { _, _ in fired = true }
+
+        // Simulate a notification whose category is the inline-reply category.
+        coordinator.handleIncomingNotification(
+            categoryID: NotificationCoordinator.categoryID,
+            senderHandle: "+15551234567",
+            preview: "Some text"
+        )
+
+        XCTAssertFalse(fired,
+            "onIncomingMessage must NOT fire when the categoryID matches the inline-reply category")
+    }
 }

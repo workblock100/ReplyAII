@@ -281,6 +281,47 @@ final class InboxViewModel {
         }
     }
 
+    // MARK: - Incoming notification capture (REP-235)
+
+    /// `true` when a successful chat.db sync is active. When false, the
+    /// UNNotification capture path is the only real-time source of thread data.
+    var chatDBAvailable: Bool {
+        if case .live = syncStatus { return true }
+        return false
+    }
+
+    /// Called by NotificationCoordinator when a foreground iMessage notification
+    /// arrives. Creates a new lightweight thread entry or refreshes the preview of
+    /// an existing one. Only acts when chat.db is unavailable — when live, the
+    /// FSEvents watcher already handles updates.
+    func applyIncomingNotification(senderHandle: String, preview: String) {
+        guard !chatDBAvailable else { return }
+        if let idx = threads.firstIndex(where: {
+            ($0.chatGUID?.hasSuffix(senderHandle) == true) || $0.name == senderHandle
+        }) {
+            let t = threads[idx]
+            threads[idx] = MessageThread(
+                id: t.id, channel: t.channel, name: t.name, avatar: t.avatar,
+                preview: preview, time: "now", unread: t.unread + 1,
+                pinned: t.pinned, contextCount: t.contextCount,
+                contextSummary: t.contextSummary, chatGUID: t.chatGUID,
+                hasAttachment: t.hasAttachment
+            )
+            let updated = threads.remove(at: idx)
+            threads.insert(updated, at: 0)
+        } else {
+            threads.insert(MessageThread(
+                id: UUID().uuidString,
+                channel: .imessage,
+                name: senderHandle,
+                avatar: senderHandle,
+                preview: preview,
+                time: "now",
+                unread: 1
+            ), at: 0)
+        }
+    }
+
     private func markPinned(_ threadID: String) {
         guard let i = threads.firstIndex(where: { $0.id == threadID }),
               !threads[i].pinned else { return }
