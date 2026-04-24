@@ -139,53 +139,100 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing InboxViewModelTests remain green
 - test_plan: 5 new tests in `InboxViewModelTests.swift`; use injected temp directory URL for cache; `StaticMockChannel` for sync results; no file system side-effects in existing tests.
 
-### REP-500 — extract MLX to separate SPM target so test compile doesn't link MLX (structural unblock for wip queue)
+### REP-501 — MLX extraction step 1: move Swift sources to new SPM target directories + rewrite Package.swift
 - priority: P0
-- effort: L
+- effort: M
 - ui_sensitive: false
 - status: open
 - claimed_by: null
+- depends_on: []
 - files_to_touch:
-  - `Package.swift` (restructure: 2 library targets + 1 executable + 1 test target)
-  - `Sources/ReplyAI/Services/MLXDraftService.swift` → `Sources/ReplyAIMLX/MLXDraftService.swift` (MOVE)
-  - `Sources/ReplyAI/App/ReplyAIApp.swift` → `Sources/ReplyAIApp/ReplyAIApp.swift` (MOVE — the @main file)
-  - All remaining files under `Sources/ReplyAI/**` → `Sources/ReplyAICore/**` (preserve subdirectory structure: Theme/, Components/, Channels/, Rules/, Services/, Inbox/, MenuBar/, Screens/, Resources/, Fixtures/, Models/)
-  - `Sources/ReplyAIApp/ReplyAIApp.swift` gains `import ReplyAICore` + `import ReplyAIMLX`
-  - `Sources/ReplyAIMLX/MLXDraftService.swift` gains `import ReplyAICore` (for `LLMService` + `DraftChunk`)
-  - `Tests/ReplyAITests/*.swift` imports change from `@testable import ReplyAI` → `@testable import ReplyAICore`
-  - `scripts/build.sh` path references change `Sources/ReplyAI/Resources/*` → `Sources/ReplyAICore/Resources/*`
-- scope: **Structural root-cause fix for the wip-queue drain bottleneck.** The MLX C++ dependency (via `mlx-swift-lm`) adds 45–90 min of cold compile time to `swift test`, far beyond the 13-min worker budget. As of 2026-04-24 this is the root cause of 20+ stranded wip branches awaiting manual human verification (see REP-254). REP-254 is addressing the symptom via caching and the new replyai-merger. This task addresses the **cause**: tests should never link MLX because they already stub `LLMService`.
-
-  **Target structure after this change:**
-  - `ReplyAICore` (library target): everything currently in `Sources/ReplyAI/` EXCEPT `Services/MLXDraftService.swift` and `App/ReplyAIApp.swift`. Depends on `swift-huggingface` + `swift-transformers` only. **No MLX dependency.**
-  - `ReplyAIMLX` (library target): only `Services/MLXDraftService.swift`. Depends on `ReplyAICore` + `mlx-swift-lm` (all three products: MLXLLM, MLXLMCommon, MLXHuggingFace).
-  - `ReplyAI` (executable target): only `App/ReplyAIApp.swift` + `@main`. Depends on `ReplyAICore` + `ReplyAIMLX`. Production app links everything.
-  - `ReplyAITests` (testTarget): depends **only** on `ReplyAICore`. Never imports MLX. Uses the existing `StubLLMService` for draft tests.
-
-  **Files under `Sources/ReplyAI/` move to `Sources/ReplyAICore/` with original relative paths preserved.** The only exceptions:
-  - `Sources/ReplyAI/Services/MLXDraftService.swift` → `Sources/ReplyAIMLX/MLXDraftService.swift`
-  - `Sources/ReplyAI/App/ReplyAIApp.swift` → `Sources/ReplyAIApp/ReplyAIApp.swift`
-
-  **`scripts/build.sh`:** update any `Sources/ReplyAI/Resources/*` refs to `Sources/ReplyAICore/Resources/*`. Verify the final `.app` bundle still lands the resources and entitlements identically.
-
-  **Import work:** within ReplyAICore, all files are in the same target so no import changes needed. `ReplyAIApp.swift` must `import ReplyAICore` + `import ReplyAIMLX`. `MLXDraftService.swift` must `import ReplyAICore` (for `LLMService` and `DraftChunk`). Test files change `@testable import ReplyAI` → `@testable import ReplyAICore`.
-
-  **Validation order:** (1) `swift package show-dependencies` after: confirm `ReplyAITests` does NOT resolve `mlx-swift-lm`. (2) `time swift test` from a fresh clone: target <10 min. (3) `./scripts/build.sh debug`: produces launchable `.app`. (4) Launch `.app`, enable MLX toggle in Settings, verify draft generation still works (MLX path intact in production).
-
-  **Expected time:** L-effort, probably 2–4 worker fires even on warm cache. First fire: do the file moves + Package.swift rewrite, probably timeout, push to wip. Second fire: fix build errors surfaced by the move. Third fire: fix test compile errors. Merge via merger once green. Reviewer highlights this in the 2026-04-24 16:10 UTC window as the "larger task... L, P1... would unblock everything downstream."
-
+  - `Package.swift` (rewrite: 4 targets — ReplyAICore library, ReplyAIMLX library, ReplyAI executable, ReplyAITests testTarget)
+  - `Sources/ReplyAICore/**` (new: all Sources/ReplyAI/** content except MLXDraftService.swift + ReplyAIApp.swift)
+  - `Sources/ReplyAIMLX/MLXDraftService.swift` (moved from Sources/ReplyAI/Services/MLXDraftService.swift)
+  - `Sources/ReplyAIApp/ReplyAIApp.swift` (moved from Sources/ReplyAI/App/ReplyAIApp.swift)
+  - `Sources/ReplyAI/` (deleted after move — all files relocated)
+- scope: Create three new SPM source directories (Sources/ReplyAICore/, Sources/ReplyAIMLX/, Sources/ReplyAIApp/), then use `git mv` to relocate every .swift file and the Resources/ subtree from Sources/ReplyAI/ to the appropriate new location (preserving subdirectory structure in ReplyAICore), then rewrite Package.swift to declare the four targets with correct dependencies. After this commit the directory layout is correct but the build will fail: MLXDraftService.swift and ReplyAIApp.swift are missing cross-module imports, and test files still reference `@testable import ReplyAI`. Do NOT attempt `swift test`. Push to `wip/REP-500-mlx-extraction` branch.
 - success_criteria:
-  - `swift test` runs in under 5 minutes on warm cache, under 10 minutes on cold cache (previously 45–90 min cold)
-  - All existing tests pass — zero regressions in test count (baseline 527+ as of 2026-04-24)
-  - `./scripts/build.sh debug` succeeds and produces a launchable `.app`
-  - The produced `.app` functions identically — MLX draft generation works in Settings toggle, AppleScript send works, all channels work
-  - `swift package show-dependencies --target ReplyAITests` does NOT include `mlx-swift-lm`
-- test_plan:
-  - Baseline: before any change, run `time swift test` on a cold clone, record build time
-  - After change: `time swift test` on cold clone (same machine), confirm <10 min
-  - `grep -rh "^\s*func test" Tests/ReplyAITests/ | wc -l` before/after — must be equal or higher
-  - Manual app launch with MLX enabled in Settings, verify `MLXDraftService.draft(...)` stream produces tokens
-  - `swift package show-dependencies --target ReplyAITests 2>&1 | grep mlx` must return empty
+  - `Sources/ReplyAI/` directory no longer exists (all .swift files relocated)
+  - `Sources/ReplyAICore/` mirrors the former Sources/ReplyAI/ hierarchy (Theme/, Components/, Channels/, Rules/, Services/, Inbox/, MenuBar/, Screens/, Fixtures/, Models/, Resources/) minus the two extracted files
+  - `Sources/ReplyAIMLX/MLXDraftService.swift` exists (file moved, content unchanged)
+  - `Sources/ReplyAIApp/ReplyAIApp.swift` exists (file moved, content unchanged)
+  - `Package.swift` declares exactly 4 targets: `ReplyAICore` (library, deps: swift-huggingface + swift-transformers only, no MLX), `ReplyAIMLX` (library, deps: ReplyAICore + MLXLLM + MLXLMCommon + MLXHuggingFace), `ReplyAI` (executable, deps: ReplyAICore + ReplyAIMLX), `ReplyAITests` (testTarget, deps: ReplyAICore only)
+  - `git diff --stat HEAD` shows all Sources/ReplyAI/* deleted and matching Sources/ReplyAICore/* + Sources/ReplyAIMLX/* + Sources/ReplyAIApp/* added
+  - Pushed to `wip/REP-500-mlx-extraction` (build expected broken — cross-module imports missing, fixed in REP-502)
+- test_plan: No `swift test` (build expected broken after this step). Worker validates file counts: `find Sources/ReplyAICore -name "*.swift" | wc -l` plus 2 (for the moved MLXDraftService + ReplyAIApp) equals the prior `find Sources/ReplyAI -name "*.swift" | wc -l`. Inspect Package.swift to confirm 4-target structure and that ReplyAITests has no MLX dependency.
+
+### REP-502 — MLX extraction step 2: add cross-module import statements to MLXDraftService.swift and ReplyAIApp.swift
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- depends_on: [REP-501]
+- files_to_touch:
+  - `Sources/ReplyAIMLX/MLXDraftService.swift`
+  - `Sources/ReplyAIApp/ReplyAIApp.swift`
+- scope: MLXDraftService.swift now lives in the ReplyAIMLX target and can no longer implicitly see ReplyAICore's types (LLMService, DraftChunk). Add `import ReplyAICore` at the top of MLXDraftService.swift. ReplyAIApp.swift now lives in the ReplyAI executable target and must import both sub-libraries; add `import ReplyAICore` and `import ReplyAIMLX` at the top of ReplyAIApp.swift. No other source files need changes — everything else is within ReplyAICore and shares its module namespace. Attempt `swift build --product ReplyAI` on warm cache; push to same `wip/REP-500-mlx-extraction` branch.
+- success_criteria:
+  - `Sources/ReplyAIMLX/MLXDraftService.swift` begins with `import ReplyAICore` (before any existing `import MLXLLM` etc.)
+  - `Sources/ReplyAIApp/ReplyAIApp.swift` contains both `import ReplyAICore` and `import ReplyAIMLX` lines
+  - No files in `Sources/ReplyAICore/` are modified (same-module; no imports needed)
+  - `swift build --target ReplyAICore` exits 0 on warm cache
+  - `swift build --target ReplyAIMLX` exits 0 on warm cache (if MLX cold-build constraint hit, skip — push to wip with note)
+  - Tests still expected to fail at this step (fixed in REP-503)
+- test_plan: Worker runs `swift build --target ReplyAICore` to confirm the core library compiles. Attempts `swift build --product ReplyAI` — compile errors, if any, should only be in test files (which reference the old module name). Push to `wip/REP-500-mlx-extraction` with a note on build status.
+
+### REP-503 — MLX extraction step 3: bulk-update test file imports @testable import ReplyAI → @testable import ReplyAICore
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- depends_on: [REP-502]
+- files_to_touch:
+  - `Tests/ReplyAITests/*.swift` (all test files — bulk import name replacement)
+- scope: Every XCTest file in Tests/ReplyAITests/ currently imports `@testable import ReplyAI`. The library target was renamed to ReplyAICore; all test imports must be updated. Use `sed -i '' 's/@testable import ReplyAI$/@testable import ReplyAICore/g'` across all test files (or equivalent). Also grep for bare `import ReplyAI` (non-testable) and update those. After this step the full build — including tests — should compile. Push to `wip/REP-500-mlx-extraction`; do NOT attempt `swift test` if MLX cold-build constraint applies (human runs tests in REP-505).
+- success_criteria:
+  - `grep -r "@testable import ReplyAI$" Tests/ReplyAITests/` returns no output (all replaced)
+  - `grep -r "import ReplyAI$" Tests/ReplyAITests/` returns no output (no bare imports remain)
+  - `grep -r "@testable import ReplyAICore" Tests/ReplyAITests/ | wc -l` equals the prior count of `@testable import ReplyAI` occurrences
+  - `swift build --target ReplyAITests` exits 0 on warm cache (if MLX cold-build constraint hit, push to wip with note)
+- test_plan: Worker runs `grep -rc "@testable import ReplyAI$" Tests/` — count before must match count replaced; count after must be 0. Attempts `swift build` (not `swift test`); all test-file compile errors should be resolved. If `swift build` exits 0, that is the green signal for this step.
+
+### REP-504 — MLX extraction step 4: fix scripts/build.sh resource paths + validate dep graph + push for human merge
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- depends_on: [REP-503]
+- files_to_touch:
+  - `scripts/build.sh`
+- scope: The bundler script references `Sources/ReplyAI/Resources/` for copying Info.plist, entitlements, Assets.xcassets, and Fonts into the .app bundle. Update every such reference to `Sources/ReplyAICore/Resources/`. Grep for any remaining `Sources/ReplyAI/` references in build.sh and fix them. Run `swift package show-dependencies` to confirm that the ReplyAITests dependency graph does NOT include mlx-swift-lm. Run `swift build` one final time to confirm the full chain is clean. Push to `wip/REP-500-mlx-extraction`. The subsequent REP-505 task handles human `swift test` + `./scripts/build.sh debug` verification before merge.
+- success_criteria:
+  - `grep "Sources/ReplyAI/" scripts/build.sh` returns empty (all paths updated to ReplyAICore)
+  - `swift package show-dependencies 2>&1 | grep "mlx-swift-lm"` returns empty when checking the ReplyAITests target (or overall graph no longer pulls in MLX through the test path)
+  - `swift build` exits 0 on warm cache
+  - `wip/REP-500-mlx-extraction` branch pushed with all 4 worker-authored commits ready for human review
+- test_plan: Worker runs `grep -r "Sources/ReplyAI/" scripts/build.sh` (must return empty after fix). Worker runs `swift package show-dependencies` and confirms mlx-swift-lm absent from ReplyAITests resolution. Worker runs `swift build` to confirm zero compile errors. Worker pushes branch.
+
+### REP-505 — human: verify wip/REP-500-mlx-extraction — run swift test + build.sh debug before merging to main
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- depends_on: [REP-504]
+- files_to_touch: wip/REP-500-mlx-extraction (review only; merge to main if green)
+- scope: Human verification gate for the full REP-500 MLX extraction chain (REP-501 through REP-504). Workers pushed code to wip/REP-500-mlx-extraction but could not run swift test due to the MLX cold-build budget constraint. Human should: (1) checkout the branch; (2) run `swift test` and confirm all 527+ tests pass with zero regressions; (3) run `./scripts/build.sh debug` and confirm the .app bundles and launches; (4) enable the MLX toggle in Settings and verify draft generation still produces tokens (MLX path intact); (5) confirm `swift package show-dependencies` excludes mlx-swift-lm from the ReplyAITests graph; (6) merge to main if all green and mark REP-500 through REP-505 done.
+- success_criteria:
+  - `swift test` exits 0 with ≥527 tests passing (no regressions in test count or correctness)
+  - `./scripts/build.sh debug` produces a launchable .app without errors
+  - MLX draft generation works end-to-end after enabling the toggle in Settings
+  - `swift package show-dependencies 2>&1 | grep mlx` returns empty (tests no longer link MLX)
+  - wip/REP-500-mlx-extraction merged into main; REP-500 through REP-505 marked done
+- test_plan: Human runs all verification steps listed in scope. Merges if and only if all criteria are met. Reports any failures back as new bug tasks if the branch does not pass.
 
 ---
 
@@ -3178,3 +3225,57 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-23-091326
+
+---
+
+## Decomposed (archive)
+
+### REP-500 — extract MLX to separate SPM target so test compile doesn't link MLX (structural unblock for wip queue)
+- priority: P0
+- effort: L
+- ui_sensitive: false
+- status: decomposed
+- claimed_by: architect-2026-04-24
+- decomposed_into: [REP-501, REP-502, REP-503, REP-504, REP-505]
+- files_to_touch:
+  - `Package.swift` (restructure: 2 library targets + 1 executable + 1 test target)
+  - `Sources/ReplyAI/Services/MLXDraftService.swift` → `Sources/ReplyAIMLX/MLXDraftService.swift` (MOVE)
+  - `Sources/ReplyAI/App/ReplyAIApp.swift` → `Sources/ReplyAIApp/ReplyAIApp.swift` (MOVE — the @main file)
+  - All remaining files under `Sources/ReplyAI/**` → `Sources/ReplyAICore/**` (preserve subdirectory structure: Theme/, Components/, Channels/, Rules/, Services/, Inbox/, MenuBar/, Screens/, Resources/, Fixtures/, Models/)
+  - `Sources/ReplyAIApp/ReplyAIApp.swift` gains `import ReplyAICore` + `import ReplyAIMLX`
+  - `Sources/ReplyAIMLX/MLXDraftService.swift` gains `import ReplyAICore` (for `LLMService` + `DraftChunk`)
+  - `Tests/ReplyAITests/*.swift` imports change from `@testable import ReplyAI` → `@testable import ReplyAICore`
+  - `scripts/build.sh` path references change `Sources/ReplyAI/Resources/*` → `Sources/ReplyAICore/Resources/*`
+- scope: **Structural root-cause fix for the wip-queue drain bottleneck.** The MLX C++ dependency (via `mlx-swift-lm`) adds 45–90 min of cold compile time to `swift test`, far beyond the 13-min worker budget. As of 2026-04-24 this is the root cause of 20+ stranded wip branches awaiting manual human verification (see REP-254). REP-254 is addressing the symptom via caching and the new replyai-merger. This task addresses the **cause**: tests should never link MLX because they already stub `LLMService`.
+
+  **Target structure after this change:**
+  - `ReplyAICore` (library target): everything currently in `Sources/ReplyAI/` EXCEPT `Services/MLXDraftService.swift` and `App/ReplyAIApp.swift`. Depends on `swift-huggingface` + `swift-transformers` only. **No MLX dependency.**
+  - `ReplyAIMLX` (library target): only `Services/MLXDraftService.swift`. Depends on `ReplyAICore` + `mlx-swift-lm` (all three products: MLXLLM, MLXLMCommon, MLXHuggingFace).
+  - `ReplyAI` (executable target): only `App/ReplyAIApp.swift` + `@main`. Depends on `ReplyAICore` + `ReplyAIMLX`. Production app links everything.
+  - `ReplyAITests` (testTarget): depends **only** on `ReplyAICore`. Never imports MLX. Uses the existing `StubLLMService` for draft tests.
+
+  **Files under `Sources/ReplyAI/` move to `Sources/ReplyAICore/` with original relative paths preserved.** The only exceptions:
+  - `Sources/ReplyAI/Services/MLXDraftService.swift` → `Sources/ReplyAIMLX/MLXDraftService.swift`
+  - `Sources/ReplyAI/App/ReplyAIApp.swift` → `Sources/ReplyAIApp/ReplyAIApp.swift`
+
+  **`scripts/build.sh`:** update any `Sources/ReplyAI/Resources/*` refs to `Sources/ReplyAICore/Resources/*`. Verify the final `.app` bundle still lands the resources and entitlements identically.
+
+  **Import work:** within ReplyAICore, all files are in the same target so no import changes needed. `ReplyAIApp.swift` must `import ReplyAICore` + `import ReplyAIMLX`. `MLXDraftService.swift` must `import ReplyAICore` (for `LLMService` and `DraftChunk`). Test files change `@testable import ReplyAI` → `@testable import ReplyAICore`.
+
+  **Validation order:** (1) `swift package show-dependencies` after: confirm `ReplyAITests` does NOT resolve `mlx-swift-lm`. (2) `time swift test` from a fresh clone: target <10 min. (3) `./scripts/build.sh debug`: produces launchable `.app`. (4) Launch `.app`, enable MLX toggle in Settings, verify draft generation still works (MLX path intact in production).
+
+  **Expected time:** L-effort, probably 2–4 worker fires even on warm cache. First fire: do the file moves + Package.swift rewrite, probably timeout, push to wip. Second fire: fix build errors surfaced by the move. Third fire: fix test compile errors. Merge via merger once green. Reviewer highlights this in the 2026-04-24 16:10 UTC window as the "larger task... L, P1... would unblock everything downstream."
+
+- success_criteria:
+  - `swift test` runs in under 5 minutes on warm cache, under 10 minutes on cold cache (previously 45–90 min cold)
+  - All existing tests pass — zero regressions in test count (baseline 527+ as of 2026-04-24)
+  - `./scripts/build.sh debug` succeeds and produces a launchable `.app`
+  - The produced `.app` functions identically — MLX draft generation works in Settings toggle, AppleScript send works, all channels work
+  - `swift package show-dependencies --target ReplyAITests` does NOT include `mlx-swift-lm`
+- test_plan:
+  - Baseline: before any change, run `time swift test` on a cold clone, record build time
+  - After change: `time swift test` on cold clone (same machine), confirm <10 min
+  - `grep -rh "^\s*func test" Tests/ReplyAITests/ | wc -l` before/after — must be equal or higher
+  - Manual app launch with MLX enabled in Settings, verify `MLXDraftService.draft(...)` stream produces tokens
+  - `swift package show-dependencies --target ReplyAITests 2>&1 | grep mlx` must return empty
+
