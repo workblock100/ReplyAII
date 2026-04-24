@@ -277,4 +277,41 @@ final class PromptBuilderTests: XCTestCase {
                 "'\(msg)' must appear after the system block in combined output")
         }
     }
+
+    // MARK: - REP-206: drop-oldest truncation direction
+
+    /// When total message chars exceed the budget, the oldest (earliest in the array)
+    /// messages are dropped first, preserving the most-recent context for the model.
+    func testOldestMessagesDroppedWhenOverBudget() {
+        // 5 messages of 500 chars each = 2500 chars total, exceeds 2000-char budget.
+        // The oldest (messages[0]) must be absent; the newest (messages[4]) must survive.
+        let oldest  = makeMessage(String(repeating: "O", count: 500))
+        let middle1 = makeMessage(String(repeating: "M", count: 500))
+        let middle2 = makeMessage(String(repeating: "N", count: 500))
+        let middle3 = makeMessage(String(repeating: "P", count: 500))
+        let newest  = makeMessage(String(repeating: "Q", count: 500))
+        let messages = [oldest, middle1, middle2, middle3, newest]
+
+        let result = PromptBuilder.truncate(messages, budget: PromptBuilder.historyCharBudget)
+
+        let texts = result.map(\.text)
+        XCTAssertFalse(texts.contains(oldest.text),  "oldest message must be dropped when over budget")
+        XCTAssertTrue(texts.contains(newest.text),   "newest message must survive truncation")
+    }
+
+    /// When total chars exactly equals the budget, all messages must be preserved —
+    /// no message should be dropped at the boundary.
+    func testAllMessagesPreservedAtExactBudget() {
+        // 4 messages of 500 chars each = exactly 2000-char budget.
+        let texts = (0..<4).map { i in String(repeating: String(UnicodeScalar(65 + i)!), count: 500) }
+        let messages = texts.map { makeMessage($0) }
+
+        let result = PromptBuilder.truncate(messages, budget: PromptBuilder.historyCharBudget)
+
+        XCTAssertEqual(result.count, 4, "all 4 messages must survive when total equals budget")
+        for text in texts {
+            XCTAssertTrue(result.map(\.text).contains(text),
+                          "message '\(text.prefix(5))…' must not be dropped at exact budget boundary")
+        }
+    }
 }

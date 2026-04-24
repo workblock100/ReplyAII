@@ -1099,4 +1099,69 @@ final class SearchIndexSnippetTests: XCTestCase {
         // Access .snippet — compile error here would mean the field was removed.
         let _ = hits.first?.snippet
     }
+
+    // MARK: - REP-205: delete() isolation
+
+    /// Deleting thread B must remove it from single-term searches that
+    /// previously matched B — other threads sharing that term are unaffected.
+    func testDeleteRemovesThreadFromSingleTermSearch() async {
+        let index = SearchIndex()
+        let threadA = MessageThread(id: "rep205-a", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "", time: "", unread: 0)
+        let threadB = MessageThread(id: "rep205-b", channel: .slack,   name: "Bob",
+                                    avatar: "B", preview: "", time: "", unread: 0)
+        let threadC = MessageThread(id: "rep205-c", channel: .imessage, name: "Carol",
+                                    avatar: "C", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: threadA, messages: [Message(from: .them, text: "hello world", time: "t")])
+        await index.upsert(thread: threadB, messages: [Message(from: .them, text: "hello swift", time: "t")])
+        await index.upsert(thread: threadC, messages: [Message(from: .them, text: "goodbye world", time: "t")])
+
+        await index.delete(threadID: "rep205-b")
+
+        let swiftHits = await index.search("swift")
+        XCTAssertTrue(swiftHits.isEmpty, "'swift' should return empty after deleting thread B")
+    }
+
+    /// After deleting B, other threads that matched the same term must still appear.
+    func testDeleteDoesNotAffectOtherMatchingThreads() async {
+        let index = SearchIndex()
+        let threadA = MessageThread(id: "rep205-d", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "", time: "", unread: 0)
+        let threadB = MessageThread(id: "rep205-e", channel: .slack,   name: "Bob",
+                                    avatar: "B", preview: "", time: "", unread: 0)
+        let threadC = MessageThread(id: "rep205-f", channel: .imessage, name: "Carol",
+                                    avatar: "C", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: threadA, messages: [Message(from: .them, text: "hello world", time: "t")])
+        await index.upsert(thread: threadB, messages: [Message(from: .them, text: "hello swift", time: "t")])
+        await index.upsert(thread: threadC, messages: [Message(from: .them, text: "goodbye world", time: "t")])
+
+        await index.delete(threadID: "rep205-e")
+
+        let helloHits = await index.search("hello")
+        XCTAssertEqual(helloHits.count, 1, "'hello' should still return thread A after deleting B")
+        XCTAssertEqual(helloHits.first?.threadID, "rep205-d")
+    }
+
+    /// Deleting B must not affect threads that share no terms with B.
+    func testDeleteDoesNotAffectUnrelatedThread() async {
+        let index = SearchIndex()
+        let threadA = MessageThread(id: "rep205-g", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "", time: "", unread: 0)
+        let threadB = MessageThread(id: "rep205-h", channel: .slack,   name: "Bob",
+                                    avatar: "B", preview: "", time: "", unread: 0)
+        let threadC = MessageThread(id: "rep205-i", channel: .imessage, name: "Carol",
+                                    avatar: "C", preview: "", time: "", unread: 0)
+
+        await index.upsert(thread: threadA, messages: [Message(from: .them, text: "hello world", time: "t")])
+        await index.upsert(thread: threadB, messages: [Message(from: .them, text: "hello swift", time: "t")])
+        await index.upsert(thread: threadC, messages: [Message(from: .them, text: "goodbye world", time: "t")])
+
+        await index.delete(threadID: "rep205-h")
+
+        let goodbyeHits = await index.search("goodbye")
+        XCTAssertEqual(goodbyeHits.count, 1, "'goodbye' should still return thread C unaffected")
+        XCTAssertEqual(goodbyeHits.first?.threadID, "rep205-i")
+    }
 }
