@@ -49,13 +49,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput — ESCALATED.** 24 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 8):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet), `wip/2026-04-24-152005-thread-cache` (REP-278, est. 536 tests), `wip/2026-04-24-114653-slack-socket-client` (REP-267, NEWLY confirmed). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met. 24 branches and growing.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput — ESCALATED.** 31 wip branches are now stuck awaiting `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 10):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (claim only, no code), `wip/2026-04-24-152005-thread-cache` (REP-278), `wip/2026-04-24-114653-slack-socket-client` (REP-267), `wip/2026-04-24-133823-inbox-bulk-filter` (REP-224/245/246/248), `wip/2026-04-24-143143-prefs-channels-negation-concurrent` (REP-231/208/220 NEWLY added), `wip/2026-04-24-163229-un-notification-parser` (REP-241), `wip/2026-04-24-152614-unread-bulk-concurrent` (REP-246/248/209/249 NEWLY added), `wip/2026-04-24-170301-sync-all-channels` (REP-244), plus `wip/worker-2026-04-23-135355-bundle`, `wip/worker-2026-04-24-105453-rep278-threads-cache` (superseded), `wip/worker-2026-04-24-115000-notification-parser-slack-token` (superseded). **31 branches total.** **Partial fix in place**: Human added `replyai-merger` agent (commit `7f9b305`, `.automation/merger.prompt`) which drains the wip queue automatically when `.build/` is warm — this is the "warm-build babysitter" the reviewer requested. The merger covers the automated-drain case; REP-285 (Package.swift MLX split) remains the structural fix that makes `swift test` fast on any machine. Human should: (a) ensure merger runs on a machine with warm `.build/`; (b) action REP-285 to remove the cold-build dependency entirely; (c) close the 3 superseded/claim-only branches.
 - success_criteria:
-  - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
-  - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
-  - All 22 current stuck wip branches manually reviewed and either merged or closed
+  - Merger agent runs on a warm-build machine and drains ≥5 wip branches per day
+  - REP-285 (Package.swift MLX split) actioned so fresh-clone `swift test` completes in <5 min
+  - All 31 current stuck wip branches either merged or closed
   - Reviewer confirms throughput improved in next 6h window
-- test_plan: Human runs `swift test` locally to baseline build time; implements fix; verifies subsequent worker run can complete `swift test` within budget.
+- test_plan: Human ensures merger fires on warm machine; verifies wip queue depth trending down in merge logs.
 
 
 ### REP-236 — InboxViewModel: wire AppleScript fallback when chat.db returns authorizationDenied
@@ -338,32 +338,47 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
-- claimed_by: worker-2026-04-24-152614
+- status: open
+- claimed_by: null
+- blocker: **Superseded by `replyai-merger` agent (commit `7f9b305`).** The merger runs every 30 min on a schedule, drains `wip/*` branches automatically when `.build/` is warm, and is more reliable than a worker fire for this purpose. Workers should NOT claim REP-280 — the merger handles the drain. If the merger is not yet running on a warm machine, workers may fall back to this task's protocol as a one-shot manual drain.
 - files_to_touch: whichever `wip/*` branch is oldest and still referenced in BACKLOG as `status: blocked`
-- scope: **Structural unblock for the entire wip backlog.** Worker MUST check that `.build/` is fresh (<6 hours old via `find .build -maxdepth 0 -mmin -360`) BEFORE claiming this task. If `.build/` is absent or stale, skip this task entirely — `swift test` will time out. If `.build/` IS fresh: (1) run `git stash` to save current state; (2) `git fetch origin && git checkout <oldest-blocked-wip-branch>`; (3) `swift test 2>&1 | tail -20`; (4) if all tests green, `git checkout main && git merge --no-ff <branch> && git push origin main`; (5) update BACKLOG.md: mark the corresponding REP as done; (6) update AGENTS.md: update test count and mark the REP as shipped. If tests fail: push a `fix-wip:<branch>` commit to the wip branch with the minimal fix, then re-run. Do not merge a failing branch. Priority order for wip branches: `wip/2026-04-23-085959-stats-session-acceptance` (oldest), then `wip/2026-04-23-130000-thread-name-regex`, then `wip/2026-04-23-145504-demo-mode` (pick one REP-228 impl, close the other), and so on in chronological order. Skip `wip/quality-*` branches (those need human review per REP-016/017/048).
+- scope: **SUPERSEDED by merger agent — see `.automation/merger.prompt`.** Original scope preserved for reference: Worker MUST check that `.build/` is fresh (<6 hours old via `find .build -maxdepth 0 -mmin -360`) BEFORE claiming this task. If `.build/` IS fresh: (1) checkout oldest blocked wip branch; (2) `swift test 2>&1 | tail -20`; (3) if green, fast-forward merge to main and push; (4) update BACKLOG.md and AGENTS.md. Priority order: `wip/2026-04-23-085959-stats-session-acceptance` (oldest), then chronological order. Skip `wip/quality-*` (human review per REP-016/017/048).
 - success_criteria:
-  - `.build/` fresh check passes before any test run
-  - At least 1 wip branch merged to main
-  - Corresponding BACKLOG task(s) marked done
-  - AGENTS.md test count updated to reflect merged tests
+  - Merger agent drains wip branches automatically (preferred path)
+  - If merger not available: worker follows manual protocol above on warm build
   - No broken tests on main after merge
-- test_plan: Worker runs `swift test` on the target branch; all tests must pass before merge.
+- test_plan: Worker or merger runs `swift test` on the target branch; all tests must pass before merge.
 
-### REP-286 — human: review + merge wip/2026-04-24-143143-prefs-channels-negation-concurrent (REP-231+208+220)
-### REP-287 — human: review + merge wip/2026-04-24-152614-unread-bulk-concurrent (REP-246+248+209+249)
-- priority: P1
+### REP-284 — human: review + merge wip/2026-04-24-170301-sync-all-channels (REP-244)
+- priority: P0
 - effort: S
 - ui_sensitive: false
 - status: open
 - claimed_by: human
-- files_to_touch: wip/2026-04-24-152614-unread-bulk-concurrent
-- scope: Review + run `swift test` on the wip branch. Adds `totalUnreadCount`, `bulkArchiveRead()` to InboxViewModel and 14 new tests (InboxViewModelSelectUnreadTests, InboxViewModelBulkTests, ContactsResolver concurrent tests). No source changes outside InboxViewModel. If green, merge to main.
+- files_to_touch: wip/2026-04-24-170301-sync-all-channels
+- scope: **Pivot P0.** Worker implemented REP-244 (`syncAllChannels()` multi-channel aggregation) on `wip/2026-04-24-170301-sync-all-channels`. This is the core multi-channel aggregation enabling the app to show threads from Slack, AppleScript fallback, and UNNotification capture without FDA. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-244 done.
 - success_criteria:
-  - `swift test` green on the wip branch
-  - merged to main
-- test_plan: run `swift test` from repo root on the branch
+  - wip/2026-04-24-170301-sync-all-channels merged into main
+  - REP-244 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally; confirms new syncAllChannels tests pass.
 
+### REP-285 — Package.swift: split MLX into separate optional target (root fix for `swift test` budget)
+- priority: P0
+- effort: L
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Package.swift` (commit message MUST start with `build:` prefix)
+- scope: **Root structural fix for the wip-queue buildup.** Current `Package.swift` forces SwiftPM to compile MLX C++ dependencies on every fresh clone, taking 20–90 min and exceeding the 13-min worker budget. Fix: move MLX and related AI dependencies into a separate optional target (`ReplyAIML`) that the main app target references conditionally or as a standalone module. After this change `swift test` on any machine should complete in <5 min on a fresh clone. Commit message MUST start with `build:` so the merger agent allows the Package.swift edit through its banned-pattern check. Human should implement and validate on a fresh clone.
+- success_criteria:
+  - `swift test` completes in <5 min on a fresh clone (no `.build/` cache)
+  - MLX isolated in separate target; test target excludes it
+  - All existing tests still pass
+  - Main app still links and runs (MLX functionality preserved, compile cost isolated)
+- test_plan: Human clones fresh, runs `swift test`; confirms <5 min completion.
+
+### REP-286 — human: review + merge wip/2026-04-24-143143-prefs-channels-negation-concurrent (REP-231+208+220)
 - priority: P1
 - effort: S
 - ui_sensitive: false
@@ -390,6 +405,48 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - merged to main
   - REP-258 and REP-269 marked done
 - test_plan: Human runs `swift test` locally; confirms 7 new/updated tests pass.
+
+### REP-287 — human: review + merge wip/2026-04-24-152614-unread-bulk-concurrent (REP-246+248+209+249)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: wip/2026-04-24-152614-unread-bulk-concurrent
+- scope: Worker-2026-04-24-152614 implemented REP-246 (totalUnreadCount), REP-248 (bulkArchiveRead), REP-209 (selectThread unread clear), REP-249 (concurrent ContactsResolver correctness) on `wip/2026-04-24-152614-unread-bulk-concurrent`. +14 new tests. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-246, REP-248, REP-209, REP-249 done.
+- success_criteria:
+  - `swift test` green on the wip branch
+  - wip/2026-04-24-152614-unread-bulk-concurrent merged into main
+  - REP-246, REP-248, REP-209, REP-249 marked done
+- test_plan: Human runs `swift test` from repo root on the branch; confirms 14 new tests pass.
+
+### REP-282 — human: review + merge wip/2026-04-24-133823-inbox-bulk-filter (REP-224+245+246+248)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: wip/2026-04-24-133823-inbox-bulk-filter
+- scope: Worker implemented REP-224 (InboxViewModel bulk-archive), REP-245 (filter by channel), REP-246 (totalUnreadCount), REP-248 (bulkArchiveRead) on `wip/2026-04-24-133823-inbox-bulk-filter`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-224, REP-245, REP-246, REP-248 done.
+- success_criteria:
+  - wip/2026-04-24-133823-inbox-bulk-filter merged into main
+  - REP-224, REP-245, REP-246, REP-248 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally; confirms new InboxViewModel tests appear.
+
+### REP-283 — human: review + merge wip/2026-04-24-163229-un-notification-parser (REP-241)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: wip/2026-04-24-163229-un-notification-parser
+- scope: Worker implemented REP-241 (UNNotificationParser: passive notification capture without FDA) on `wip/2026-04-24-163229-un-notification-parser`. Pivot-aligned: passive capture path works without Full Disk Access. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-241 done.
+- success_criteria:
+  - wip/2026-04-24-163229-un-notification-parser merged into main
+  - REP-241 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally; confirms UNNotificationParser tests pass.
 
 ### REP-281 — human: review + merge wip/2026-04-24-114653-slack-socket-client (REP-267)
 - priority: P1
