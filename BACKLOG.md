@@ -1422,8 +1422,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-170301
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: the multi-channel aggregation layer that makes alternative sources (AppleScript, Slack, notification-captured) appear alongside iMessage without FDA.** Without this, each channel must be queried independently and there is no unified thread list. Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
 - success_criteria:
