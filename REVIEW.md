@@ -6,6 +6,48 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-24 10:10 – 16:10 UTC (last ~6h) — ⭐⭐⭐⭐
+
+**Rating: 4/5**
+
+Fifteen commits (3 planner refreshes + 1 reactive planner addendum, 11 worker including 2 substantive main-branch commits, 1 reviewer carry-in). Main-branch test suite grew **521 → 527 (+6 tests)** via a single code commit — verified by `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'` reporting 527. AGENTS.md test-count line reads 527 and matches reality. Zero banned-action violations: no `Package.swift` / `project.yml` / `Info.plist` / `*.entitlements` / `scripts/*` / `design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes. Production-source delta is narrow, pivot-aligned, and fully test-covered: new `Sources/ReplyAI/Channels/MessagesAppActivationObserver.swift` (+73, 3 tests) and `Sources/ReplyAI/Inbox/InboxViewModel.swift` (+30, 3 tests) wired behind a `MessagesAppActivationObserver?` injection point.
+
+**The pivot is now visibly driving the codebase.** Zero cycles this window on `AttributedBodyDecoder` / `ChatDBWatcher` / chat.db SQL / FDA prompt tweaks. Every code and wip-branch artifact is either a non-FDA message-source (REP-239 NSWorkspace.didActivateApplicationNotification activation observer → triggers a re-sync when the user brings Messages.app forward), a channel-agnostic UX primitive (REP-247 ViewState enum on wip, REP-278 thread-list cache for cold-launch resilience on wip), or pivot-enabling infrastructure (REP-271 MLX build-time protocol). Planner's three refreshes added zero FDA-dependent tasks.
+
+**The reviewer→planner loop closed cleanly.** Last window flagged the MLX cold-build budget as three-consecutive-windows unaddressed. This window the planner's `1b9d6a3` addendum added REP-271 as P0, the worker shipped it in `08f2e4b` (S-only but sanctioned — message explicitly invokes the substantiveness exception: "Only one open P0 task this fire"), and AGENTS.md + worker.prompt now document the wip-branch protocol. Workers are already following it: three new wip branches opened this window instead of pushing unverified code to main.
+
+Two reasons the rating is 4 not 5:
+
+**1. Main-branch throughput was 1 code commit.** Three wip branches opened (REP-247, REP-278, and REP-267 claimed), none merged. The worker is behaving correctly per the new protocol, and this is a direct consequence of the MLX constraint the reviewer asked to be documented — so it's not a worker regression. But effective code velocity on `main` is now gated on a human (or a warm-build worker) draining the wip queue. The queue, combined with carry-forward branches, is at ~9. If the next window adds 3 more without merges, the queue becomes operationally untrackable and the rating should drop.
+
+**2. REP-267 claimed at 11:48 EDT with no follow-on commits by window close.** Worker is either still running or timed out silently. Not a violation on its own, but worth watching — if the next review finds REP-267 abandoned, it needs to be un-claimed.
+
+### Shipped this window (feature-level)
+
+- **MessagesAppActivationObserver (REP-239 + REP-265).** New `Sources/ReplyAI/Channels/MessagesAppActivationObserver.swift` watches `NSWorkspace.shared.notificationCenter` for `didActivateApplicationNotification`, fires `onMessagesActivated` when `com.apple.MobileSMS` becomes frontmost, debounces 600ms via `DispatchWorkItem` cancellation. Both `notificationCenter` and `bundleIDExtractor: (Notification) -> String?` are injectable — tests stuff bundle IDs through `userInfo` instead of constructing real `NSRunningApplication` instances (which `XCTest` can't do). `InboxViewModel` accepts a `MessagesAppActivationObserver?` in `init` (nil-default keeps every existing call site compiling), wires `onMessagesActivated` through `Task { @MainActor [weak self] in await self?.handleMessagesActivation() }`, and enforces a second 5-second debounce via `lastActivationDate` to prevent app-switch thrash. Both new properties are `@ObservationIgnored` because `@Observable`'s macro expansion resolves tracked wrappers before `MessagesAppActivationObserver` enters the compilation batch. 6 new tests (3 per ticket), 521 → 527, zero failures at 08:10 EDT.
+- **MLX cold-build protocol (REP-271).** AGENTS.md "Gotchas" now warns about the 45–90 min MLX C++ cold compile under SwiftPM. `.automation/worker.prompt` step 8 gains an explicit branch: if `.build/` is missing or older than 6h, push to `wip/` instead of attempting `swift test` + merge. This is what produced the 10+ wip branches the human had already been seeing; now it's the sanctioned behavior instead of an accidental one. Docs-only; no test delta expected.
+
+### Test coverage delta
+
+- **+6 tests on main** (521 → 527), all in commit `9a6c3d1`: `MessagesAppActivationObserverTests` (activation-triggers-callback, bundle-ID-mismatch-ignored, rapid-refire-debounced) + `InboxViewModelMessagesActivationTests` (activation-triggers-sync, 5s-debounce-suppresses-second-call, nil-observer-is-no-op).
+- **+9 tests pending verification on wip branches** (527 → 531 on `wip/worker-2026-04-24-113000-viewstate` for REP-247 ViewState; 531 → ~536 on `wip/2026-04-24-152005-thread-cache` for REP-278 thread-list cache). AGENTS.md tags both "unverified pending warm build."
+- **Coverage gap**: neither NSWorkspace activation code path nor the new `lastActivationDate` debounce has a "Messages.app activated while sync in progress" test. Low priority — the existing 5s debounce already covers the practical case — but worth a 2-line test in the next window if a worker needs padding.
+
+### Concerns
+
+- **Wip queue depth ≈ 9, not draining.** `origin/wip/2026-04-24-005143-rep255-notification-permission`, `origin/wip/2026-04-24-031929-channel-stubs`, `origin/wip/2026-04-24-083949-rep266-slack-oauth-flow`, `origin/wip/2026-04-24-113000-slack-socket-token-store`, `origin/wip/2026-04-24-120000-viewstate-slacktokenstore`, `origin/wip/2026-04-24-152005-thread-cache`, `origin/wip/worker-2026-04-24-105453-rep278-threads-cache`, `origin/wip/worker-2026-04-24-113000-viewstate`, `origin/wip/worker-2026-04-24-115000-notification-parser-slack-token`. Most of these came from the last ~24h. The new REP-271 protocol is correct in telling workers not to merge unverified, but it has no companion mechanism for verifying and merging. This is the single highest-leverage thing for the next planner cycle to fix.
+- **REP-267 claimed at 11:48 EDT, no push observed by 12:10 EDT.** Not yet a violation, but if the next reviewer can't find a corresponding wip branch or main-branch commit, the claim should be released.
+- **Planner model-pin drift.** Continuing to note (for the 5th consecutive review) that planner commits co-author `Claude Sonnet 4.6` while the user's automation-model policy documents Opus 4.7 + `effortLevel=high`. No change expected inside the automation loop; this needs a human settings.json edit.
+
+### Suggestions for next planner cycle
+
+- **Add P0, M: "warm-build babysitter worker."** Single long-running scheduled task whose only job is to check out each open `wip/*` branch in turn, run `swift test`, and (if green + no bans) fast-forward `main` to the branch tip. Without something like this the wip queue will keep growing. This is the obvious companion to REP-271.
+- **Add P2, S: "prune stale wip/* branches."** Any branch AGENTS.md hasn't mentioned in the last 48h should be deleted. Stale branches are reviewer noise.
+- **Stop re-emphasizing the pivot in every planner run.** Pivot alignment has now been 5/5 across the last 2 windows. The prompt tokens currently spent restating the pivot in each run would be better used sharpening `success_criteria:` and `test_plan:` per task — those are still the weakest fields in recent BACKLOG entries.
+- **Consider replacing the MLX build dependency with a stubbed-at-test-time `MLXModelLoader` protocol seam.** The root cause of the wip queue is that `swift test` has to link against MLX. If tests ran against a protocol and production linked against the MLX conformance, CI / worker wall clock drops from ~45 min to ~2 min. This is a larger task (probably L, P1) but it would unblock everything downstream.
+
+---
+
 ## Window 2026-04-24 04:22 – 10:20 UTC (last ~6h) — ⭐⭐⭐⭐
 
 **Rating: 4/5**
