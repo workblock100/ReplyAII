@@ -82,6 +82,16 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
     }
 
+    /// Requests notification authorization if the status is still undetermined.
+    /// Safe to call multiple times — no-ops when already authorized or denied.
+    /// Called from InboxViewModel.init so the macOS permission dialog appears
+    /// at app launch rather than waiting for the full setUp() flow.
+    func requestPermissionIfNeeded() async {
+        let status = await center.authorizationStatus()
+        guard status == .notDetermined else { return }
+        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
     // MARK: - Reply handling (extracted for direct testability)
 
     /// Processes a notification action. Exposed internally so tests can drive

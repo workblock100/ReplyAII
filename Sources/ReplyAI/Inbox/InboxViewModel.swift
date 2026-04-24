@@ -176,6 +176,7 @@ final class InboxViewModel {
         defaults: UserDefaults = .standard,
         searchIndex: SearchIndex? = nil,
         activationObserver: MessagesAppActivationObserver? = nil,
+        notificationCoordinator: NotificationCoordinator? = nil,
         threadsCacheURL: URL? = nil
     ) {
         self.searchIndex = searchIndex ?? SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())
@@ -210,6 +211,11 @@ final class InboxViewModel {
         }
         startObservingRules()
         startObservingNotificationReply()
+        // Trigger the macOS notification permission dialog early so the user
+        // sees it at launch rather than the first time a message arrives.
+        if let coordinator = notificationCoordinator {
+            Task { await coordinator.requestPermissionIfNeeded() }
+        }
     }
 
     var selectedThread: MessageThread {

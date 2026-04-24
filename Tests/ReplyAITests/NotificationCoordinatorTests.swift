@@ -307,4 +307,45 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertEqual(inbox.threads.first?.preview, "Morning",
             "thread preview must update when matched via CKChatGUID fallback")
     }
+
+    // MARK: - REP-255: requestPermissionIfNeeded
+
+    func testRequestPermissionCalledWhenUndetermined() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .notDetermined
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.requestPermissionIfNeeded()
+
+        XCTAssertEqual(
+            center.authorizationRequestCount, 1,
+            "requestAuthorization must be called once when status is .notDetermined"
+        )
+    }
+
+    func testRequestPermissionNotCalledWhenAuthorized() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .authorized
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.requestPermissionIfNeeded()
+
+        XCTAssertEqual(
+            center.authorizationRequestCount, 0,
+            "requestAuthorization must not be called when status is already .authorized"
+        )
+    }
+
+    func testRequestPermissionNotCalledWhenDenied() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .denied
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.requestPermissionIfNeeded()
+
+        XCTAssertEqual(
+            center.authorizationRequestCount, 0,
+            "requestAuthorization must not be called when status is .denied"
+        )
+    }
 }
