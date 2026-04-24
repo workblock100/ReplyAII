@@ -286,8 +286,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-031929
 - files_to_touch: `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Tests/ReplyAITests/WhatsAppChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-233/234 (Slack). `WhatsAppChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-WhatsApp")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no session token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported` (real send comes in a follow-up). `channel` property returns `.whatsapp` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.whatsapp`.
 - success_criteria:
@@ -303,8 +303,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-031929
 - files_to_touch: `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Tests/ReplyAITests/TeamsChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) for Microsoft Teams. `TeamsChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-Teams")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no Graph API token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.teams` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.teams`.
 - success_criteria:
@@ -339,8 +339,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-031929
 - files_to_touch: `Sources/ReplyAI/Channels/SMSChannel.swift` (new), `Tests/ReplyAITests/SMSChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-260/261 (WhatsApp/Teams). `SMSChannel: ChannelService` in a new file. SMS relay via CloudKit from iPhone is a future feature; stub the plumbing now. Injectable `KeychainHelper(service: "ReplyAI-SMS")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no relay token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.sms` — add this case to `Channel` enum if REP-243 not yet merged. Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.sms`.
 - success_criteria:
@@ -1254,8 +1254,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-031929
 - files_to_touch: `Sources/ReplyAI/Models/Channel.swift` (or wherever `Channel` is defined), `Tests/ReplyAITests/ChannelTests.swift` (new or extend)
 - scope: **Pivot-aligned (channel architecture scaffolding).** `Channel` enum currently has only cases used in the codebase (`.iMessage`, `.slack`). Add `.telegram`, `.whatsapp`, `.teams`, `.sms` as future-channel stubs. Each case needs `displayName: String` and `iconName: String` properties. Add `CaseIterable` conformance and `Codable` (raw `String` value). `ChannelDot` and any exhaustive `switch` over `Channel` must be updated (no behavior change — add placeholder colors for new cases). Tests: `Channel.allCases` count matches expected; each case decodes from its `rawValue` string; `displayName` is non-empty for every case.
 - success_criteria:
