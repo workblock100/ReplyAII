@@ -96,6 +96,27 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing NotificationCoordinatorTests remain green
 - test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; injectable `MockUNUserNotificationCenter` that returns configured authorization status.
 
+### REP-263 — NotificationCoordinator: extract chatGUID from userInfo for thread deduplication
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: **Bug fix in shipped REP-235 path (no FDA required).** `applyIncomingNotification` in InboxViewModel (REP-235) creates a new thread entry for every incoming notification, even when a thread for that conversation already exists. Root cause: no chatGUID is threaded through, so ViewModel cannot match the notification to an existing thread. Fix: extract `chatGUID` from `content.userInfo["CKChatIdentifier"]` (primary) or `content.userInfo["CKChatGUID"]` (fallback) in `NotificationCoordinator.handleIncomingNotification`. Add `chatGUID: String?` parameter to `handleIncomingNotification` and to `InboxViewModel.applyIncomingNotification`. In ViewModel, when `chatGUID` non-nil and a matching thread exists, update that thread's `previewText` and increment `unread` instead of appending a new entry. When chatGUID is nil or no match, create a new thread as before. No FDA required — purely extends the shipped notification path.
+- success_criteria:
+  - `NotificationCoordinator.handleIncomingNotification` gains `chatGUID: String?` parameter
+  - `chatGUID` extracted from `content.userInfo["CKChatIdentifier"]` with fallback to `"CKChatGUID"`
+  - `InboxViewModel.applyIncomingNotification` gains `chatGUID: String?` parameter
+  - Matching by chatGUID updates existing thread (no duplicate appended)
+  - `testIncomingNotificationWithMatchingGUIDUpdatesExistingThread` — known GUID → thread count unchanged, previewText updated
+  - `testIncomingNotificationWithUnknownGUIDCreatesNewThread` — unknown GUID → thread count +1
+  - `testIncomingNotificationWithNilGUIDCreatesNewThread` — nil GUID → thread count +1 (backward-compatible)
+  - `testChatGUIDExtractedFromCKChatIdentifier` — primary key used when present
+  - `testChatGUIDFallsBackToCKChatGUID` — fallback key used when primary absent
+  - Existing NotificationCoordinatorTests and InboxViewModelTests remain green
+- test_plan: 5 new tests split across NotificationCoordinatorTests and InboxViewModelTests; use fabricated userInfo dicts + StaticMockChannel with pre-seeded threads.
+
 
 ---
 
@@ -187,24 +208,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
-
-### REP-235 — NotificationCoordinator: passive capture of incoming message metadata without FDA
-- priority: P1
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-24-015900
-- files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
-- scope: **Pivot-aligned (alt message source, no FDA required).** `NotificationCoordinator` already handles inline reply (REP-028, REP-072). Extend it to passively capture incoming message metadata from `UNNotificationCenter` delegate callbacks — specifically `userNotificationCenter(_:willPresent:)`. Parse `content.userInfo["sender"]` (handle/name) and `content.body` (preview text) from each arriving notification. Call a new `onIncomingMessage: ((senderHandle: String, preview: String) -> Void)?` callback on `NotificationCoordinator`. `InboxViewModel` subscribes to this callback and uses it to refresh-or-create a lightweight thread entry when FDA is unavailable (checking `Preferences.channels.iMessageEnabled && !chatDBAvailable`). No FDA required — uses `UNUserNotificationCenter` which needs only Notification permission. Tests: `onIncomingMessage` fires when a new notification arrives; `senderHandle` and `preview` fields populated correctly; callback is NOT fired for inline-reply notifications (category differs); no FDA entitlement needed (injectable `UNUserNotificationCenter`).
-- success_criteria:
-  - `NotificationCoordinator.onIncomingMessage` callback added
-  - `userNotificationCenter(_:willPresent:)` parses sender + preview and fires callback
-  - `InboxViewModel` subscribes and creates/refreshes thread entry when FDA unavailable
-  - `testIncomingNotificationFiresCallback` — delegate call triggers onIncomingMessage
-  - `testIncomingNotificationParsesFields` — senderHandle and preview extracted correctly
-  - `testReplyNotificationDoesNotFireIncomingCallback` — reply category skipped
-  - Existing NotificationCoordinatorTests remain green
-- test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; inject mock `UNUserNotificationCenter` and fabricate `UNNotification` payloads.
 
 ### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
 - priority: P1
@@ -331,6 +334,41 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testEmptyMessagesArrayProducesThreadWithNoMessages` — empty messages → thread with `messages: []`
   - Existing tests remain green
 - test_plan: 4 new tests in `ShortcutsExportHandlerTests.swift`; pass literal URL strings to `parse(url:)`; no real URL scheme registration in tests.
+
+### REP-264 — SMSChannel: ChannelService conformance stub with CloudKit relay gate
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SMSChannel.swift` (new), `Tests/ReplyAITests/SMSChannelTests.swift` (new)
+- scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-260/261 (WhatsApp/Teams). `SMSChannel: ChannelService` in a new file. SMS relay via CloudKit from iPhone is a future feature; stub the plumbing now. Injectable `KeychainHelper(service: "ReplyAI-SMS")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no relay token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.sms` — add this case to `Channel` enum if REP-243 not yet merged. Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.sms`.
+- success_criteria:
+  - `SMSChannel: ChannelService` in new file
+  - `recentThreads()` throws `authorizationDenied` when no Keychain entry
+  - `testSMSChannelThrowsWhenNoToken` — no Keychain entry → `authorizationDenied`
+  - `testSMSChannelReturnsEmptyWithToken` — token present → `[]` (stub)
+  - `testSMSChannelPropertyReturnsSMS` — `channel == .sms`
+  - Existing tests remain green
+- test_plan: 3 new tests in `SMSChannelTests.swift`; injectable `KeychainHelper` with test-scoped service name.
+
+### REP-265 — InboxViewModel: wire MessagesAppActivationObserver to trigger re-sync when Messages becomes active
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` (REP-239, open) fires when `com.apple.MobileSMS` becomes frontmost. Wire this into `InboxViewModel`: accept an injectable `MessagesAppActivationObserver?` (default nil = disabled). In `init()`, set `activationObserver.onMessagesActivated = { [weak self] in Task { await self?.handleMessagesActivation() } }`. `handleMessagesActivation()` calls `syncFromIMessage()` (conservative until REP-236 merges) and merges results without discarding existing threads. 5-second debounce guards against rapid app-switch thrash: track `lastActivationDate` and skip if < 5s ago. Tests: observer fires → sync triggered; second fire within 5s → sync skipped (debounce); ViewModel deinited before callback fires → no crash (weak capture). Prereq: REP-239 must be completed first (or implemented inline as a stub for testability).
+- success_criteria:
+  - `InboxViewModel` accepts injectable `MessagesAppActivationObserver?` (default nil)
+  - `handleMessagesActivation()` method triggers sync
+  - 5-second debounce via `lastActivationDate` tracking
+  - `testMessagesActivationTriggersSyncOnObserverFire` — observer fires → handleMessagesActivation called
+  - `testMessagesActivationDebounceSkipsRapidSecondFire` — second fire within 5s → sync not triggered
+  - `testMessagesActivationWeakCaptureNoCrashAfterDeinit` — observer fires after ViewModel deinited → no crash
+  - Existing InboxViewModelTests remain green
+- test_plan: 3 new tests in `InboxViewModelTests.swift`; injectable mock observer that manually fires `onMessagesActivated`.
 
 
 ---
