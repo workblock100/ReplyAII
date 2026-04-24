@@ -100,8 +100,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-083949
+- blocker: code complete (+115 LOC source, +145 LOC tests, 5 tests); MLX fresh-clone build time exceeded 13-min worker budget (REP-254); human should run `swift test` and merge if green; wip/2026-04-24-083949-rep266-slack-oauth-flow
 - files_to_touch: `Sources/ReplyAI/Channels/SlackOAuthFlow.swift` (new), `Tests/ReplyAITests/SlackOAuthFlowTests.swift` (new)
 - scope: **Pivot-aligned P0: first end-to-end non-iMessage channel path — no FDA required.** `LocalhostOAuthListener` (REP-230, shipped fbba843) handles the callback server. `KeychainHelper` (REP-233, shipped c001d7e) handles token storage. New `SlackOAuthFlow` orchestrates both: `authorize(clientID: String, clientSecret: String, completion: (Result<Void, OAuthError>) -> Void)` — (1) starts `LocalhostOAuthListener` on port 4242; (2) opens `https://slack.com/oauth/v2/authorize?client_id=<id>&scope=channels:read,chat:write&redirect_uri=http://localhost:4242/callback` via injectable `URLOpener` protocol (default: `NSWorkspace.shared.open`); (3) on `code` received, POSTs to `https://slack.com/api/oauth.v2.access` with `code + client_id + client_secret` via injectable `URLSession`; (4) parses `access_token` from JSON response; (5) stores via `KeychainHelper.set(value: token, for: "slack-access-token")`. `LocalhostOAuthListenerFactory: (port: UInt16, timeout: TimeInterval) -> LocalhostOAuthListener` injectable for tests. Tests: mock `URLOpener` captures constructed auth URL (assert clientID, scope, redirectURI params); mock listener factory delivers `code=testcode`; mock URLSession returns `{"ok":true,"access_token":"xoxb-test"}` → token stored in KeychainHelper; `{"ok":false}` response throws `OAuthError.tokenExchangeFailed`; listener timeout propagates as `OAuthError.timeout`.
 - success_criteria:
