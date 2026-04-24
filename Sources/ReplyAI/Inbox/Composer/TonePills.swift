@@ -26,6 +26,7 @@ struct TonePills: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(tone.rawValue) tone")
             }
         }
     }
