@@ -229,6 +229,7 @@ Commits (newest first; run `git log` for detail):
 - **Rich messages (newer iOS)** store text in `message.attributedBody` (typedstream NSAttributedString), not `message.text`. The query selects both; `AttributedBodyDecoder` falls back when `text` is NULL.
 - **`chat.chat_identifier` is the projected ID, not the guid.** Group chat sends via AppleScript need the full `chat.guid` (`iMessage;+;chat1234567890`). 1:1 chats we synthesize `iMessage;-;<chat_identifier>` which works.
 - **First MLX draft takes ~60–120s** — downloads ~2 GB + compiles Metal kernels. UI must show progress (see stubbed work above).
+- **MLX fresh-clone C++ compile exceeds the 13-min worker budget (~45–90 min on a cold machine).** Do NOT attempt `swift test` from a clean repo — it will time out. Before running tests, check whether `.build/` exists and is less than 6 hours old (`find .build -maxdepth 0 -mmin -360`). If `.build/` is absent or stale AND the task requires `swift test`, **push to `wip/`** with a note that the MLX build time exceeded the budget — merging unverified code to `main` is banned. Workers on a hot machine (`.build/` present, <6h old) can run `swift build && swift test` incrementally (~9 min). Also check `SWIFTPM_BUILD_PATH` in the environment — if it points at an existing cache, that path applies instead of `.build/`.
 - **macOS 26.4 SDK on this machine.** Deployment target is 14.0 but some new SDK features leak through (`consuming` parameters in swift-transformers API, etc.).
 
 ## Priority queue

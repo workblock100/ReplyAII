@@ -39,7 +39,8 @@ If you're about to implement `chat.db`, `ChatDBWatcher`, `AttributedBodyDecoder`
 8. Do the work:
    - Write the code
    - Write or update tests — test file for every new source file; existing files need test coverage for every net-new public surface
-   - Run `swift test` — must pass 100%, no skipped cases
+   - **MLX build-time check (REQUIRED before running tests):** The MLX C++ dependency takes 45–90 min to compile on a cold machine — far beyond the 13-min budget. Before running `swift test`, check: `find .build -maxdepth 0 -mmin -360 2>/dev/null`. If `.build/` is absent or older than 6 hours AND your task requires code changes, **do not run `swift test`** — push to `wip/` instead with the note "MLX cold build would exceed time budget." Also check `SWIFTPM_BUILD_PATH` in your environment. If `.build/` is present and fresh (<6h), incremental `swift build && swift test` takes ~9 min and is safe. **Merging unverified code to `main` is banned.**
+   - Run `swift test` — must pass 100%, no skipped cases (only after confirming a warm build cache above)
    - Run `./scripts/build.sh debug` — must succeed, no linker errors
 9. Update `BACKLOG.md`:
    - Mark finished tasks `status: done`

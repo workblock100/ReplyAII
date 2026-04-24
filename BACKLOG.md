@@ -122,7 +122,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-24-110000
 - files_to_touch: `AGENTS.md` (Gotchas section), `.automation/worker.prompt` (Gotchas section)
 - scope: **Structural infra — docs-only, auto-merge eligible.** Three reviewer windows have flagged the MLX fresh-clone C++ compile (~45–90 min) exceeding the 13-min worker budget as the primary throughput bottleneck. Without documented guidance, each new worker hits the same wall and produces another wip branch. Add two doc changes: (1) **AGENTS.md Gotchas**: "**MLX fresh-clone C++ compile exceeds the 13-min worker budget (~45–90 min on a cold machine).** Do not attempt `swift test` from a clean repo — it will time out. Check for `SWIFTPM_BUILD_PATH` or `.build/` left by a prior run. If `.build/` is stale or missing, push to `wip/` with a note that the MLX build time exceeded the budget. Workers running on a hot machine (`.build/` present, <6h old) can do `swift build && swift test` incrementally (~9 min)." (2) **`.automation/worker.prompt`**: same warning prominently at the top of the "Running tests" section. Also document: if the worker detects a fresh clone with no `.build/` AND the task requires `swift test`, it MUST push to `wip/` — merging unverified code is banned. This resolves the protocol ambiguity that has produced 10+ wip branches so far. Reviewer will downgrade to ⭐⭐⭐ if this task is not in BACKLOG by next review cycle.
@@ -1587,6 +1587,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-271 — AGENTS.md + worker.prompt: document MLX build-time budget workaround and wip-branch protocol
+- status: done
+- claimed_by: worker-2026-04-24-110000
+- scope: Docs-only. Added MLX cold-build warning to AGENTS.md Gotchas and to `.automation/worker.prompt` step 8. Documents that workers must check `.build/` freshness before running `swift test` and must push to `wip/` if the build cache is absent or stale. Resolves the protocol ambiguity that produced 10+ unnecessary wip branches. No code changes.
 
 ### REP-263 — NotificationCoordinator: extract chatGUID from userInfo for thread deduplication
 - status: done
