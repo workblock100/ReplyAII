@@ -1229,3 +1229,153 @@ final class InboxViewModelDraftStoreSeedTests: XCTestCase {
                      "selectThread must not set userEdits when no draft is stored for the selected thread")
     }
 }
+
+// MARK: - Thread-list cache (REP-278)
+
+@MainActor
+final class InboxViewModelThreadCacheTests: XCTestCase {
+
+    private func tempCacheURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("ThreadCacheTests-\(UUID())/last-threads-cache.json")
+    }
+
+    private func makeThread(id: String, name: String, preview: String = "hello",
+                            channel: Channel = .imessage, unread: Int = 1,
+                            chatGUID: String? = nil) -> MessageThread {
+        MessageThread(id: id, channel: channel, name: name, avatar: String(name.prefix(1)),
+                      preview: preview, time: "now", unread: unread, chatGUID: chatGUID)
+    }
+
+    /// Successful sync returning ≥1 thread must write the cache file.
+    func testSuccessfulSyncWritesCache() async throws {
+        let cacheURL = tempCacheURL()
+        let thread = makeThread(id: "t1", name: "Alice", chatGUID: "iMessage;-;+11")
+        let channel = StaticMockChannel(threads: [thread])
+        let vm = InboxViewModel(
+            threads: [], imessage: channel, contacts: fastContacts(),
+            threadsCacheURL: cacheURL
+        )
+
+        await vm.syncFromIMessage()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cacheURL.path),
+                      "cache file must exist after successful sync")
+        let data = try Data(contentsOf: cacheURL)
+        let json = try JSONSerialization.jsonObject(with: data) as! [[String: Any]]
+        XCTAssertEqual(json.count, 1)
+        XCTAssertEqual(json[0]["id"] as? String, "t1")
+        XCTAssertEqual(json[0]["displayName"] as? String, "Alice")
+        XCTAssertEqual(json[0]["chatGUID"] as? String, "iMessage;-;+11")
+        XCTAssertEqual(json[0]["channel"] as? String, "imessage")
+    }
+
+    /// Fresh ViewModel with no threads + cache present → threads populated from cache.
+    func testColdInitFromCache() throws {
+        let cacheURL = tempCacheURL()
+        // Pre-write a cache representing a prior session's thread list.
+        let prior = makeThread(id: "cached-t1", name: "Bob", preview: "hey", unread: 0)
+        let channel = StaticMockChannel(threads: [prior])
+        // First VM: sync to populate cache.
+        let seeder = InboxViewModel(
+            threads: [], imessage: channel, contacts: fastContacts(),
+            threadsCacheURL: cacheURL
+        )
+        // Write the cache directly via the encode path by calling sync synchronously.
+        let exp = expectation(description: "seed sync")
+        Task {
+            await seeder.syncFromIMessage()
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 5)
+
+        // Second VM: no threads provided, but cache exists — must hydrate.
+        let coldVM = InboxViewModel(
+            threads: [], imessage: StaticMockChannel(threads: []),
+            contacts: fastContacts(), threadsCacheURL: cacheURL
+        )
+        XCTAssertEqual(coldVM.threads.count, 1)
+        XCTAssertEqual(coldVM.threads[0].id, "cached-t1")
+        XCTAssertEqual(coldVM.threads[0].name, "Bob")
+    }
+
+    /// A second sync must overwrite the cache with the new thread list.
+    func testSecondSyncUpdatesCacheFile() async throws {
+        let cacheURL = tempCacheURL()
+        let first  = makeThread(id: "t-first",  name: "First")
+        let second = makeThread(id: "t-second", name: "Second")
+
+        var callCount = 0
+        final class SequencedChannel: ChannelService, @unchecked Sendable {
+            private let lock = NSLock()
+            private var _count = 0
+            let batches: [[MessageThread]]
+            init(_ batches: [[MessageThread]]) { self.batches = batches }
+            func recentThreads(limit: Int) async throws -> [MessageThread] {
+                lock.lock(); defer { lock.unlock() }
+                let idx = min(_count, batches.count - 1)
+                _count += 1
+                return batches[idx]
+            }
+            func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+        }
+        _ = callCount
+
+        let seq = SequencedChannel([[first], [second]])
+        let vm = InboxViewModel(threads: [], imessage: seq, contacts: fastContacts(),
+                                threadsCacheURL: cacheURL)
+        await vm.syncFromIMessage()
+        await vm.syncFromIMessage()
+
+        let data = try Data(contentsOf: cacheURL)
+        let json = try JSONSerialization.jsonObject(with: data) as! [[String: Any]]
+        XCTAssertEqual(json.count, 1)
+        XCTAssertEqual(json[0]["id"] as? String, "t-second",
+                       "cache must reflect the most recent sync result")
+    }
+
+    /// Failed sync must leave in-memory threads unchanged (cache not re-written).
+    func testFailedSyncLeavesThreadsUnchanged() async throws {
+        let cacheURL = tempCacheURL()
+        let thread = makeThread(id: "t1", name: "Alice")
+        let good = StaticMockChannel(threads: [thread])
+        let vm = InboxViewModel(threads: [], imessage: good, contacts: fastContacts(),
+                                threadsCacheURL: cacheURL)
+        // Seed with a successful sync.
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.threads.count, 1)
+        let cacheModDate1 = try FileManager.default.attributesOfItem(atPath: cacheURL.path)[.modificationDate] as! Date
+
+        // Now inject a failing channel by replacing via the InboxViewModel's
+        // internal imessage. We can't swap it post-init, so we test the
+        // invariant directly: failed sync must not alter `threads`.
+        final class FailingChannel: ChannelService, @unchecked Sendable {
+            func recentThreads(limit: Int) async throws -> [MessageThread] {
+                throw ChannelError.unavailable("test failure")
+            }
+            func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+        }
+        let vm2 = InboxViewModel(threads: [thread], imessage: FailingChannel(),
+                                 contacts: fastContacts(), threadsCacheURL: cacheURL)
+        let countBefore = vm2.threads.count
+        await vm2.syncFromIMessage()
+        XCTAssertEqual(vm2.threads.count, countBefore,
+                       "failed sync must not mutate in-memory threads")
+        // Cache file modification date must not change.
+        let cacheModDate2 = try FileManager.default.attributesOfItem(atPath: cacheURL.path)[.modificationDate] as! Date
+        XCTAssertEqual(cacheModDate1.timeIntervalSince1970,
+                       cacheModDate2.timeIntervalSince1970, accuracy: 1,
+                       "failed sync must not overwrite the cache file")
+    }
+
+    /// No cache file at init → threads empty, no crash.
+    func testMissingCacheAtInitProducesEmptyThreads() {
+        let cacheURL = tempCacheURL() // file does not exist yet
+        let vm = InboxViewModel(
+            threads: [], imessage: StaticMockChannel(threads: []),
+            contacts: fastContacts(), threadsCacheURL: cacheURL
+        )
+        XCTAssertTrue(vm.threads.isEmpty,
+                      "absent cache must produce empty thread list without crashing")
+    }
+}

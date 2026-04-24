@@ -90,6 +90,10 @@ final class InboxViewModel {
     /// Injected at init time for test isolation; production uses `.standard`.
     private let defaults: UserDefaults
 
+    /// File URL for the thread-list cache. Injected in tests for isolation;
+    /// production resolves via `Preferences.lastThreadsCacheURL`.
+    private let threadsCacheURL: URL
+
     /// Persists completed drafts to disk so the composer can be pre-populated
     /// on the next launch without waiting for LLM re-generation. Nil in tests.
     var draftStore: DraftStore?
@@ -136,12 +140,15 @@ final class InboxViewModel {
         stats: Stats? = nil,
         defaults: UserDefaults = .standard,
         searchIndex: SearchIndex? = nil,
-        activationObserver: MessagesAppActivationObserver? = nil
+        activationObserver: MessagesAppActivationObserver? = nil,
+        threadsCacheURL: URL? = nil
     ) {
         self.searchIndex = searchIndex ?? SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())
         self.defaults = defaults
         self.stats = stats ?? Stats()
-        self.threads = threads
+        let cacheURL = threadsCacheURL ?? Preferences.lastThreadsCacheURL
+        self.threadsCacheURL = cacheURL
+        self.threads = threads.isEmpty ? InboxViewModel.loadThreadCache(from: cacheURL) : threads
         self.folders = folders
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
@@ -453,6 +460,7 @@ final class InboxViewModel {
             liveMessages = liveMessages.filter { key, _ in live.contains(where: { $0.id == key }) }
 
             syncStatus = .live(at: Date())
+            saveThreadCache(threads)
 
             // Preload messages for the focused thread so the detail pane
             // is populated without a second permission round-trip.
@@ -749,6 +757,55 @@ final class InboxViewModel {
         if liveMessages[threadID] != nil { return }
         if let msgs = try? await imessage.messages(forThreadID: threadID, limit: 40) {
             liveMessages[threadID] = msgs
+        }
+    }
+
+    // MARK: - Thread list cache (REP-278)
+
+    /// Slim Codable projection of MessageThread. Only the fields needed for
+    /// cold-launch pre-population; heavy fields (contextSummary, etc.) are omitted.
+    private struct CachedThread: Codable {
+        let id: String
+        let displayName: String
+        let chatGUID: String?
+        let previewText: String
+        let channel: Channel
+        let isRead: Bool
+    }
+
+    private func saveThreadCache(_ threads: [MessageThread]) {
+        let payload = threads.map {
+            CachedThread(
+                id: $0.id,
+                displayName: $0.name,
+                chatGUID: $0.chatGUID,
+                previewText: $0.preview,
+                channel: $0.channel,
+                isRead: $0.unread == 0
+            )
+        }
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        let dir = threadsCacheURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: threadsCacheURL, options: .atomic)
+    }
+
+    private static func loadThreadCache(from url: URL) -> [MessageThread] {
+        guard let data = try? Data(contentsOf: url),
+              let cached = try? JSONDecoder().decode([CachedThread].self, from: data) else {
+            return []
+        }
+        return cached.map {
+            MessageThread(
+                id: $0.id,
+                channel: $0.channel,
+                name: $0.displayName,
+                avatar: String($0.displayName.prefix(1)),
+                preview: $0.previewText,
+                time: "",
+                unread: $0.isRead ? 0 : 1,
+                chatGUID: $0.chatGUID
+            )
         }
     }
 }

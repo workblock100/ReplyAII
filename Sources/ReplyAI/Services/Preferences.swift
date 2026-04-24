@@ -41,6 +41,18 @@ enum PreferenceDefaults {
     static let autoApplyRulesOnSync = true
 }
 
+/// File-system paths that ReplyAI reads or writes at runtime.
+/// Distinct from `PreferenceKey` (UserDefaults) — these are plain file URLs.
+enum Preferences {
+    /// JSON cache of the last-known thread list. Written after every successful
+    /// sync so InboxViewModel can show recognizable rows on cold launch even
+    /// when all channels fail to connect.
+    static var lastThreadsCacheURL: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return support.appendingPathComponent("ReplyAI/last-threads-cache.json")
+    }
+}
+
 extension UserDefaults {
     /// Seed every ReplyAI preference to its shipping default. Idempotent
     /// — `register(defaults:)` never overwrites a user-set value.
