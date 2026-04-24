@@ -1436,6 +1436,70 @@ final class RulesStoreConcurrencyTests: XCTestCase {
         XCTAssertEqual(store.rules.count, taskCount,
                        "All \(taskCount) concurrent adds must land — no rule silently dropped")
     }
+
+    // MARK: - REP-220: concurrent add + remove does not corrupt rules array
+
+    func testConcurrentAddRemoveNoCrash() async throws {
+        // Rapidly interleave 50 adds and 50 removes on the same store.
+        // RulesStore is @MainActor so tasks serialize through the main actor;
+        // this guards against any future regression that removes that isolation
+        // and introduces a real race between add() and remove().
+        let store = RulesStore(fileURL: tempRulesURL())
+        for rule in store.rules { store.remove(rule.id) }
+
+        var addedIDs: [UUID] = []
+        for i in 0..<50 {
+            let rule = SmartRule(name: "add-remove-\(i)", when: .senderIs("x\(i)"), then: .archive)
+            try? store.add(rule)
+            addedIDs.append(rule.id)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for id in addedIDs {
+                group.addTask { @MainActor in store.remove(id) }
+            }
+            for i in 50..<100 {
+                group.addTask { @MainActor in
+                    let rule = SmartRule(name: "refill-\(i)", when: .senderIs("y\(i)"), then: .pin)
+                    try? store.add(rule)
+                }
+            }
+        }
+        // Must not crash; final count must be non-negative.
+        XCTAssertGreaterThanOrEqual(store.rules.count, 0,
+                                    "Rules count must be ≥0 after concurrent add+remove")
+    }
+
+    func testConcurrentAddRemoveNoDuplicateIDs() async throws {
+        let store = RulesStore(fileURL: tempRulesURL())
+        for rule in store.rules { store.remove(rule.id) }
+
+        // Add 50 rules then concurrently remove half and add 25 new ones.
+        var firstBatch: [SmartRule] = []
+        for i in 0..<50 {
+            let rule = SmartRule(name: "batch-\(i)", when: .senderIs("s\(i)"), then: .archive)
+            try? store.add(rule)
+            firstBatch.append(rule)
+        }
+
+        let toRemove = Array(firstBatch.prefix(25))
+        await withTaskGroup(of: Void.self) { group in
+            for rule in toRemove {
+                group.addTask { @MainActor in store.remove(rule.id) }
+            }
+            for i in 50..<75 {
+                group.addTask { @MainActor in
+                    let r = SmartRule(name: "new-\(i)", when: .senderIs("n\(i)"), then: .pin)
+                    try? store.add(r)
+                }
+            }
+        }
+
+        let ids = store.rules.map(\.id)
+        let uniqueIDs = Set(ids)
+        XCTAssertEqual(ids.count, uniqueIDs.count,
+                       "No duplicate UUIDs must appear in rules after concurrent add+remove")
+    }
 }
 
 // MARK: - REP-116: hasUnread predicate
@@ -2143,5 +2207,53 @@ final class ValidateRegexBoundaryCasesTests: XCTestCase {
                 return
             }
         }
+    }
+}
+
+// MARK: - Predicate double-negation correctness (REP-208)
+
+final class DoubleNegationTests: XCTestCase {
+
+    private func aliceCtx() -> RuleContext {
+        RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "",
+            isUnread: false, senderKnown: true, chatIdentifier: "t-alice")
+    }
+
+    private func bobCtx() -> RuleContext {
+        RuleContext(
+            senderName: "Bob", senderHandle: "Bob",
+            channel: .imessage, lastMessageText: "",
+            isUnread: false, senderKnown: true, chatIdentifier: "t-bob")
+    }
+
+    /// `not(not(pred))` must evaluate to the same truth value as `pred` itself.
+    func testDoubleNegationMatchesWhenBaseMatches() {
+        let pred = RulePredicate.not(.not(.senderIs("Alice")))
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: aliceCtx()),
+                      "not(not(senderIs(Alice))) must match context where sender is Alice")
+    }
+
+    func testDoubleNegationMissesWhenBaseMisses() {
+        let pred = RulePredicate.not(.not(.senderIs("Alice")))
+        XCTAssertFalse(RuleEvaluator.matches(pred, in: bobCtx()),
+                       "not(not(senderIs(Alice))) must not match context where sender is Bob")
+    }
+
+    /// `not(not(not(pred)))` must equal `not(pred)` in both matching and non-matching cases.
+    func testTripleNegationInvertsBase() {
+        let base  = RulePredicate.senderIs("Alice")
+        let triple = RulePredicate.not(.not(.not(base)))
+        let single = RulePredicate.not(base)
+
+        XCTAssertEqual(
+            RuleEvaluator.matches(triple, in: aliceCtx()),
+            RuleEvaluator.matches(single, in: aliceCtx()),
+            "not(not(not(pred))) must equal not(pred) when predicate matches")
+        XCTAssertEqual(
+            RuleEvaluator.matches(triple, in: bobCtx()),
+            RuleEvaluator.matches(single, in: bobCtx()),
+            "not(not(not(pred))) must equal not(pred) when predicate does not match")
     }
 }

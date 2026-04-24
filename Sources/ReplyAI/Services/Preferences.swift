@@ -25,6 +25,11 @@ enum PreferenceKey {
     /// so the user doesn't see demo mode re-appear after a factory reset.
     static let demoModeActive = "pref.inbox.demoModeActive"
 
+    /// Per-channel on/off switches. iMessage defaults on; Slack defaults off until OAuth.
+    /// Both are wipe-eligible — factory reset should clear channel tokens and state.
+    static let iMessageEnabled = "pref.channels.iMessageEnabled"
+    static let slackEnabled    = "pref.channels.slackEnabled"
+
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
     static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive]
 }
@@ -45,6 +50,10 @@ enum PreferenceDefaults {
     static let autoApplyRulesOnSync = true
     /// Starts true on fresh install; cleared after first successful real sync.
     static let demoModeActive = true
+    /// iMessage channel enabled by default; opt-out via Settings.
+    static let iMessageEnabled = true
+    /// Slack channel disabled until the user completes OAuth.
+    static let slackEnabled    = false
 }
 
 /// File-system paths that ReplyAI reads or writes at runtime.
@@ -93,6 +102,8 @@ extension UserDefaults {
             PreferenceKey.autoPrime:            PreferenceDefaults.autoPrime,
             PreferenceKey.autoApplyRulesOnSync: PreferenceDefaults.autoApplyRulesOnSync,
             PreferenceKey.demoModeActive:       PreferenceDefaults.demoModeActive,
+            PreferenceKey.iMessageEnabled:      PreferenceDefaults.iMessageEnabled,
+            PreferenceKey.slackEnabled:         PreferenceDefaults.slackEnabled,
         ])
     }
 

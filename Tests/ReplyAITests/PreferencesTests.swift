@@ -267,6 +267,8 @@ final class PreferencesTests: XCTestCase {
             PreferenceKey.autoApplyRulesOnSync,
             PreferenceKey.launchCount,
             PreferenceKey.firstLaunchDate,
+            PreferenceKey.iMessageEnabled,
+            PreferenceKey.slackEnabled,
         ]
         let uniqueKeys = Set(knownKeys)
         XCTAssertEqual(
@@ -317,4 +319,30 @@ final class PreferencesTests: XCTestCase {
                        "value exactly at upper bound must pass through unchanged")
     }
 
+    // MARK: - Per-channel enable/disable keys (REP-231)
+
+    func testIMessageEnabledDefaultsToTrue() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.iMessageEnabled),
+                      "iMessage channel must be enabled by default")
+    }
+
+    func testSlackEnabledDefaultsToFalse() {
+        UserDefaults.registerReplyAIDefaults(in: defaults)
+        XCTAssertFalse(defaults.bool(forKey: PreferenceKey.slackEnabled),
+                       "Slack channel must be disabled until the user completes OAuth")
+    }
+
+    func testChannelKeysClearedOnWipe() {
+        defaults.set(true, forKey: PreferenceKey.iMessageEnabled)
+        defaults.set(true, forKey: PreferenceKey.slackEnabled)
+
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+
+        let domain = defaults.persistentDomain(forName: suiteName)
+        XCTAssertNil(domain?[PreferenceKey.iMessageEnabled],
+                     "iMessageEnabled must be cleared on factory wipe — it is not wipe-exempt")
+        XCTAssertNil(domain?[PreferenceKey.slackEnabled],
+                     "slackEnabled must be cleared on factory wipe — it is not wipe-exempt")
+    }
 }
