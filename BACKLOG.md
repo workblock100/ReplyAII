@@ -1416,8 +1416,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status:   in_progress
+- claimed_by: worker-2026-04-24-113000
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Replace implicit thread-count-based state detection with explicit `ViewState` enum: `case loading, populated, empty(EmptyReason), demo, error(Error)` where `EmptyReason: Equatable { case noMessages, noPermissions }`. `InboxViewModel.viewState: ViewState` is `@Published`. Transitions: on init → `.loading`; sync returns threads → `.populated`; sync returns [] with demo mode active → `.demo`; sync returns [] without demo → `.empty(.noMessages)`; sync throws `authorizationDenied` → `.empty(.noPermissions)`; sync throws other → `.error(error)`. Tests: each state transition tested with mock channel; `.loading` → `.populated` on sync; `.loading` → `.demo` when demoMode; `.empty(.noPermissions)` on auth-denied sync.
 - success_criteria:
