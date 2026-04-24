@@ -111,6 +111,10 @@ final class InboxViewModel {
     }
 
     private var imessage: ChannelService
+    /// All channel services queried by `syncAllChannels()`. Injectable for
+    /// test isolation; production defaults to `[imessage]` so the existing
+    /// iMessage path is included automatically.
+    var registeredChannels: [any ChannelService]
     let contacts: ContactsResolver
     private var watcher: ChatDBWatcher?
     let rules: RulesStore
@@ -165,6 +169,7 @@ final class InboxViewModel {
         folders: [Folder] = Fixtures.folders,
         channels: [Channel] = Fixtures.sidebarChannels,
         imessage: ChannelService? = nil,
+        registeredChannels: [any ChannelService]? = nil,
         contacts: ContactsResolver? = nil,
         rules: RulesStore? = nil,
         stats: Stats? = nil,
@@ -195,6 +200,7 @@ final class InboxViewModel {
         self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
             resolver.name(for: handle)
         })
+        self.registeredChannels = registeredChannels ?? [self.imessage]
         self.activationObserver = activationObserver
         activationObserver?.onMessagesActivated = { [weak self] in
             Task { @MainActor [weak self] in
@@ -570,6 +576,42 @@ final class InboxViewModel {
             syncStatus = .failed(error.localizedDescription)
             viewState = .error(error)
         }
+    }
+
+    /// Fetch threads from every registered channel concurrently, merge them
+    /// into a single deduplicated list, and return it sorted with pinned
+    /// threads first. One channel failing does not abort the others — its
+    /// error is logged and its contribution is treated as empty.
+    func syncAllChannels() async -> [MessageThread] {
+        let raw = defaults.integer(forKey: PreferenceKey.inboxThreadLimit)
+        let limit = max(1, raw == 0 ? PreferenceDefaults.inboxThreadLimit : raw)
+        let channels = registeredChannels
+
+        var batches: [[MessageThread]] = Array(repeating: [], count: channels.count)
+        await withTaskGroup(of: (Int, [MessageThread]).self) { group in
+            for (index, channel) in channels.enumerated() {
+                group.addTask {
+                    do {
+                        let result = try await channel.recentThreads(limit: limit)
+                        return (index, result)
+                    } catch {
+                        print("[syncAllChannels] channel \(index) failed: \(error)")
+                        return (index, [])
+                    }
+                }
+            }
+            for await (index, result) in group {
+                batches[index] = result
+            }
+        }
+
+        // Flatten in registration order so first-channel wins on duplicate threadID.
+        var seen = Set<String>()
+        let merged = batches.joined().filter { seen.insert($0.id).inserted }
+
+        // Pinned threads surface above unpinned; relative order within each
+        // group is preserved (channels return newest-first from their own APIs).
+        return merged.sorted { $0.pinned && !$1.pinned }
     }
 
     // MARK: - Rules on incoming
