@@ -6,6 +6,57 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-24 16:10 – 22:10 UTC (last ~6h) — ⭐⭐⭐
+
+**Rating: 3/5**
+
+Twenty-one commits (4 planner runs, 9 worker bookkeeping, 3 human infrastructure, 3 merger bails, 1 reviewer carry-in, 1 unattributed wip-log). **Zero worker code commits to main this window**, second consecutive window with no main-branch code delta — test count holds at 527 (`grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'` = 527, AGENTS.md line 116 matches). Zero banned-action violations: no `Package.swift` / `project.yml` / `Info.plist` / `*.entitlements` / `scripts/*` / `design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes. Pivot alignment remains strong — every new wip branch this window is non-FDA / channel-agnostic.
+
+**The headline is human infrastructure, not worker output.** Three high-quality human commits landed: `7f9b305` adds the long-requested `replyai-merger` agent (135-line prompt, 30-min cadence, oldest-first wip drain, fast-forward-only, banned-pattern + `swift test` + `./scripts/build.sh debug` gate, 13-min budget, cold-cache bail); `271af48` standardizes the "ReplyAI Automation" trailer across all four agent prompts, adds a planner failed-claim reset (>2h orphan rule that would have caught last window's REP-267), teaches the merger to archive 5-day-stale wip branches, and **promotes REP-285 (Package.swift MLX split) to P0** as the root fix for the cold-cache problem; `9f9732d` adds three new agent prompts (architect / polisher / operator, 265 lines combined) as foundation for future expansion. All three are doc-only — no code, no Package.swift, no entitlements, no scripts/*. ✓
+
+**The merger is here but not yet earning its keep.** It fired three times this window (`7990532`, `b1af1b1`, `7cb2c9d`) and bailed all three runs with `.build/` absent. Per its own protocol: correct behavior. Practical effect: zero merges, wip queue 27 → 33, and the bottleneck the last 4 reviews flagged is now mechanically un-stuck only after REP-285 lands. The merger is doing exactly what its spec says; the spec is doing exactly what the cold-cache reality forces.
+
+**Worker found a way to regress the backlog.** Claim commit `87f5001` (REP-208/224/231 claim) used a context-replace pattern that silently deleted REP-282/283/284/285 — four tasks the planner had added in run9 just 13 minutes earlier. Planner run10 caught and restored them, so blast radius was contained, but this is a real worker.prompt edge case. Claim commits are supposed to be additive; they should not be able to delete unrelated blocks. Worth a P0/S sharpening task in the next planner cycle.
+
+Three reasons the rating is 3 not 4:
+
+**1. Zero worker code commits to main for two consecutive windows.** Last window: 1 code commit. This window: 0. Net main-branch test count delta over 12 hours: 0. Workers are correctly pushing to wip per REP-271 protocol — they're not regressing — but the merger that should drain the queue is blocked on cold cache. The product is not getting closer to shippable on `main` even though five new wip branches contain real work this window.
+
+**2. Worker.prompt accidental-deletion regression.** The `87f5001` block-deletion bug is preventable with a worker.prompt requirement to `git diff --stat` before pushing a claim commit. Until that lands, this could happen again — and next time the planner might not catch it.
+
+**3. Wip queue at 33 branches, including 8 quality-* branches from 2026-04-21** that are now 3 days old. The 271af48 stale-archival mechanism will eventually prune these, but the queue is currently larger than any reviewer's active-context window. Operationally fragile.
+
+### Shipped this window (feature-level)
+
+- **replyai-merger agent (`7f9b305`).** New 30-min-cadence scheduled task that scans `wip/*` oldest-first, runs banned-pattern / `swift test` / debug-build, fast-forward-merges green branches to main, archives stale branches at 5 days. Companion to REP-271's wip-branch protocol — finally closes the producer/consumer loop. Currently blocked by cold cache; unblocks once REP-285 lands.
+- **Trailer standardization + failed-claim reset + MLX-seam P0 (`271af48`).** All four agent prompts (planner, worker, reviewer, merger) now use the canonical `Co-Authored-By: ReplyAI Automation <automation@replyai.co>` trailer. Planner gains an explicit "reset claims with no wip push after 2h" rule (would have caught last window's REP-267 orphan). Merger gains 5-day stale-branch archival. **REP-285 added as P0** — the root fix for everything else.
+- **Architect / polisher / operator agent foundations (`9f9732d`).** Three new prompts (architect 75 lines, polisher 76, operator 114) plus AUTOMATION.md update. Pure spec — no scheduled-task created yet, no behavior change. Foundation for the next phase of automation expansion.
+- **Five new wip branches** (REP-258+269 AccessibilityAPIReader + injectable IMessageSender retryDelay; REP-209+246+248+249 totalUnread + bulkArchiveRead + concurrent ContactsResolver; REP-208+220+231 per-channel Preferences keys + double-negation + concurrent RulesStore; REP-241 UNNotification parser; REP-244 syncAllChannels). All pivot-aligned, all unverified pending warm build.
+
+### Test coverage delta
+
+- **+0 tests on main** (527 → 527). Second consecutive window with no main-branch test-count change. Not from regression — from stalled merge pipeline.
+- **+~22 tests pending verification on wip branches** (estimated across the 5 new branches, per AGENTS.md "What's done" entries flagged "unverified pending warm build").
+- **Coverage gap**: nothing new emerged this window. The dominant gap is *verification*, not *coverage* — tests exist, they just haven't run against main.
+
+### Concerns
+
+- **Two consecutive windows with 0 worker code commits to main.** Wip-protocol is internally healthy but externally not delivering. If REP-285 doesn't land by next window, this becomes a sustained throughput crisis and the rating drops to ⭐⭐ on structural grounds (not worker fault).
+- **Worker accidentally deletes backlog blocks.** `87f5001` quietly removed REP-282/283/284/285. Planner recovered, but this needs a worker.prompt fix before it bites harder.
+- **Wip queue depth: 33** including 8 branches from 2026-04-21 that are now 3 days stale. Merger's 5-day archival rule will eventually prune them, but the queue is operationally untrackable today.
+- **REP-267 still orphaned** on a wip branch from last window. Merger should pick it up once cache warms; until then, 12+ hour claim → merge latency is the dominant cycle time.
+- **Planner model-pin drift, 7th consecutive window.** Planner commits still co-author `Claude Sonnet 4.6` against an Opus 4.7 + `effortLevel=high` policy. Cannot self-correct; needs a human settings.json edit.
+
+### Suggestions for next planner cycle
+
+- **REP-285 (MLX Package.swift split) is the only P0 that matters.** Every other P0 should be marked "blocked on REP-285" if it requires `swift test` to verify. Until the cold-cache problem is rooted out, the merger is a no-op and the wip queue grows without bound.
+- **Add P0/S: "worker.prompt: claim commits must be append-only."** Require `git diff --stat HEAD` inspection before push; reject any deletion of unrelated REP blocks. The 87f5001 regression is preventable in spec.
+- **Add P1/S: "warm-cache prefetch scheduled task."** Spec a separate task that runs `./scripts/build.sh debug` on a 2-hour cadence so the merger always finds a warm `.build/`. Bridge solution while REP-285 is in flight; not a replacement.
+- **Freeze new ticket creation until REP-285 lands.** Backlog is 98 active items. Adding more in this state is noise. Planner should focus exclusively on shepherding the 33 wip branches and the MLX P0.
+- **Wire one of the architect / polisher / operator prompts into a scheduled-task next planner cycle.** Three new agent prompts shipped this window with no production hookup. Either pick the highest-leverage one (operator, probably) and schedule it, or move the others to `.automation/draft/` so the directory reflects what's actually running.
+
+---
+
 ## Window 2026-04-24 10:10 – 16:10 UTC (last ~6h) — ⭐⭐⭐⭐
 
 **Rating: 4/5**
