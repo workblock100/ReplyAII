@@ -49,7 +49,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput — ESCALATED.** 22 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 7):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput — ESCALATED.** 23 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 8):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet), `wip/2026-04-24-152005-thread-cache` (REP-278, est. 536 tests, NEW this run). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met. 23 branches and growing.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
 - success_criteria:
   - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
   - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
@@ -122,8 +122,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-152005
+- blocker: code complete on wip/2026-04-24-152005-thread-cache (est. 531→536 tests, 5 new tests); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green; see REP-279 for human review task
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: app must show something useful when all channels fail at cold launch.** When FDA is denied, Automation is denied, and no Slack token exists, the inbox is blank. If a prior launch had real threads, persisting the thread list means the user sees recognizable conversation rows immediately, not a blank screen. After every successful `syncFromIMessage()` (or any channel sync) that returns ≥1 thread, JSON-serialize the thread list (fields: `id, displayName, chatGUID, previewText, channel, isRead`) to `~/Library/Application Support/ReplyAI/last-threads-cache.json`. On `InboxViewModel.init()`, if `threads.isEmpty`, read this file and populate `threads` from cache. Cache is only used as initial-state fill — any real sync result (even empty) replaces it. Cache entries do NOT carry `isDemoThread: true`; they are presented as-is. `Preferences.lastThreadsCacheURL: URL` is a computed property returning the cache path. Tests: successful sync → cache file written with correct JSON; cold-init with cache present → `threads` populated; second sync → cache updated; failed sync → existing in-memory threads unchanged (cache file unchanged); cache file absent at init → empty threads (no crash).
 - success_criteria:
@@ -270,6 +271,20 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - REP-243, REP-260, REP-261, REP-264 marked done
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` locally before and after merge; confirms 13 new tests appear.
+
+### REP-279 — human: review + merge wip/2026-04-24-152005-thread-cache (REP-278)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Worker-2026-04-24-152005 implemented REP-278 (InboxViewModel: persist thread list to disk for cold-launch resilience) but was blocked by MLX fresh-clone build time exceeding the 13-min budget. Implementation is complete on branch `wip/2026-04-24-152005-thread-cache` (est. 531→536 tests, 5 new tests: successful sync writes cache; cold-init from cache populates threads; second sync updates cache; failed sync leaves threads unchanged; missing cache at init is safe). Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm; (5) mark REP-278 done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-24-152005-thread-cache merged into main
+  - REP-278 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge to confirm baseline and pass; verifies 5 new tests appear.
 
 ### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
 - priority: P1
@@ -1372,13 +1387,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 3 new tests in `ChannelTests.swift`; no mocking needed — pure enum conformance.
 
 ### REP-244 — InboxViewModel: `syncAllChannels()` merges results from all registered ChannelServices
-- priority: P1
+- priority: P0
 - effort: M
 - ui_sensitive: false
 - status: open
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: **Pivot-aligned (multi-channel UX).** Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
+- scope: **Pivot P0: the multi-channel aggregation layer that makes alternative sources (AppleScript, Slack, notification-captured) appear alongside iMessage without FDA.** Without this, each channel must be queried independently and there is no unified thread list. Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
 - success_criteria:
   - `InboxViewModel.registeredChannels: [any ChannelService]` injectable property
   - `syncAllChannels() async -> [MessageThread]` — concurrent fetch, dedupe, sort
