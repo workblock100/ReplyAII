@@ -122,8 +122,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152005
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: app must show something useful when all channels fail at cold launch.** When FDA is denied, Automation is denied, and no Slack token exists, the inbox is blank. If a prior launch had real threads, persisting the thread list means the user sees recognizable conversation rows immediately, not a blank screen. After every successful `syncFromIMessage()` (or any channel sync) that returns ≥1 thread, JSON-serialize the thread list (fields: `id, displayName, chatGUID, previewText, channel, isRead`) to `~/Library/Application Support/ReplyAI/last-threads-cache.json`. On `InboxViewModel.init()`, if `threads.isEmpty`, read this file and populate `threads` from cache. Cache is only used as initial-state fill — any real sync result (even empty) replaces it. Cache entries do NOT carry `isDemoThread: true`; they are presented as-is. `Preferences.lastThreadsCacheURL: URL` is a computed property returning the cache path. Tests: successful sync → cache file written with correct JSON; cold-init with cache present → `threads` populated; second sync → cache updated; failed sync → existing in-memory threads unchanged (cache file unchanged); cache file absent at init → empty threads (no crash).
 - success_criteria:
