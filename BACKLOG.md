@@ -1106,8 +1106,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: When two threads share the same `lastMessageDate`, the sort should be stable (threads don't arbitrarily swap positions between syncs). Test: add threads A and B with identical timestamps; sync multiple times; assert A always appears before B (using thread IDs as tiebreaker or creation order). Unstable sort is user-visible as jumping rows in the thread list during live sync.
 - success_criteria:
@@ -1274,8 +1274,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-066 ships `DraftStore` and its scope explicitly states "InboxViewModel.selectThread seeds `userEdits` from the store before the LLM re-primes, so the composer is populated immediately on app open." There is no integration test pinning this end-to-end path. Test: write a draft string to an injected temp `DraftStore` for thread ID "T1"; construct an `InboxViewModel` with that DraftStore injected; call `selectThread` with a thread whose ID is "T1"; assert `viewModel.userEdits == <stored string>` before the LLM prime completes. Also: a thread with no stored draft leaves `userEdits` empty on select.
 - success_criteria:
@@ -1316,8 +1316,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-031 shipped `SmartRule.validateRegex(_:)` + `RulesStore.addValidating(_:)` + `RuleValidationError.invalidRegex`. These are correctness gates but coverage may be thin. Pin 4 boundary cases: (1) `"[invalid"` throws `.invalidRegex`; (2) `"^hello.*$"` is accepted (no throw); (3) `""` (empty pattern) is accepted — matches everything, which is intentional for "catch-all" rules; (4) `"(?P<name>x)"` (Python named group, unsupported in ICU) throws `.invalidRegex`. Guards the regex validation gate against silent bypass.
 - success_criteria:
@@ -1346,8 +1346,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-174 fixed `\n → \\n` escaping. Add a combined boundary test: a message containing `"line one\nline two\nbackslash: \\"` produces an AppleScript string literal where `\n` is escaped to `\\n` and `\\` is escaped to `\\\\`. Also: a message containing a tab character `\t` passes through unchanged (tabs are legal in AppleScript string literals). Uses the injectable `executeHook` seam to capture the constructed AppleScript string without executing it.
 - success_criteria:
