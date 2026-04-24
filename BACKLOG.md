@@ -49,7 +49,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput — ESCALATED.** 24 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 8):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet), `wip/2026-04-24-152005-thread-cache` (REP-278, est. 536 tests), `wip/2026-04-24-114653-slack-socket-client` (REP-267, NEWLY confirmed). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met. 24 branches and growing.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput — ESCALATED.** 27 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 9):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim only), `wip/2026-04-24-152005-thread-cache` (REP-278), `wip/2026-04-24-114653-slack-socket-client` (REP-267), `wip/2026-04-24-133823-inbox-bulk-filter` (REP-224/245/246/248 NEWLY confirmed), `wip/2026-04-24-163229-un-notification-parser` (REP-241 NEWLY confirmed), `wip/2026-04-24-170301-sync-all-channels` (REP-244 NEWLY confirmed). **Reviewer has flagged this for 5+ consecutive windows. 27 branches and growing.** Root structural fix: move MLX into a separate Swift product target so the test target does not link against it — see REP-285. Human should: (a) merge as many wip branches as possible immediately (each has human review REP); (b) implement REP-285 (Package.swift split) so future `swift test` completes in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls).
 - success_criteria:
   - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
   - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
@@ -302,6 +302,36 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No broken tests on main after merge
 - test_plan: Worker runs `swift test` on the target branch; all tests must pass before merge.
 
+### REP-284 — human: review + merge wip/2026-04-24-170301-sync-all-channels (REP-244)
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Worker-2026-04-24-170301 implemented REP-244 (`syncAllChannels()` multi-channel aggregator with `registeredChannels: [any ChannelService]` injectable array, concurrent fetch, threadID deduplication, sort by lastMessageDate, 4 tests) on `wip/2026-04-24-170301-sync-all-channels`. This is the pivot P0 aggregation layer — once merged, the app can show threads from iMessage, Slack, and AppleScript-fallback in a unified list without FDA. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-244 done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-24-170301-sync-all-channels merged into main
+  - REP-244 marked done
+  - `swift test` all green after merge
+  - Test count updated in AGENTS.md
+- test_plan: Human runs `swift test` locally before and after merge; confirms 4 new tests present.
+
+### REP-285 — human: split MLX into separate Swift product target to remove from test compilation
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Package.swift`, `Sources/ReplyAI/Services/MLXDraftService.swift`
+- scope: **Root structural fix for the 27-branch wip queue.** The 13-min worker budget is exceeded by every `swift test` run because MLX's C++ compilation is triggered for the test target. The fix: move `MLXDraftService.swift` into a separate Swift product (e.g. `ReplyAIMLX`) and exclude it from the `ReplyAITests` test target. Tests that currently mock `LLMService` via `StubLLMService` do not need MLX at all — they are blocked only because the test binary links against the MLX product. Post-split: `swift test` should complete in ~2–3 min (no C++ compilation). `swift build` of the full app still links MLX normally. Steps: (1) add a `ReplyAIMLX` library target in `Package.swift` containing only `MLXDraftService.swift`; (2) remove MLXDraftService from the main `ReplyAI` sources (or make it a dependency target); (3) ensure the main app still links `ReplyAIMLX`; (4) confirm `swift test` no longer triggers MLX compilation. This task REQUIRES Package.swift changes — planner normally bans these; human override required here because it is the root fix for the pipeline blocker. After completing, update AGENTS.md Gotchas with the new build structure.
+- success_criteria:
+  - `swift test` completes in <5 min on a cold machine with no prior `.build/` cache
+  - All 527+ tests pass after the split
+  - `./scripts/build.sh debug` still produces a working app with MLX enabled
+  - AGENTS.md Gotchas updated to reflect new target layout
+- test_plan: Human runs `swift test` before and after the split, measures wall-clock time; verifies test count unchanged.
+
 ### REP-281 — human: review + merge wip/2026-04-24-114653-slack-socket-client (REP-267)
 - priority: P1
 - effort: S
@@ -315,6 +345,34 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - REP-267 marked done
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` locally before and after merge.
+
+### REP-282 — human: review + merge wip/2026-04-24-133823-inbox-bulk-filter (REP-224/245/246/248)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Worker-2026-04-24-133823 implemented REP-224 (`bulkMarkAllRead()`), REP-245 (`filterByChannel(_:)` view-level filter), REP-246 (`totalUnreadCount: Int` computed property), and REP-248 (`bulkArchiveRead()`) bundled in a single commit on `wip/2026-04-24-133823-inbox-bulk-filter`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-224, REP-245, REP-246, REP-248 done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-24-133823-inbox-bulk-filter merged into main
+  - REP-224, REP-245, REP-246, REP-248 all marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge.
+
+### REP-283 — human: review + merge wip/2026-04-24-163229-un-notification-parser (REP-241)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Channels/UNNotificationContentParser.swift` (new), `Tests/ReplyAITests/UNNotificationContentParserTests.swift` (new)
+- scope: Worker-2026-04-24-163229 implemented REP-241 (`UNNotificationContentParser`: structured parser for iMessage notification payloads, 7 tests) on `wip/2026-04-24-163229-un-notification-parser`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-241 done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-24-163229-un-notification-parser merged into main
+  - REP-241 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge; confirms 7 new tests present.
 
 ### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
 - priority: P1
@@ -1287,8 +1345,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-133823
+- blocker: code complete on wip/2026-04-24-133823-inbox-bulk-filter (bundled with REP-245/246/248); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green; see REP-282 for human review task
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkMarkAllRead()` to `InboxViewModel` that iterates `threads` and sets `unread = 0` for each. Useful for a "Mark all read" menu action (UI wiring is separate, human-reviewed). Tests: start with 3 threads each with `unread > 0`; call `bulkMarkAllRead()`; assert all three have `unread == 0`; thread count unchanged.
 - success_criteria:
@@ -1422,8 +1481,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-170301
+- blocker: code complete on wip/2026-04-24-170301-sync-all-channels (+4 tests: merges, dedupes, partial-failure, empty-list); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green; see REP-284 for human review task
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: the multi-channel aggregation layer that makes alternative sources (AppleScript, Slack, notification-captured) appear alongside iMessage without FDA.** Without this, each channel must be queried independently and there is no unified thread list. Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
 - success_criteria:
@@ -1440,8 +1500,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-133823
+- blocker: code complete on wip/2026-04-24-133823-inbox-bulk-filter (bundled with REP-224/246/248); MLX build time exceeded 13-min budget; human reviews via REP-282
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `filterByChannel(_ channel: Channel?)` to `InboxViewModel`. When non-nil, sets `activeChannelFilter: Channel?` which causes `threads` computed property to return only threads matching that channel. When nil, returns all threads. Filter is view-level — underlying `_threads` array is unchanged. Tests: filter for `.iMessage` returns only iMessage threads; filter for `.slack` returns only Slack threads; nil filter returns all; setting filter does not mutate `_threads`; empty result when no threads match filter.
 - success_criteria:
@@ -1458,8 +1519,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-133823
+- blocker: code complete on wip/2026-04-24-133823-inbox-bulk-filter (bundled with REP-224/245/248); MLX build time exceeded 13-min budget; human reviews via REP-282
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `totalUnreadCount: Int` to `InboxViewModel` that sums `thread.unread` across all threads. Useful for the MenuBar badge (REP-044) and the sidebar header. Clamped to ≥0 (guard against hypothetical negative unread). Tests: no threads → 0; 3 threads with unread 2, 0, 5 → 7; all unread=0 → 0; single thread unread=1 → 1.
 - success_criteria:
@@ -1493,8 +1555,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-133823
+- blocker: code complete on wip/2026-04-24-133823-inbox-bulk-filter (bundled with REP-224/245/246); MLX build time exceeded 13-min budget; human reviews via REP-282
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkArchiveRead()` to `InboxViewModel` that calls `archive(_:)` on every thread where `thread.unread == 0`. Useful for a "Clear read" menu action (UI wiring is separate). Complements `bulkMarkAllRead()` (REP-224). Tests: 3 threads with unread 0 and 1 with unread 3 → 3 archived, 1 remains; all threads unread=0 → all archived, `threads` empty; no threads with unread=0 → no archives triggered, `threads` unchanged.
 - success_criteria:
