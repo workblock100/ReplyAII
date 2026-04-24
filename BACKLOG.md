@@ -96,27 +96,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing NotificationCoordinatorTests remain green
 - test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; injectable `MockUNUserNotificationCenter` that returns configured authorization status.
 
-### REP-263 — NotificationCoordinator: extract chatGUID from userInfo for thread deduplication
-- priority: P0
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-24-060000
-- files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: **Bug fix in shipped REP-235 path (no FDA required).** `applyIncomingNotification` in InboxViewModel (REP-235) creates a new thread entry for every incoming notification, even when a thread for that conversation already exists. Root cause: no chatGUID is threaded through, so ViewModel cannot match the notification to an existing thread. Fix: extract `chatGUID` from `content.userInfo["CKChatIdentifier"]` (primary) or `content.userInfo["CKChatGUID"]` (fallback) in `NotificationCoordinator.handleIncomingNotification`. Add `chatGUID: String?` parameter to `handleIncomingNotification` and to `InboxViewModel.applyIncomingNotification`. In ViewModel, when `chatGUID` non-nil and a matching thread exists, update that thread's `previewText` and increment `unread` instead of appending a new entry. When chatGUID is nil or no match, create a new thread as before. No FDA required — purely extends the shipped notification path.
-- success_criteria:
-  - `NotificationCoordinator.handleIncomingNotification` gains `chatGUID: String?` parameter
-  - `chatGUID` extracted from `content.userInfo["CKChatIdentifier"]` with fallback to `"CKChatGUID"`
-  - `InboxViewModel.applyIncomingNotification` gains `chatGUID: String?` parameter
-  - Matching by chatGUID updates existing thread (no duplicate appended)
-  - `testIncomingNotificationWithMatchingGUIDUpdatesExistingThread` — known GUID → thread count unchanged, previewText updated
-  - `testIncomingNotificationWithUnknownGUIDCreatesNewThread` — unknown GUID → thread count +1
-  - `testIncomingNotificationWithNilGUIDCreatesNewThread` — nil GUID → thread count +1 (backward-compatible)
-  - `testChatGUIDExtractedFromCKChatIdentifier` — primary key used when present
-  - `testChatGUIDFallsBackToCKChatGUID` — fallback key used when primary absent
-  - Existing NotificationCoordinatorTests and InboxViewModelTests remain green
-- test_plan: 5 new tests split across NotificationCoordinatorTests and InboxViewModelTests; use fabricated userInfo dicts + StaticMockChannel with pre-seeded threads.
-
 ### REP-266 — SlackOAuthFlow: complete OAuth2 orchestrator — LocalhostOAuthListener + token exchange + KeychainHelper
 - priority: P0
 - effort: M
@@ -1541,6 +1520,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-263 — NotificationCoordinator: extract chatGUID from userInfo for thread deduplication
+- status: done
+- claimed_by: worker-2026-04-24-060000
+- scope: `handleIncomingNotification` gains `chatGUID: String?` extracted from `content.userInfo["CKChatIdentifier"]` (fallback `"CKChatGUID"`). `InboxViewModel.applyIncomingNotification` matches by chatGUID when non-nil, updating existing thread's `previewText` and unread count instead of appending a duplicate. nil/unknown GUID falls back to senderHandle creation (backward-compatible). Commit `31534e1`. 516→521 tests (+5).
 
 ### REP-230 — LocalhostOAuthListener: injectable loopback handler for Slack OAuth
 - status: done

@@ -113,7 +113,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                516 tests
+Tests/ReplyAITests/                521 tests
 ```
 
 ## Architecture patterns
@@ -129,6 +129,7 @@ Tests/ReplyAITests/                516 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `31534e1` NotificationCoordinator/InboxViewModel: chatGUID extraction from `CKChatIdentifier`/`CKChatGUID` userInfo keys, thread deduplication in applyIncomingNotification (REP-263, worker-2026-04-24-060000, 516→521 tests)
 - `fbba843` LocalhostOAuthListener: NWListener-backed loopback HTTP server for OAuth callbacks, `actualPort`/`onReady` test hooks, `OAuthError` enum + 3 new tests; AGENTS.md sync (REP-230, REP-253, worker-2026-04-24-042000, 513→516 tests)
 - `b2af590` NotificationCoordinator passive incoming-message capture via willPresent + InboxViewModel applyIncomingNotification (REP-235, worker-2026-04-24-015900, 510→513 tests)
 - `c001d7e` KeychainHelper set/get/delete Keychain wrapper + SlackChannel ChannelService stub with token gate (REP-233, REP-234, worker-2026-04-23-171932, 502→510 tests)
