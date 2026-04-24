@@ -117,6 +117,27 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing NotificationCoordinatorTests and InboxViewModelTests remain green
 - test_plan: 5 new tests split across NotificationCoordinatorTests and InboxViewModelTests; use fabricated userInfo dicts + StaticMockChannel with pre-seeded threads.
 
+### REP-266 — SlackOAuthFlow: complete OAuth2 orchestrator — LocalhostOAuthListener + token exchange + KeychainHelper
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackOAuthFlow.swift` (new), `Tests/ReplyAITests/SlackOAuthFlowTests.swift` (new)
+- scope: **Pivot-aligned P0: first end-to-end non-iMessage channel path — no FDA required.** `LocalhostOAuthListener` (REP-230, shipped fbba843) handles the callback server. `KeychainHelper` (REP-233, shipped c001d7e) handles token storage. New `SlackOAuthFlow` orchestrates both: `authorize(clientID: String, clientSecret: String, completion: (Result<Void, OAuthError>) -> Void)` — (1) starts `LocalhostOAuthListener` on port 4242; (2) opens `https://slack.com/oauth/v2/authorize?client_id=<id>&scope=channels:read,chat:write&redirect_uri=http://localhost:4242/callback` via injectable `URLOpener` protocol (default: `NSWorkspace.shared.open`); (3) on `code` received, POSTs to `https://slack.com/api/oauth.v2.access` with `code + client_id + client_secret` via injectable `URLSession`; (4) parses `access_token` from JSON response; (5) stores via `KeychainHelper.set(value: token, for: "slack-access-token")`. `LocalhostOAuthListenerFactory: (port: UInt16, timeout: TimeInterval) -> LocalhostOAuthListener` injectable for tests. Tests: mock `URLOpener` captures constructed auth URL (assert clientID, scope, redirectURI params); mock listener factory delivers `code=testcode`; mock URLSession returns `{"ok":true,"access_token":"xoxb-test"}` → token stored in KeychainHelper; `{"ok":false}` response throws `OAuthError.tokenExchangeFailed`; listener timeout propagates as `OAuthError.timeout`.
+- success_criteria:
+  - `SlackOAuthFlow.authorize(clientID:clientSecret:completion:)` in new file
+  - Injectable `URLOpener` protocol (default `NSWorkspace.shared.open`)
+  - Injectable `URLSession` for token exchange POST
+  - Injectable `LocalhostOAuthListenerFactory` for test isolation
+  - `testSlackOAuthOpensCorrectAuthURL` — mock URLOpener captures URL with correct clientID + scope + redirectURI
+  - `testSlackOAuthExchangesCodeForToken` — mock listener delivers code → URLSession called with correct POST params
+  - `testSlackOAuthStoresTokenInKeychain` — successful exchange → `KeychainHelper.get("slack-access-token")` returns token
+  - `testSlackOAuthFailedExchangeThrows` — `{"ok":false}` → `OAuthError.tokenExchangeFailed`
+  - `testSlackOAuthListenerTimeoutPropagates` — listener timeout → `OAuthError.timeout`
+  - Existing tests remain green
+- test_plan: 5 new tests in `SlackOAuthFlowTests.swift`; inject mock `URLOpener`, listener factory, and `URLSession`; no real network or OS calls.
+
 
 ---
 
@@ -369,6 +390,27 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testMessagesActivationWeakCaptureNoCrashAfterDeinit` — observer fires after ViewModel deinited → no crash
   - Existing InboxViewModelTests remain green
 - test_plan: 3 new tests in `InboxViewModelTests.swift`; injectable mock observer that manually fires `onMessagesActivated`.
+
+### REP-267 — SlackSocketClient: injectable WebSocket wrapper for Slack Socket Mode real-time event stream
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
+- scope: **Pivot-aligned (real-time Slack updates without polling).** Slack Socket Mode pushes new messages over `wss://` WebSocket from a URL obtained via `apps.connections.open`. `SlackSocketClient(connectionURL: URL, urlSession: URLSession = .shared, reconnectDelay: TimeInterval = 5.0)`: `start()` creates `URLSessionWebSocketTask` and starts receiving. `stop()` cancels task. `onEventReceived: ((Data) -> Void)?` fires for each non-control frame. Envelope filter: silently drop `{"type":"ping"}` and `{"type":"hello"}`; forward only `{"type":"events_callback",...}`. Auto-reconnects up to 3 times on `.abnormalClosure` or `.goingAway` using injectable `reconnectDelay`. Tests: mock WebSocket task delivers `events_callback` message → `onEventReceived` called; `stop()` cancels task; abnormal close → reconnect attempted (count ≤3 with injected 0s delay); `hello` message → callback not fired; fourth disconnect after 3 reconnects → no further reconnect.
+- success_criteria:
+  - `SlackSocketClient(connectionURL:urlSession:reconnectDelay:)` in new file
+  - `start()` and `stop()` methods
+  - `onEventReceived: ((Data) -> Void)?` callback property
+  - Auto-reconnect up to 3 times after abnormal close
+  - `testSlackSocketClientDeliversEventCallbackToHandler` — `events_callback` message → `onEventReceived` fires
+  - `testSlackSocketClientStopCancelsTask` — `stop()` cancels WebSocket task
+  - `testSlackSocketClientReconnectsOnAbnormalClose` — abnormal close → reconnect attempted
+  - `testSlackSocketClientDropsHelloAndPingMessages` — `hello`/`ping` types not forwarded
+  - `testSlackSocketClientStopsReconnectAfterThreeAttempts` — 4th disconnect → no reconnect
+  - Existing tests remain green
+- test_plan: 5 new tests in `SlackSocketClientTests.swift`; use injectable `MockURLSession` with `MockWebSocketTask` that allows manual message delivery and close state control.
 
 
 ---
@@ -1179,7 +1221,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 4 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture with varied `associated_message_type` values.
 
 ### REP-239 — MessagesAppActivationObserver: notify when Messages.app becomes frontmost
-- priority: P2
+- priority: P1
 - effort: S
 - ui_sensitive: false
 - status: open
@@ -1445,7 +1487,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 3 new tests in `AccessibilityAPIReaderTests.swift`; mock `AXUIElementFactory` returning synthesized element trees with known `kAXTitleAttribute` values.
 
 ### REP-259 — Onboarding: "Limited mode" — graceful flow when all permissions denied
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: true
 - status: open
@@ -1459,6 +1501,39 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Dismissable "Limited Mode" banner in inbox when `demoModeActive == true`
   - Human reviews copy, CTA placement, and banner before merge
 - test_plan: Non-UI logic (setting `hasCompletedOnboarding`, checking `demoModeActive` for banner) extractable for unit tests in `InboxViewModelTests.swift`; human validates onboarding UX.
+
+### REP-268 — Preferences: `inbox.lastSyncDate: Date?` key — persist timestamp of last successful sync
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: InboxViewModel has no persistent record of when threads were last refreshed. Add `Preferences.inbox.lastSyncDate: Date?` (nil if never synced). `InboxViewModel.syncFromIMessage()` sets this to `Date()` on any successful sync returning ≥1 thread; `syncAllChannels()` (REP-244) will do the same. `wipe()` clears this key. Useful for a "Last synced N min ago" footer in SidebarView (UI wiring is separate). Tests: nil on fresh Preferences; set after successful sync returning threads; NOT updated when sync returns empty; cleared by wipe().
+- success_criteria:
+  - `Preferences.inbox.lastSyncDate: Date?` key implemented
+  - `InboxViewModel.syncFromIMessage()` sets key on sync returning ≥1 thread
+  - `testLastSyncDateNilBeforeFirstSync` — nil on fresh isolated UserDefaults
+  - `testLastSyncDateUpdatedAfterSuccessfulSync` — non-nil after sync returns threads
+  - `testLastSyncDateNotUpdatedOnEmptySync` — nil preserved when sync returns empty
+  - `testLastSyncDateClearedOnWipe` — wipe() resets to nil
+  - Existing PreferencesTests and InboxViewModelTests remain green
+- test_plan: 2 new tests in `PreferencesTests.swift` (nil/round-trip via isolated UserDefaults) + 2 in `InboxViewModelTests.swift` (sync path via `StaticMockChannel`).
+
+### REP-269 — IMessageSender: injectable `retryDelay: TimeInterval` for -1708 backoff — removes hardcoded sleep from test paths
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: REP-064 added -1708 error retry with a hardcoded sleep between attempts. This makes tests slow — each retry cycle pays real wall-clock time. Add `retryDelay: TimeInterval` to `IMessageSender.init(retryDelay: TimeInterval = 0.5)` and use `Thread.sleep(forTimeInterval: retryDelay)` in the retry path. Tests pass `retryDelay: 0.0` to run without sleep. No behavior change in production. Existing retry tests that construct `IMessageSender()` without an explicit `retryDelay` continue to use the 0.5s default; update the tests that exercise the retry path to use `retryDelay: 0` for speed.
+- success_criteria:
+  - `IMessageSender.init(retryDelay: TimeInterval = 0.5)` constructor parameter added
+  - Retry path uses injected delay
+  - `testRetryDelayZeroCompletesInstantly` — sender with `retryDelay: 0` completes retry in <100ms wall time
+  - Existing IMessageSenderTests remain green (retry tests updated to use `retryDelay: 0`)
+- test_plan: 1 new test in `IMessageSenderTests.swift`; update existing retry-path tests to use `retryDelay: 0`; no behavior change for production code.
 
 
 ## Done / archived
