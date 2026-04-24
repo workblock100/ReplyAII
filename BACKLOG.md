@@ -1240,7 +1240,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 4 new tests in `IMessageChannelTests.swift`; inject mock executor; no real AppleScript.
 
 ### REP-241 — UNNotificationContentParser: structured parser for iMessage notification payloads
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -1295,7 +1295,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 3 new tests in `ChannelTests.swift`; no mocking needed — pure enum conformance.
 
 ### REP-244 — InboxViewModel: `syncAllChannels()` merges results from all registered ChannelServices
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -1347,7 +1347,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 3 new tests in `InboxViewModelTests.swift` using `StaticMockChannel` with seeded threads.
 
 ### REP-247 — InboxViewModel: `ViewState` enum for loading/populated/demo/error states
-- priority: P2
+- priority: P0
 - effort: M
 - ui_sensitive: false
 - status: open
