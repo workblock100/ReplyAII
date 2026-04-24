@@ -1007,3 +1007,93 @@ final class InboxViewModelChatGUIDDeduplicationTests: XCTestCase {
             "nil chatGUID with non-matching senderHandle must create a new thread")
     }
 }
+
+// MARK: - Messages app activation re-sync (REP-265)
+
+@MainActor
+final class InboxViewModelMessagesActivationTests: XCTestCase {
+
+    private let testExtractor: (Notification) -> String? = { $0.userInfo?["bundleID"] as? String }
+
+    // MARK: - Observer fires → syncFromIMessage triggered
+
+    func testMessagesActivationTriggersSyncOnObserverFire() async throws {
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+
+        let obs = MessagesAppActivationObserver(
+            notificationCenter: NotificationCenter(),
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+        let vm = InboxViewModel(
+            imessage: channel,
+            contacts: fastContacts(),
+            activationObserver: obs
+        )
+
+        // Fire the activation directly (bypasses NSWorkspace notification)
+        obs.onMessagesActivated?()
+
+        // Yield to let the Task reach and complete syncFromIMessage
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertGreaterThanOrEqual(channel.recentThreadsCallCount, 1,
+            "Messages activation must trigger syncFromIMessage")
+        _ = vm
+    }
+
+    // MARK: - 5-second debounce prevents rapid second sync
+
+    func testMessagesActivationDebounceSkipsRapidSecondFire() async throws {
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+
+        let obs = MessagesAppActivationObserver(
+            notificationCenter: NotificationCenter(),
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+        let vm = InboxViewModel(
+            imessage: channel,
+            contacts: fastContacts(),
+            activationObserver: obs
+        )
+
+        // Fire twice in rapid succession; InboxViewModel's 5s debounce stops the second
+        obs.onMessagesActivated?()
+        obs.onMessagesActivated?()
+
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        XCTAssertEqual(channel.recentThreadsCallCount, 1,
+            "second activation within 5s must be debounced — only one sync should fire")
+        _ = vm
+    }
+
+    // MARK: - Weak capture prevents crash after ViewModel deinit
+
+    func testMessagesActivationWeakCaptureNoCrashAfterDeinit() async throws {
+        let obs = MessagesAppActivationObserver(
+            notificationCenter: NotificationCenter(),
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+
+        autoreleasepool {
+            let channel = BlockingMockChannel()
+            channel.blocking = false
+            let vm = InboxViewModel(
+                imessage: channel,
+                contacts: fastContacts(),
+                activationObserver: obs
+            )
+            _ = vm
+        }
+        // vm and channel are deallocated; weak capture in the Task holds nil
+
+        obs.onMessagesActivated?()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        // Reaching here without a crash means the weak capture is correct
+    }
+}

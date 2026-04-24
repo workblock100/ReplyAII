@@ -118,6 +118,14 @@ final class InboxViewModel {
     /// can drive a spinner; only InboxViewModel mutates it.
     private(set) var isSyncing: Bool = false
 
+    /// Fires a re-sync when Messages.app becomes frontmost. Nil disables
+    /// the feature (default in tests that don't inject an observer).
+    @ObservationIgnored private var activationObserver: MessagesAppActivationObserver?
+
+    /// Timestamp of the last `handleMessagesActivation` call. Guards against
+    /// rapid re-syncs when the user switches to Messages repeatedly.
+    @ObservationIgnored private var lastActivationDate: Date?
+
     init(
         threads: [MessageThread] = Fixtures.threads,
         folders: [Folder] = Fixtures.folders,
@@ -127,7 +135,8 @@ final class InboxViewModel {
         rules: RulesStore? = nil,
         stats: Stats? = nil,
         defaults: UserDefaults = .standard,
-        searchIndex: SearchIndex? = nil
+        searchIndex: SearchIndex? = nil,
+        activationObserver: MessagesAppActivationObserver? = nil
     ) {
         self.searchIndex = searchIndex ?? SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())
         self.defaults = defaults
@@ -149,6 +158,12 @@ final class InboxViewModel {
         self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
             resolver.name(for: handle)
         })
+        self.activationObserver = activationObserver
+        activationObserver?.onMessagesActivated = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.handleMessagesActivation()
+            }
+        }
         startObservingRules()
         startObservingNotificationReply()
     }
@@ -641,6 +656,19 @@ final class InboxViewModel {
         }
         w.start()
         watcher = w
+    }
+
+    // MARK: - Messages app activation re-sync (REP-265)
+
+    /// Triggered when Messages.app becomes frontmost. Calls `syncFromIMessage()`
+    /// with a 5-second debounce so rapid app-switching doesn't pile up syncs.
+    func handleMessagesActivation() async {
+        let now = Date()
+        if let last = lastActivationDate, now.timeIntervalSince(last) < 5.0 {
+            return
+        }
+        lastActivationDate = now
+        await syncFromIMessage()
     }
 
     // MARK: - Sending

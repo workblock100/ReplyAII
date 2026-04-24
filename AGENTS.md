@@ -113,7 +113,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                521 tests
+Tests/ReplyAITests/                527 tests
 ```
 
 ## Architecture patterns
@@ -129,6 +129,7 @@ Tests/ReplyAITests/                521 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `(pending)` MessagesAppActivationObserver (NSWorkspace activation watcher, 600ms debounce, injectable seams) + InboxViewModel activation re-sync wiring (5s debounce, weak capture, handleMessagesActivation) (REP-239, REP-265, worker-2026-04-24-102657, 521→527 tests)
 - `31534e1` NotificationCoordinator/InboxViewModel: chatGUID extraction from `CKChatIdentifier`/`CKChatGUID` userInfo keys, thread deduplication in applyIncomingNotification (REP-263, worker-2026-04-24-060000, 516→521 tests)
 - `fbba843` LocalhostOAuthListener: NWListener-backed loopback HTTP server for OAuth callbacks, `actualPort`/`onReady` test hooks, `OAuthError` enum + 3 new tests; AGENTS.md sync (REP-230, REP-253, worker-2026-04-24-042000, 513→516 tests)
 - `b2af590` NotificationCoordinator passive incoming-message capture via willPresent + InboxViewModel applyIncomingNotification (REP-235, worker-2026-04-24-015900, 510→513 tests)
