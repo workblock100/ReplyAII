@@ -49,11 +49,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput.** Three consecutive wip branches (wip/130000-thread-name-regex, wip/135355-bundle, wip/145504-demo-mode, wip/161500-demo-mode) are stuck because `swift test` on a fresh clone exceeds the 13-min worker budget. Root cause: mlx-swift-lm, swift-transformers, and swift-syntax macro compilation must re-download and re-compile from scratch on every worker run (no build artifact cache). The automation model costs escalate and pivot deliverables (especially REP-228 demo mode) can't land on main. Human should investigate: (a) GitHub Actions / CI artifact caching for `.build/` directory across worker runs; (b) pre-built `swift test` artifact in a separate GitHub Actions job that the worker can pull before testing; (c) or bump the worker prompt's budget hint so it parks MLX-requiring tasks to background compile while shipping non-MLX tasks. At minimum, the human should locally run `swift test` for each of the 4 stuck wip branches and merge if green. Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput.** 7 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is piling up. **All 7 pending wip branches as of 2026-04-24:** `wip/2026-04-23-085959-stats-session-acceptance` (REP-200, covers REP-135/177/179/183/187), `wip/2026-04-23-130000-thread-name-regex` (REP-217, covers REP-129), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236, covers REP-229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (covers REP-237+REP-238), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255). Additionally, the 8 quality/* branches from 2026-04-21 (REP-016, REP-017, REP-048) remain unmerged. Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close any duplicate wip branches (pick 1 of the 2 REP-228 impls). Document the structural fix chosen in AGENTS.md.
 - success_criteria:
   - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
   - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
-  - All 4 current stuck wip branches manually reviewed and either merged or closed
+  - All 7 current stuck wip branches manually reviewed and either merged or closed
   - Reviewer confirms throughput improved in next 6h window
 - test_plan: Human runs `swift test` locally to baseline build time; implements fix; verifies subsequent worker run can complete `swift test` within budget.
 
@@ -242,6 +242,41 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `testDeleteAllOnEmptyKeychainIsNoop` — no crash on empty keychain
   - Existing KeychainHelperTests remain green (depends on REP-233)
 - test_plan: 3 new tests in `KeychainHelperTests.swift`; uses same injectable service as REP-233.
+
+### REP-256 — TelegramChannel: ChannelService conformance stub with bot token gate
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new)
+- scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-233/234 for Telegram. `TelegramChannel: ChannelService` in a new file. `channel` property returns `.telegram` (requires REP-243 adds the case, or add the case here). Injectable `KeychainHelper(service: "ReplyAI-Telegram")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no bot token present; `openReadOnly()` no-ops or returns quickly. `send()` throws `ChannelError.unsupported` (Telegram send via Bot API comes in a follow-up). Tests: no token → `authorizationDenied`; token present → empty `[]` (stub, no real fetch); `channel` property returns `.telegram`.
+- success_criteria:
+  - `TelegramChannel: ChannelService` in new file
+  - `recentThreads()` throws `authorizationDenied` when `KeychainHelper.get("telegram-bot-token")` returns nil
+  - `testTelegramChannelThrowsWhenNoToken` — no Keychain entry → `authorizationDenied`
+  - `testTelegramChannelReturnsEmptyWithToken` — token present → `[]` (stub)
+  - `testTelegramChannelPropertyReturnsTelegram` — `channel == .telegram`
+  - Existing tests remain green
+- test_plan: 3 new tests in `TelegramChannelTests.swift`; injectable `KeychainHelper` with test-scoped service name.
+
+### REP-257 — SlackChannel: `messagesForThread(threadID:limit:)` via `conversations.history`
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
+- scope: **Pivot-aligned (Slack first-class, prereq: REP-237 + REP-242).** After `recentThreads()` populates the thread list, the inbox needs to fetch message history for a selected thread. Implement `SlackChannel.messagesForThread(threadID: String, limit: Int) async throws -> [Message]` using `SlackHTTPClient` (REP-237): `GET api/conversations.history?channel=<threadID>&limit=<limit>`. Parse `messages[]` array — each item has `text`, `user`, `ts` (Unix timestamp as string). Build `Message` with `body: text`, `sender: user`, `sentAt: Date(timeIntervalSince1970: Double(ts))`, `channel: .slack`. Tests: mock client returning 3-message history JSON → `[Message]` with correct fields; empty messages array → `[]`; `ts` string parses to correct Date; no token → `authorizationDenied`; HTTP error → `ChannelError.networkError`.
+- success_criteria:
+  - `SlackChannel.messagesForThread(threadID:limit:) async throws -> [Message]` implemented
+  - Injectable `SlackHTTPClient` (same seam as `recentThreads`)
+  - `testSlackMessagesForThreadParsesHistoryResponse` — 3-message JSON → `[Message]`
+  - `testSlackMessagesForThreadEmptyHistoryReturnsEmpty` — empty messages array → `[]`
+  - `testSlackMessagesForThreadTimestampParsedCorrectly` — `ts` string → correct `Date`
+  - `testSlackMessagesForThreadNoTokenThrows` — no Keychain token → `authorizationDenied`
+  - Existing SlackChannelTests remain green
+- test_plan: 4 new tests in `SlackChannelTests.swift`; mock `SlackHTTPClient` returns configured JSON Data.
 
 
 ---
@@ -856,8 +891,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: blocked
 - claimed_by: null
+- blocker: Implementation complete on wip/2026-04-23-191507-appleScript-fallback (REP-236, +228 LOC, 4 tests). Worker must NOT re-implement — check if REP-236's wip branch merged first; if so, mark this done. If not merged, this task is waiting on human swift test + merge (REP-254).
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift` (or new `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift`), `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned (alt message-source).** Add `AppleScriptMessageReader.recentChats() -> [MessageThread]` that executes `tell application "Messages" to get every chat` via `NSAppleScript`. Returns a `[MessageThread]` with display name, chat GUID, and a placeholder `previewText` (AppleScript can retrieve `every text chat` with `name` and `id` but not full message history — that's OK for the thread list). No FDA required — uses Automation permission. `IMessageChannel.recentThreads()` uses this as a fallback when `openReadOnly()` fails with `authorizationDenied`. Tests use injectable AppleScript executor (same seam as `IMessageSender`).
 - success_criteria:
@@ -1282,13 +1318,13 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `SearchIndexTests.swift`; use in-memory FTS5 with threads having controlled term frequencies.
 
 ### REP-253 — AGENTS.md: update "What's still stubbed" and "What's done" sections
-- priority: P2
+- priority: P1
 - effort: S
 - ui_sensitive: false
 - status: open
 - claimed_by: null
 - files_to_touch: `AGENTS.md`
-- scope: **Docs-only.** Update `AGENTS.md` to reflect current automation state: (1) Remove `UNNotification inline reply` from "What's still stubbed" — resolved via REP-072 / commit `bbedd1a`. (2) Update Slack status in "What's still stubbed" to note REP-233/234 (KeychainHelper + SlackChannel stub) are in-progress. (3) Add `AppleScriptMessageReader` to "What's still stubbed" noting REP-236 is the implementation task. (4) Update test count in repo layout header from 502 to match current `grep -c "func test" Tests/ReplyAITests/*.swift` (should still be 502 if no new tests merged). Worker should run the grep to get exact count before committing.
+- scope: **Docs-only — auto-merge eligible.** Update `AGENTS.md` to reflect current automation state: (1) Remove `UNNotification inline reply` from "What's still stubbed" — resolved via REP-072 / commit `bbedd1a`. (2) Update Slack status in "What's still stubbed" to note REP-233/234 (KeychainHelper + SlackChannel stub) are shipped and next steps are REP-230/237/242. (3) `AppleScriptMessageReader` — note wip/2026-04-23-191507-appleScript-fallback has complete implementation; pending human merge. (4) Add `NotificationCoordinator requestPermissionIfNeeded` stub to "What's still stubbed" (REP-255 wip pending merge). (5) Run `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'` to get current test count and update the repo layout header. Planner has already updated 502→510 but the wip branches add more. Worker should not run `swift test` — docs-only, just grep and update text.
 - success_criteria:
   - `UNNotification inline reply` removed from "What's still stubbed" section
   - Slack stub status updated to reflect REP-233/234 progress
@@ -1296,6 +1332,39 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Test count in header verified by grep and updated if stale
   - No architecture or gotchas sections modified (planner ban)
 - test_plan: N/A (docs-only). Worker verifies via `grep -c "func test" Tests/ReplyAITests/*.swift` before committing.
+
+### REP-258 — AccessibilityAPIReader: read Messages.app conversation list via NSAccessibilityElement
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new)
+- scope: **Pivot-aligned (alt message-source, no FDA required — uses Accessibility permission).** `AccessibilityAPIReader.conversationNames() -> [String]` walks the `AXUIElement` hierarchy of the `com.apple.MobileSMS` process to find conversation names listed in the sidebar. Injectable `AXUIElementFactory` protocol for test isolation (default uses real `AXUIElementCreateApplication`). Returns `[]` gracefully when Accessibility permission not granted (check `AXIsProcessTrusted()` before walking). Tests: mock element tree returns 3 conversation names → `[String]` with correct values; Accessibility not trusted → returns `[]` without crash; empty sidebar → `[]`; injectable factory captures the target PID for assertion.
+- success_criteria:
+  - `AccessibilityAPIReader.conversationNames() -> [String]` with injectable `AXUIElementFactory`
+  - Returns `[]` when `AXIsProcessTrusted()` is false (no crash, no permission dialog)
+  - `testAccessibilityReaderReturnsConversationNames` — mock element tree → correct names
+  - `testAccessibilityReaderReturnsEmptyWhenNotTrusted` — not trusted → `[]`
+  - `testAccessibilityReaderReturnsEmptyOnEmptySidebar` — empty element tree → `[]`
+  - Existing tests remain green
+- test_plan: 3 new tests in `AccessibilityAPIReaderTests.swift`; mock `AXUIElementFactory` returning synthesized element trees with known `kAXTitleAttribute` values.
+
+### REP-259 — Onboarding: "Limited mode" — graceful flow when all permissions denied
+- priority: P2
+- effort: M
+- ui_sensitive: true
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Screens/Onboarding/` (existing screens), `Sources/ReplyAI/Inbox/InboxViewModel.swift`
+- scope: **Pivot-aligned (UX — app must be useful with zero permissions).** When the user completes onboarding without granting FDA, Notifications, or Contacts, the app currently shows a broken or empty state. Add a "Limited mode" path: if `Preferences.demoModeActive == true` after onboarding, the onboarding completion screen shows a "Continue in Limited Mode" CTA instead of the primary "Set up iMessage" path. Tapping it sets `Preferences.hasCompletedOnboarding = true` and opens the inbox in demo mode. A dismissable banner in the inbox ("You're in Limited Mode — grant permissions to see real conversations") points to Settings. This is UI-sensitive; worker pushes to `wip/` branch for human copy + layout review. Prereq: REP-228 (demo mode fixtures) should be merged before this ships.
+- success_criteria:
+  - `wip/` branch with onboarding changes
+  - "Continue in Limited Mode" CTA visible on permission-denied onboarding state
+  - `Preferences.hasCompletedOnboarding: Bool` key (if not already present) set on CTA tap
+  - Dismissable "Limited Mode" banner in inbox when `demoModeActive == true`
+  - Human reviews copy, CTA placement, and banner before merge
+- test_plan: Non-UI logic (setting `hasCompletedOnboarding`, checking `demoModeActive` for banner) extractable for unit tests in `InboxViewModelTests.swift`; human validates onboarding UX.
 
 
 ## Done / archived
