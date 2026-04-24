@@ -410,6 +410,57 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing tests remain green
 - test_plan: 5 new tests in `SlackSocketClientTests.swift`; use injectable `MockURLSession` with `MockWebSocketTask` that allows manual message delivery and close state control.
 
+### REP-272 — SlackChannel: `authorize(clientID:clientSecret:completion:)` wiring to SlackOAuthFlow
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Tests/ReplyAITests/SlackChannelTests.swift`
+- scope: **Pivot-aligned (Slack first-class — prereq: REP-266 merged).** `SlackChannel` currently throws `authorizationDenied` for all calls when no token present. Add `authorize(clientID: String, clientSecret: String, completion: @escaping (Result<Void, OAuthError>) -> Void)` that delegates to a `SlackOAuthFlow` instance. Injectable `SlackOAuthFlowFactory: (String, String) -> SlackOAuthFlow` for test isolation. On success: token now in Keychain, completion called with `.success(())`; subsequent `recentThreads()` calls return real data. On failure: completion called with `.failure(error)`. Idempotent: a second `authorize` call while one is in-flight invokes the completion via the existing flow (no double-listener bind). Tests: factory called with correct `clientID` + `clientSecret`; success completion called when flow returns success; failure completion called when flow returns failure.
+- success_criteria:
+  - `SlackChannel.authorize(clientID:clientSecret:completion:)` method added
+  - Injectable `SlackOAuthFlowFactory` protocol for test isolation
+  - `testAuthorizeCallsOAuthFlowWithCorrectCredentials` — factory receives correct clientID + clientSecret
+  - `testAuthorizeSuccessCompletionCalled` — flow success → completion `.success`
+  - `testAuthorizeFailureCompletionCalled` — flow failure → completion `.failure`
+  - Existing SlackChannelTests remain green
+- test_plan: 3 new tests in `SlackChannelTests.swift`; inject mock `SlackOAuthFlowFactory` delivering configured results.
+
+### REP-273 — Settings: Slack "Connect Workspace" button — UI trigger for SlackChannel.authorize()
+- priority: P1
+- effort: M
+- ui_sensitive: true
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Screens/Settings/` (existing settings screens), `Sources/ReplyAI/Channels/SlackChannel.swift`
+- scope: **Pivot-aligned (Slack UX, prereq: REP-272).** Add a "Channels" section to the Settings screen. The Slack row shows "Connect Workspace" button when no token is stored; shows "Connected: <workspace name>" + a "Disconnect" button when connected (workspace name from `SlackTokenStore`, REP-274). Tapping "Connect Workspace" calls `SlackChannel.authorize(clientID:clientSecret:)` — credentials from `Preferences.slack.clientID/clientSecret` (hard-coded constants for now, Preferences keys in a follow-up). Shows a progress spinner during OAuth. Shows an inline error label on failure with a retry option. UI-sensitive → worker pushes to `wip/` branch. Human reviews layout and copy. Non-UI state transitions (connected/disconnected/loading/error) should be testable via an extracted ViewModel property.
+- success_criteria:
+  - `wip/` branch with Slack row in Settings channels section
+  - "Connect Workspace" button visible when `SlackTokenStore.get() == nil`
+  - "Connected: <name>" + "Disconnect" when token present
+  - Loading indicator during OAuth flow
+  - Inline error state with retry
+  - Human reviews copy and layout before merge
+- test_plan: Non-UI ViewModel state transitions (connected/disconnected/loading/error) extracted to unit tests; human validates UX in the preview.
+
+### REP-274 — SlackTokenStore: structured Keychain wrapper for Slack access token + workspace name
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (extends REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift`
+- scope: **Pivot-aligned (Slack token management, prereq: REP-233).** The Slack OAuth `v2.access` response includes both `access_token` and `team.name` (workspace name for display). Storing only the token (as REP-266/272 currently does via raw `KeychainHelper.set`) loses the workspace name needed for Settings UI (REP-273). Add `struct SlackTokenStore` (in `KeychainHelper.swift` or a adjacent file): `set(token: String, workspaceName: String)` JSON-encodes and stores under `"slack-access-token"` key; `get() -> (token: String, workspaceName: String)?` retrieves and decodes; `delete()` removes the entry. `SlackOAuthFlow` (REP-266) and `SlackChannel.authorize()` (REP-272) should be updated to use `SlackTokenStore.set(...)` instead of raw `KeychainHelper.set`. Tests: round-trip through set/get preserves both fields; delete removes entry; missing entry returns nil; malformed JSON stored returns nil gracefully.
+- success_criteria:
+  - `SlackTokenStore.set(token:workspaceName:)`, `get()`, `delete()` implemented
+  - `testSlackTokenStoreRoundTrip` — set then get returns same token + workspaceName
+  - `testSlackTokenStoreDeleteRemovesEntry` — delete → get returns nil
+  - `testSlackTokenStoreMissingEntryReturnsNil` — no prior set → nil
+  - `testSlackTokenStoreMalformedJSONReturnsNil` — corrupt stored blob → nil, no crash
+  - Existing KeychainHelperTests remain green
+- test_plan: 4 new tests in `KeychainHelperTests.swift`; use injectable `KeychainHelper` with test-scoped service name.
+
 
 ---
 
