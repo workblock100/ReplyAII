@@ -1612,8 +1612,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-161734
 - files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source, no FDA required — uses Accessibility permission).** `AccessibilityAPIReader.conversationNames() -> [String]` walks the `AXUIElement` hierarchy of the `com.apple.MobileSMS` process to find conversation names listed in the sidebar. Injectable `AXUIElementFactory` protocol for test isolation (default uses real `AXUIElementCreateApplication`). Returns `[]` gracefully when Accessibility permission not granted (check `AXIsProcessTrusted()` before walking). Tests: mock element tree returns 3 conversation names → `[String]` with correct values; Accessibility not trusted → returns `[]` without crash; empty sidebar → `[]`; injectable factory captures the target PID for assertion.
 - success_criteria:
@@ -1663,8 +1663,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-161734
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added -1708 error retry with a hardcoded sleep between attempts. This makes tests slow — each retry cycle pays real wall-clock time. Add `retryDelay: TimeInterval` to `IMessageSender.init(retryDelay: TimeInterval = 0.5)` and use `Thread.sleep(forTimeInterval: retryDelay)` in the retry path. Tests pass `retryDelay: 0.0` to run without sleep. No behavior change in production. Existing retry tests that construct `IMessageSender()` without an explicit `retryDelay` continue to use the 0.5s default; update the tests that exercise the retry path to use `retryDelay: 0` for speed.
 - success_criteria:
