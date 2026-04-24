@@ -1002,7 +1002,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-24-042000
 - files_to_touch: `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift` (new), `Tests/ReplyAITests/LocalhostOAuthListenerTests.swift` (new)
 - scope: **Pivot-aligned (Slack first).** Building block for REP-010 (Slack OAuth). Extract the loopback listener into a standalone `LocalhostOAuthListener` that: (1) binds an `NWListener` on `127.0.0.1:4242`; (2) resolves a `code` query parameter from the first incoming callback URL; (3) calls a completion handler with `code: String` and shuts down the listener. Injectable port and timeout (`default: 120s`). Tests verify: valid callback URL returns the `code`; timeout fires completion with `OAuthError.timeout`; double-start is a no-op. No Slack-specific logic here — just the reusable plumbing.
@@ -1415,7 +1415,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-24-042000
 - files_to_touch: `AGENTS.md`
 - scope: **Docs-only — auto-merge eligible.** Update `AGENTS.md` to reflect current automation state: (1) Remove `UNNotification inline reply` from "What's still stubbed" — resolved via REP-072 / commit `bbedd1a`. (2) Update Slack status in "What's still stubbed" to note REP-233/234 (KeychainHelper + SlackChannel stub) are shipped and next steps are REP-230/237/242. (3) `AppleScriptMessageReader` — note wip/2026-04-23-191507-appleScript-fallback has complete implementation; pending human merge. (4) Add `NotificationCoordinator requestPermissionIfNeeded` stub to "What's still stubbed" (REP-255 wip pending merge). (5) Run `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'` to get current test count and update the repo layout header. Planner has already updated 502→510 but the wip branches add more. Worker should not run `swift test` — docs-only, just grep and update text.
@@ -1462,6 +1462,16 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-230 — LocalhostOAuthListener: injectable loopback handler for Slack OAuth
+- status: done
+- claimed_by: worker-2026-04-24-042000
+- scope: New `LocalhostOAuthListener` in `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift`. Binds `NWListener` on `127.0.0.1` (port 0 for tests, 4242 default), resolves `code` query param from first GET callback, fires completion exactly once. `isRunning` flag guards double-start. `actualPort` + `onReady` callback for test synchronization. `OAuthError.timeout` and `OAuthError.listenerFailed`. 3 new tests in `LocalhostOAuthListenerTests.swift`. 513→516 tests.
+
+### REP-253 — AGENTS.md: update "What's still stubbed" and "What's done" sections
+- status: done
+- claimed_by: worker-2026-04-24-042000
+- scope: Docs-only. Updated test count 513→516. Fixed REP-235 commit hash TBD→`b2af590`. Updated Slack "still stubbed" note to reflect REP-233/234 shipped and REP-230 in progress. Added `NotificationCoordinator requestPermissionIfNeeded` stub note (REP-255 on wip branch). Bundled with REP-230 commit.
 
 ### REP-235 — NotificationCoordinator: passive capture of incoming message metadata without FDA
 - status: done
