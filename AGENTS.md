@@ -295,7 +295,8 @@ Pinned in `Package.swift`:
 
 - Present tense, lowercase first letter, terse noun-phrase title.
 - Body explains the *why*, not the *what* — readers can `git diff` for the what.
-- Every commit includes `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`; if you're Codex, sub in your own trailer.
+- **Automation commits** (planner, worker, merger, reviewer) use the fixed trailer `Co-Authored-By: ReplyAI Automation <automation@replyai.co>` regardless of underlying model. Do not substitute model-specific names — that just creates drift flags every time Anthropic rotates the provisioned model.
+- **Human-driven commits** include `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`; if you're Codex, sub in your own trailer.
 - Never force-push. Never `git amend` after pushing. Separate commits per logical change.
 
 ## When you're stuck

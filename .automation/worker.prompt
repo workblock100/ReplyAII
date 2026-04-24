@@ -50,7 +50,7 @@ If you're about to implement `chat.db`, `ChatDBWatcher`, `AttributedBodyDecoder`
 11. Commit to `main` with project style:
     - Title: present tense, lowercase first letter, terse noun phrase
     - Body: the WHY, not the WHAT. Readers can `git diff` for the what.
-    - Trailer: `Co-Authored-By: Claude Autonomous Worker <automation@replyai.co>`
+    - Trailer (exact string, regardless of which model you are): `Co-Authored-By: ReplyAI Automation <automation@replyai.co>`
 12. `git push origin main`.
 
 ## Time budget: 13 minutes (hard cap — 2 min buffer before next 15-min fire)

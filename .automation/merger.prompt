@@ -27,7 +27,12 @@ Think step-by-step. Be paranoid about safety. A bad merge can revert the worker'
 
 6. For each wip branch, in order, while total elapsed runtime < 10 min:
 
-   **A. Age check.** If the branch's latest commit is older than 5 days, log it as `stale` and skip. A separate human-review task can clean up stales.
+   **A. Age check.** If the branch's latest commit is older than 5 days, archive it and continue:
+   ```bash
+   git push origin origin/<branch>:refs/heads/archive/<branch>
+   git push origin --delete <branch>
+   ```
+   Log as `reason: stale-archived`. Archive branches are retrievable via `git checkout origin/archive/<name>` but don't clutter the active `wip/*` namespace or the merger's per-fire iteration list.
 
    **B. Checkout:**
    ```bash
@@ -98,10 +103,15 @@ Think step-by-step. Be paranoid about safety. A bad merge can revert the worker'
    - Runtime used
    - Wip queue depth remaining after run
 
-8. Commit only the log and push:
+8. Commit only the log and push. Include the trailer (exact string, regardless of which model you are): `Co-Authored-By: ReplyAI Automation <automation@replyai.co>`.
    ```bash
    git add .automation/logs/
-   git commit -m "merge: YYYY-MM-DD-HHMM (<N> merged, <M> skipped, <X> wip remaining)"
+   git commit -m "$(cat <<EOF
+merge: YYYY-MM-DD-HHMM (<N> merged, <M> skipped, <X> wip remaining)
+
+Co-Authored-By: ReplyAI Automation <automation@replyai.co>
+EOF
+)"
    git pull --rebase origin main
    git push origin main
    ```

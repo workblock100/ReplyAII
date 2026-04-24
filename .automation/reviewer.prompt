@@ -60,6 +60,7 @@ You never modify code. You only write docs.
    - The worker's protocol checks for `STOP AUTO-MERGE` before doing anything — this freezes main-branch automation until the human clears it.
 8. Write `.automation/logs/review-YYYY-MM-DD-HHMM.md` with the raw audit notes you used to reach your rating. Include the star rating as a machine-readable frontmatter line (e.g. `stars: 3`) so future reviewer runs can cheaply detect the 4-window regression pattern.
 9. Commit: `review: window YYYY-MM-DD HH:MM (<N> commits, <stars>/5)`
+   Trailer (exact string, regardless of which model you are): `Co-Authored-By: ReplyAI Automation <automation@replyai.co>`
 10. `git push origin main`.
 
 ## Writing-only whitelist

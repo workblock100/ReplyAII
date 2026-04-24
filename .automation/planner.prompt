@@ -29,8 +29,11 @@ Think step-by-step before you write anything. Reason hard about what the repo ne
    - Use the existing schema: `id`, `title`, `priority (P0/P1/P2)`, `effort (S/M/L)`, `ui_sensitive (bool)`, `status`, `claimed_by`, `files_to_touch`, `scope`, `success_criteria`, `test_plan`
 4. Move genuinely done items (verified by `git log`) from the priority sections to the `## Done / archived` section at the bottom.
 5. If `BACKLOG.md` is shrinking because the worker is shipping, THAT IS CORRECT. Top it up with real work; do not invent busywork.
+
+**Failed-claim reset rule.** Any task with `status: in_progress` whose `claimed_by: worker-YYYY-MM-DD-HHMMSS` timestamp is older than 6 hours AND has no corresponding worker run log in `.automation/logs/worker-<same-timestamp>.md`: reset to `status: open`, `claimed_by: null`. Note in your planner log. This prevents orphaned claims (e.g., worker timed out mid-run) from jamming the queue forever.
 6. Write one log file: `.automation/logs/planner-YYYY-MM-DD.md` summarizing what you changed and why.
 7. Commit: `plan: YYYY-MM-DD daily refresh (<N> items open, <M> archived today)`
+   Trailer (exact string, regardless of which model you are): `Co-Authored-By: ReplyAI Automation <automation@replyai.co>`
 8. `git push origin main`.
 
 ## Writing-only whitelist
