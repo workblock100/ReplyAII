@@ -302,6 +302,20 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - No broken tests on main after merge
 - test_plan: Worker runs `swift test` on the target branch; all tests must pass before merge.
 
+### REP-286 — human: review + merge wip/2026-04-24-143143-prefs-channels-negation-concurrent (REP-231+208+220)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/RulesTests.swift`
+- scope: Worker-2026-04-24-143143 implemented REP-231 (per-channel enable/disable Preference keys for iMessage and Slack), REP-208 (double-negation predicate correctness tests), and REP-220 (concurrent add+remove RulesStore correctness tests) on `wip/2026-04-24-143143-prefs-channels-negation-concurrent`. Bundled into one commit (+195 LOC, 8 tests). MLX fresh-clone build time exceeded budget. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-231, REP-208, REP-220 done.
+- success_criteria:
+  - wip/2026-04-24-143143-prefs-channels-negation-concurrent merged into main
+  - REP-231, REP-208, REP-220 all marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally; confirms 8 new tests appear.
+
 ### REP-281 — human: review + merge wip/2026-04-24-114653-slack-socket-client (REP-267)
 - priority: P1
 - effort: S
@@ -1035,8 +1049,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-143143
+- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: Verify predicate composition correctness: `not(not(senderIs("Alice")))` must match when `senderIs("Alice")` matches, and must not match when it doesn't. Test with two base predicates (a matching and a non-matching context). Also test: `not(not(not(pred)))` inverts correctly (equals `not(pred)`). Guards the `not` composition against a double-negation cancellation bug in the evaluator.
 - success_criteria:
@@ -1185,8 +1200,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-143143
+- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: **Pivot-aligned (channel architecture).** Add three Preferences keys: `pref.channels.iMessageEnabled: Bool` (default `true`), `pref.channels.slackEnabled: Bool` (default `false`), `pref.channels.demoModeActive: Bool` (alias of `Preferences.demoModeActive` from REP-228, or consolidate here). These are the channel-level on/off switches that `InboxViewModel.syncFromIMessage` and future `SlackChannel.recentThreads` will check before attempting a sync. Tests: default values; round-trip through UserDefaults; wipe behavior (channels.* keys are NOT wipe-exempt — privacy reset clears channel tokens).
 - success_criteria:
@@ -1228,8 +1244,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-143143
+- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore` uses `Locked<T>` for thread-safety. Pin correctness under concurrent writes: `DispatchQueue.concurrentPerform(iterations: 50)` alternately calls `add(_:)` and `remove(ruleID:)` on the same store. After completion, assert: no crash, `rules.count ≥ 0`, no duplicate IDs. Guards against a race where a `Locked<T>` scope is held across an add while a concurrent remove modifies a different index.
 - success_criteria:
