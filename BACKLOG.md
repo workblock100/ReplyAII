@@ -49,7 +49,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput — ESCALATED.** 23 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 8):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet), `wip/2026-04-24-152005-thread-cache` (REP-278, est. 536 tests, NEW this run). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met. 23 branches and growing.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput — ESCALATED.** 24 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 8):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet), `wip/2026-04-24-152005-thread-cache` (REP-278, est. 536 tests), `wip/2026-04-24-114653-slack-socket-client` (REP-267, NEWLY confirmed). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met. 24 branches and growing.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
 - success_criteria:
   - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
   - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
@@ -286,6 +286,36 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` locally before and after merge to confirm baseline and pass; verifies 5 new tests appear.
 
+### REP-280 — warm-build wip-drain: run `swift test` on oldest open wip/* branch and merge if green
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: whichever `wip/*` branch is oldest and still referenced in BACKLOG as `status: blocked`
+- scope: **Structural unblock for the entire wip backlog.** Worker MUST check that `.build/` is fresh (<6 hours old via `find .build -maxdepth 0 -mmin -360`) BEFORE claiming this task. If `.build/` is absent or stale, skip this task entirely — `swift test` will time out. If `.build/` IS fresh: (1) run `git stash` to save current state; (2) `git fetch origin && git checkout <oldest-blocked-wip-branch>`; (3) `swift test 2>&1 | tail -20`; (4) if all tests green, `git checkout main && git merge --no-ff <branch> && git push origin main`; (5) update BACKLOG.md: mark the corresponding REP as done; (6) update AGENTS.md: update test count and mark the REP as shipped. If tests fail: push a `fix-wip:<branch>` commit to the wip branch with the minimal fix, then re-run. Do not merge a failing branch. Priority order for wip branches: `wip/2026-04-23-085959-stats-session-acceptance` (oldest), then `wip/2026-04-23-130000-thread-name-regex`, then `wip/2026-04-23-145504-demo-mode` (pick one REP-228 impl, close the other), and so on in chronological order. Skip `wip/quality-*` branches (those need human review per REP-016/017/048).
+- success_criteria:
+  - `.build/` fresh check passes before any test run
+  - At least 1 wip branch merged to main
+  - Corresponding BACKLOG task(s) marked done
+  - AGENTS.md test count updated to reflect merged tests
+  - No broken tests on main after merge
+- test_plan: Worker runs `swift test` on the target branch; all tests must pass before merge.
+
+### REP-281 — human: review + merge wip/2026-04-24-114653-slack-socket-client (REP-267)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
+- scope: Worker-2026-04-24-114653 implemented REP-267 (SlackSocketClient: injectable WebSocket wrapper for Slack Socket Mode). Implementation complete on `wip/2026-04-24-114653-slack-socket-client`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-267 done in BACKLOG.
+- success_criteria:
+  - wip/2026-04-24-114653-slack-socket-client merged into main
+  - REP-267 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge.
+
 ### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
 - priority: P1
 - effort: S
@@ -436,8 +466,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-114653
+- blocker: code complete on wip/2026-04-24-114653-slack-socket-client; MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
 - scope: **Pivot-aligned (real-time Slack updates without polling).** Slack Socket Mode pushes new messages over `wss://` WebSocket from a URL obtained via `apps.connections.open`. `SlackSocketClient(connectionURL: URL, urlSession: URLSession = .shared, reconnectDelay: TimeInterval = 5.0)`: `start()` creates `URLSessionWebSocketTask` and starts receiving. `stop()` cancels task. `onEventReceived: ((Data) -> Void)?` fires for each non-control frame. Envelope filter: silently drop `{"type":"ping"}` and `{"type":"hello"}`; forward only `{"type":"events_callback",...}`. Auto-reconnects up to 3 times on `.abnormalClosure` or `.goingAway` using injectable `reconnectDelay`. Tests: mock WebSocket task delivers `events_callback` message → `onEventReceived` called; `stop()` cancels task; abnormal close → reconnect attempted (count ≤3 with injected 0s delay); `hello` message → callback not fired; fourth disconnect after 3 reconnects → no further reconnect.
 - success_criteria:

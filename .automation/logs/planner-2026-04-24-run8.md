@@ -1,13 +1,15 @@
 # Planner Run — 2026-04-24 run 8
 
-**Status**: completed  
+**Status**: completed (with addendum after push rebase)  
 **Model**: claude-sonnet-4-6 (minimum spec; preferred is Opus 4.7 — model drift persists, 5th consecutive window)  
 **Open before this run**: ~66 worker-actionable (post-run7 state)  
-**Open after this run**: ~67 (0 archived, 1 new task added, 3 status/priority changes)  
+**Open after this run**: ~69 (0 archived, 3 new tasks added, 4 status/priority changes)  
 **Archived today**: 0 (no substantive commits to main since run7)  
-**New tasks added**: 1 (REP-279)  
+**New tasks added**: 3 (REP-279, REP-280, REP-281)  
 **Priority upgrades**: 1 (REP-244 P1→P0)  
-**Status updates**: 2 (REP-278 in_progress→blocked, REP-254 wip count 22→23)
+**Status updates**: 3 (REP-278 in_progress→blocked, REP-267 in_progress→blocked, REP-254 wip count 22→24)
+
+**Addendum (post-push rebase)**: Push was rejected — reviewer commit `20623d6` and worker commit `f0c4cb6` arrived during planner run. After rebase onto remote, additional corrections applied: REP-267 updated to `status: blocked` (wip/2026-04-24-114653-slack-socket-client confirmed in AGENTS.md update `f0c4cb6`). REP-280 (warm-build wip-drain P0) added per reviewer window `20623d6` suggestion. REP-281 (human review REP-267 wip) added. REP-254 wip count updated to 24.
 
 ---
 
