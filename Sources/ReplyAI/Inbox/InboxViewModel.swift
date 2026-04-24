@@ -294,11 +294,23 @@ final class InboxViewModel {
     /// arrives. Creates a new lightweight thread entry or refreshes the preview of
     /// an existing one. Only acts when chat.db is unavailable — when live, the
     /// FSEvents watcher already handles updates.
-    func applyIncomingNotification(senderHandle: String, preview: String) {
+    ///
+    /// `chatGUID` — extracted from `CKChatIdentifier`/`CKChatGUID` userInfo keys —
+    /// enables exact thread matching so the same conversation doesn't accumulate
+    /// duplicate entries when multiple notifications arrive before a chat.db sync.
+    func applyIncomingNotification(senderHandle: String, preview: String, chatGUID: String? = nil) {
         guard !chatDBAvailable else { return }
-        if let idx = threads.firstIndex(where: {
-            ($0.chatGUID?.hasSuffix(senderHandle) == true) || $0.name == senderHandle
-        }) {
+        // Prefer exact chatGUID match when available; the senderHandle suffix heuristic
+        // is kept as a fallback for notifications that omit the CK keys.
+        let matchIndex: Int?
+        if let guid = chatGUID {
+            matchIndex = threads.firstIndex(where: { $0.chatGUID == guid })
+        } else {
+            matchIndex = threads.firstIndex(where: {
+                ($0.chatGUID?.hasSuffix(senderHandle) == true) || $0.name == senderHandle
+            })
+        }
+        if let idx = matchIndex {
             let t = threads[idx]
             threads[idx] = MessageThread(
                 id: t.id, channel: t.channel, name: t.name, avatar: t.avatar,

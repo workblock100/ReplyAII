@@ -100,7 +100,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
 - claimed_by: worker-2026-04-24-060000
 - files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Bug fix in shipped REP-235 path (no FDA required).** `applyIncomingNotification` in InboxViewModel (REP-235) creates a new thread entry for every incoming notification, even when a thread for that conversation already exists. Root cause: no chatGUID is threaded through, so ViewModel cannot match the notification to an existing thread. Fix: extract `chatGUID` from `content.userInfo["CKChatIdentifier"]` (primary) or `content.userInfo["CKChatGUID"]` (fallback) in `NotificationCoordinator.handleIncomingNotification`. Add `chatGUID: String?` parameter to `handleIncomingNotification` and to `InboxViewModel.applyIncomingNotification`. In ViewModel, when `chatGUID` non-nil and a matching thread exists, update that thread's `previewText` and increment `unread` instead of appending a new entry. When chatGUID is nil or no match, create a new thread as before. No FDA required — purely extends the shipped notification path.

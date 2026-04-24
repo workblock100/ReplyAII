@@ -98,12 +98,21 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     /// notifications (those are handled by handleReply). Fires onIncomingMessage
     /// and forwards to inbox so it can refresh-or-create a thread entry.
     ///
+    /// `chatGUID` — extracted from `userInfo["CKChatIdentifier"]` (primary) or
+    /// `userInfo["CKChatGUID"]` (fallback) — lets InboxViewModel match the
+    /// notification to an existing thread instead of always creating a new one.
+    ///
     /// Exposed internally so tests can drive it without constructing a real
     /// UNNotification (which has no public initializer).
-    func handleIncomingNotification(categoryID: String, senderHandle: String, preview: String) {
+    func handleIncomingNotification(
+        categoryID: String,
+        senderHandle: String,
+        preview: String,
+        chatGUID: String? = nil
+    ) {
         guard categoryID != Self.categoryID else { return }
         onIncomingMessage?(senderHandle, preview)
-        inbox?.applyIncomingNotification(senderHandle: senderHandle, preview: preview)
+        inbox?.applyIncomingNotification(senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -132,8 +141,12 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         // Prefer the explicit sender key iMessage/CKSenderID sets; fall back to title.
         let senderHandle = content.userInfo["sender"] as? String ?? content.title
         let preview = content.body
+        // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
+        // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
+        let chatGUID = content.userInfo["CKChatIdentifier"] as? String
+            ?? content.userInfo["CKChatGUID"] as? String
         Task { @MainActor in
-            self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview)
+            self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
         }
         completionHandler([.banner, .sound])
     }

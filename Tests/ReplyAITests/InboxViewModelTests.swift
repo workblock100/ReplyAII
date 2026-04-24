@@ -946,3 +946,64 @@ final class InboxViewModelIsSyncingTests: XCTestCase {
         XCTAssertFalse(vm.isSyncing, "isSyncing must be false after sync throws an error")
     }
 }
+
+// MARK: - REP-263: applyIncomingNotification chatGUID deduplication
+
+@MainActor
+final class InboxViewModelChatGUIDDeduplicationTests: XCTestCase {
+
+    private func makeVM(threads: [MessageThread]) -> InboxViewModel {
+        let ch = BlockingMockChannel()
+        ch.blocking = false
+        return InboxViewModel(threads: threads, imessage: ch, contacts: fastContacts())
+    }
+
+    func testIncomingNotificationWithMatchingGUIDUpdatesExistingThread() {
+        let guid = "iMessage;+;chat5555"
+        let vm = makeVM(threads: [
+            MessageThread(id: "t1", channel: .imessage, name: "Carol",
+                          avatar: "C", preview: "old text", time: "08:00",
+                          chatGUID: guid)
+        ])
+
+        vm.applyIncomingNotification(senderHandle: "+15550001111", preview: "New message", chatGUID: guid)
+
+        XCTAssertEqual(vm.threads.count, 1,
+            "thread count must stay 1 when chatGUID matches existing thread")
+        XCTAssertEqual(vm.threads.first?.preview, "New message",
+            "existing thread previewText must be updated")
+        XCTAssertEqual(vm.threads.first?.unread, 1,
+            "unread count must increment by 1 on match")
+    }
+
+    func testIncomingNotificationWithUnknownGUIDCreatesNewThread() {
+        let vm = makeVM(threads: [
+            MessageThread(id: "t2", channel: .imessage, name: "Dave",
+                          avatar: "D", preview: "hi", time: "09:00",
+                          chatGUID: "iMessage;+;chat9999")
+        ])
+
+        vm.applyIncomingNotification(
+            senderHandle: "+15552223333",
+            preview: "Hello from unknown",
+            chatGUID: "iMessage;+;chatAAAA"   // does not match any seeded thread
+        )
+
+        XCTAssertEqual(vm.threads.count, 2,
+            "unknown chatGUID must create a new thread entry")
+    }
+
+    func testIncomingNotificationWithNilGUIDCreatesNewThread() {
+        let vm = makeVM(threads: [
+            MessageThread(id: "t3", channel: .imessage, name: "Eve",
+                          avatar: "E", preview: "hey", time: "10:00",
+                          chatGUID: "iMessage;+;chat1234")
+        ])
+
+        // nil chatGUID → fall back to senderHandle heuristic; senderHandle doesn't match name/GUID
+        vm.applyIncomingNotification(senderHandle: "+19990001111", preview: "Surprise", chatGUID: nil)
+
+        XCTAssertEqual(vm.threads.count, 2,
+            "nil chatGUID with non-matching senderHandle must create a new thread")
+    }
+}

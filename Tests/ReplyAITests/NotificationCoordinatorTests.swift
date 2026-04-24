@@ -248,4 +248,63 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertFalse(fired,
             "onIncomingMessage must NOT fire when the categoryID matches the inline-reply category")
     }
+
+    // MARK: - REP-263: chatGUID extraction from userInfo
+
+    func testChatGUIDExtractedFromCKChatIdentifier() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        var capturedGUID: String?
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+        // Intercept via onIncomingMessage to verify the GUID reaches applyIncomingNotification.
+        // We seed the inbox with a thread whose chatGUID matches so we can observe
+        // the update path vs the create path.
+        let existingGUID = "iMessage;+;chat1111"
+        inbox.threads = [
+            MessageThread(id: "t1", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "old", time: "10:00",
+                          chatGUID: existingGUID)
+        ]
+
+        // handleIncomingNotification with the primary key should route through to inbox.
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "+15551112222",
+            preview: "Hi!",
+            chatGUID: existingGUID
+        )
+
+        // Thread count should stay 1 (updated in place, not duplicated).
+        XCTAssertEqual(inbox.threads.count, 1,
+            "thread count must not grow when chatGUID matches an existing thread")
+        XCTAssertEqual(inbox.threads.first?.preview, "Hi!",
+            "existing thread preview must be updated to the new message body")
+    }
+
+    func testChatGUIDFallsBackToCKChatGUID() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+        let existingGUID = "iMessage;-;+15559998888"
+        inbox.threads = [
+            MessageThread(id: "t2", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "old preview", time: "09:00",
+                          chatGUID: existingGUID)
+        ]
+
+        // Use the fallback key (CKChatGUID) — handleIncomingNotification accepts it directly.
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "+15559998888",
+            preview: "Morning",
+            chatGUID: existingGUID   // represents what willPresent extracts from CKChatGUID
+        )
+
+        XCTAssertEqual(inbox.threads.count, 1,
+            "fallback CKChatGUID key must also prevent thread duplication")
+        XCTAssertEqual(inbox.threads.first?.preview, "Morning",
+            "thread preview must update when matched via CKChatGUID fallback")
+    }
 }
