@@ -247,8 +247,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-230824
 - files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-233/234 for Telegram. `TelegramChannel: ChannelService` in a new file. `channel` property returns `.telegram` (requires REP-243 adds the case, or add the case here). Injectable `KeychainHelper(service: "ReplyAI-Telegram")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no bot token present; `openReadOnly()` no-ops or returns quickly. `send()` throws `ChannelError.unsupported` (Telegram send via Bot API comes in a follow-up). Tests: no token → `authorizationDenied`; token present → empty `[]` (stub, no real fetch); `channel` property returns `.telegram`.
 - success_criteria:
@@ -732,8 +732,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-230824
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: Index threads A ("hello world"), B ("hello swift"), C ("goodbye world"). Call `delete(threadID: B)`. Run 3 queries: "hello" (previously returned A+B → should now return only A); "swift" (previously returned B → should return empty); "goodbye" (should still return C unchanged). Guards against FTS5 soft-delete / rowid-reuse scenarios where a deleted thread resurfaces.
 - success_criteria:
@@ -747,8 +747,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-23-230824
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: Build a list of 5 messages where combined length exceeds the 2000-char budget. Verify drop-oldest semantics: `message[0]` (oldest, first in array) must not appear in the built prompt; `message[4]` (newest) must appear. Also test: with exactly 2000 chars of messages (at budget boundary), all 5 messages survive. This pins the truncation direction so a future refactor can't accidentally flip to drop-newest.
 - success_criteria:
