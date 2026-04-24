@@ -129,7 +129,7 @@ Tests/ReplyAITests/                516 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `2f6402a` LocalhostOAuthListener: NWListener-backed loopback HTTP server for OAuth callbacks, `actualPort`/`onReady` test hooks, `OAuthError` enum + 3 new tests; AGENTS.md sync (REP-230, REP-253, worker-2026-04-24-042000, 513→516 tests)
+- `fbba843` LocalhostOAuthListener: NWListener-backed loopback HTTP server for OAuth callbacks, `actualPort`/`onReady` test hooks, `OAuthError` enum + 3 new tests; AGENTS.md sync (REP-230, REP-253, worker-2026-04-24-042000, 513→516 tests)
 - `b2af590` NotificationCoordinator passive incoming-message capture via willPresent + InboxViewModel applyIncomingNotification (REP-235, worker-2026-04-24-015900, 510→513 tests)
 - `c001d7e` KeychainHelper set/get/delete Keychain wrapper + SlackChannel ChannelService stub with token gate (REP-233, REP-234, worker-2026-04-23-171932, 502→510 tests)
 - `43d735b` FTS5 snippet extraction (SearchResult type + snippet() col-3 wiring), concurrent-prime stress test, insertion-order disk round-trip, error→idle state transition (REP-067, REP-169, REP-188, REP-189, worker-2026-04-23-111853, 493→502 tests)
@@ -208,7 +208,7 @@ Commits (newest first; run `git log` for detail):
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
 - ~~**UNNotification inline reply.**~~ Resolved: `InboxViewModel` observes `pendingNotificationReply` via `NotificationCoordinator` callback, looks up the thread by ID, calls `IMessageSender.send(text:toChatGUID:)`, then clears the pending state. Unknown thread IDs are logged and discarded without crash (REP-072, commit `bbedd1a`). Test coverage: 2 cases in `InboxViewModelTests.swift`.
-- **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists. `SlackChannel` stub + `KeychainHelper` shipped (REP-233, REP-234, commit `c001d7e`) — Slack throws `authorizationDenied` until OAuth token present. `LocalhostOAuthListener` (REP-230) in progress (worker-2026-04-24-042000). Next: `SlackHTTPClient` (REP-237, complete on `wip/2026-04-23-200831-slack-http-keychain-deleteall`, pending human merge), then real `conversations.list` fetch (REP-242). WhatsApp/Teams/Telegram remain unstarted.
+- **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists. `SlackChannel` stub + `KeychainHelper` shipped (REP-233, REP-234, commit `c001d7e`) — Slack throws `authorizationDenied` until OAuth token present. `LocalhostOAuthListener` shipped (REP-230, commit `fbba843`). Next: `SlackHTTPClient` (REP-237, complete on `wip/2026-04-23-200831-slack-http-keychain-deleteall`, pending human merge), then real `conversations.list` fetch (REP-242). WhatsApp/Teams/Telegram remain unstarted.
 - **AppleScript message-source fallback**. `AppleScriptMessageReader.recentChats()` implementation complete on `wip/2026-04-23-191507-appleScript-fallback` (REP-236, +4 tests). Pending human `swift test` + merge. No FDA required — uses Automation permission.
 - **NotificationCoordinator `requestPermissionIfNeeded`**. Authorization request on startup (REP-255) implementation complete on `wip/2026-04-24-005143-rep255-notification-permission`. Pending human `swift test` + merge.
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
