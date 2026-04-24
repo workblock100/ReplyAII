@@ -77,6 +77,24 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageChannelTests remain green
 - test_plan: 4 new tests in `IMessageChannelTests.swift`; injectable executor returns either structured data or throws without executing real AppleScript.
 
+### REP-255 — NotificationCoordinator: request UNUserNotificationCenter authorization on startup
+- priority: P0
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
+- scope: **Pivot-aligned P0 (enables notification-based thread capture without FDA).** `NotificationCoordinator` already handles inline reply and passive capture (REP-028, REP-235). Without an explicit `requestAuthorization` call, macOS will never show the permission prompt and the UNNotification capture path (REP-235) silently produces zero events. Add `requestPermissionIfNeeded()` to `NotificationCoordinator`: calls `UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])` if the current status is `.notDetermined`. Injectable `UNUserNotificationCenter` protocol for test isolation (same pattern as REP-028). `InboxViewModel.init()` calls `notificationCoordinator.requestPermissionIfNeeded()` — fires early so macOS permission dialog appears at app launch. Tests: `requestAuthorization` called when status is `.notDetermined`; NOT called when status is `.authorized` (idempotent); NOT called when status is `.denied` (no re-prompt).
+- success_criteria:
+  - `NotificationCoordinator.requestPermissionIfNeeded()` method added
+  - Calls `requestAuthorization` only when status is `.notDetermined`
+  - `InboxViewModel.init()` calls `requestPermissionIfNeeded()`
+  - `testRequestPermissionCalledWhenUndetermined` — mock status=.notDetermined → requestAuthorization called
+  - `testRequestPermissionNotCalledWhenAuthorized` — mock status=.authorized → requestAuthorization not called
+  - `testRequestPermissionNotCalledWhenDenied` — mock status=.denied → requestAuthorization not called
+  - Existing NotificationCoordinatorTests remain green
+- test_plan: 3 new tests in `NotificationCoordinatorTests.swift`; injectable `MockUNUserNotificationCenter` that returns configured authorization status.
+
 
 ---
 
@@ -168,44 +186,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
-### REP-233 — KeychainHelper: generic set/get/delete wrapper for channel OAuth tokens
-- priority: P1
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-171932
-- files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (new), `Tests/ReplyAITests/KeychainHelperTests.swift` (new)
-- scope: **Pivot-aligned (Slack/channel prereq).** REP-010 (Slack OAuth) and REP-230 (OAuth listener) both need a Keychain wrapper but neither specs one. Add `KeychainHelper` with three methods: `set(value: String, for key: String) throws`, `get(key: String) -> String?`, `delete(key: String)`. Keys are prefixed with `ReplyAI-` (matching the AGENTS.md convention) to isolate from system keys. Uses `kSecClassGenericPassword` with `kSecAttrAccount` = key. Injectable `service: String` parameter (default `"co.replyai.app"`) for test isolation — tests use a unique service string and call `delete` in `tearDownWithError`. Tests: set+get round-trip returns same value; get on missing key returns nil; delete removes key (subsequent get returns nil); overwrite returns new value; two distinct keys don't interfere.
-- success_criteria:
-  - `KeychainHelper(service:)` type in new file
-  - `set(value:for:)`, `get(key:)`, `delete(key:)` methods
-  - `testKeyValueRoundTrip` — set then get returns same value
-  - `testGetMissingKeyReturnsNil` — nil on unknown key
-  - `testDeleteRemovesKey` — get returns nil after delete
-  - `testOverwriteReturnsNewValue` — second set replaces first
-  - `testDistinctKeysAreIsolated` — two keys don't interfere
-  - Existing tests remain green
-- test_plan: 5 new tests in `KeychainHelperTests.swift`; use injectable `service: "co.replyai.test-\(UUID().uuidString)"` and `tearDownWithError` to clean up.
-
-### REP-234 — SlackChannel: ChannelService conformance stub with Keychain token gate
-- priority: P1
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-23-171932
-- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (new), `Tests/ReplyAITests/SlackChannelTests.swift` (new)
-- scope: **Pivot-aligned (first non-iMessage channel stub).** Build `SlackChannel: ChannelService` that is immediately registerable without breaking the app. `recentThreads(limit:)`: checks `KeychainHelper.get("Slack-token")` — if nil, throws `ChannelError.authorizationDenied`; otherwise returns `[]` for now (real API calls come in a follow-up). `send(text:toChatGUID:)`: throws `ChannelError.authorizationDenied` until token exists. `channel: Channel` property returns `.slack`. `displayName` returns `"Slack"`. Injectable `KeychainHelper` for test isolation. `InboxViewModel` does NOT wire this up yet — it's a standalone conformance that can be exercised in isolation. Tests: returns authDenied when no token; returns empty thread list when token present (mock KeychainHelper returning a token); channel property is `.slack`; no real network calls.
-- success_criteria:
-  - `SlackChannel: ChannelService` in new file
-  - `recentThreads` throws `authorizationDenied` when no Keychain token
-  - `recentThreads` returns `[]` when token present
-  - `channel` property returns `.slack`
-  - Injectable `KeychainHelper` seam for testing
-  - `testSlackChannelThrowsAuthDeniedWithNoToken`
-  - `testSlackChannelReturnsEmptyThreadsWithToken`
-  - `testSlackChannelIdentifiesAsSlack`
-  - Existing tests remain green
-- test_plan: 3 new tests in `SlackChannelTests.swift`; use mock KeychainHelper returning nil vs. a fake token.
 
 ### REP-235 — NotificationCoordinator: passive capture of incoming message metadata without FDA
 - priority: P1
@@ -495,8 +475,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: deprioritized
 - claimed_by: null
+- blocker: "pivot: new chat.db SQL queries banned per AGENTS.md strategic direction"
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `messages(forThreadID:limit:)` currently fetches the N most-recent messages. Add an overload `messages(forThreadID:limit:before:)` where `before: Int64?` is an optional SQLite ROWID cursor. When non-nil the SQL WHERE clause includes `message.ROWID < before`, enabling "load older" pagination. The existing overload delegates to `before: nil` for backward compatibility. Tests: messages returned all have `ROWID < before`; `before: nil` matches current behavior; fewer than limit available returns all; `before` equal to minimum ROWID in DB returns empty.
 - success_criteria:
@@ -869,7 +850,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests in `IMessageSenderTests.swift`; use `executeHook` seam to capture AppleScript string for assertion rather than executing.
 
 ### REP-229 — AppleScript thread listing: `tell Messages to get every chat` fallback when FDA unavailable
-- priority: P1
+- priority: P0
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -885,7 +866,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: 2 new tests; injectable executor captures and asserts on the AppleScript source string without executing real AppleScript.
 
 ### REP-230 — LocalhostOAuthListener: injectable loopback handler for Slack OAuth
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -1315,6 +1296,16 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-234 — SlackChannel: ChannelService conformance stub with Keychain token gate
+- status: done
+- claimed_by: worker-2026-04-23-171932
+- scope: `SlackChannel: ChannelService` in `Sources/ReplyAI/Channels/SlackChannel.swift`. Throws `authorizationDenied` when no Keychain token present; returns `[]` when token present. `channel` property returns `.slack`. 3 new tests in `SlackChannelTests.swift`. Commit `c001d7e`, 502→510 tests.
+
+### REP-233 — KeychainHelper: generic set/get/delete wrapper for channel OAuth tokens
+- status: done
+- claimed_by: worker-2026-04-23-171932
+- scope: `KeychainHelper(service:)` in `Sources/ReplyAI/Channels/KeychainHelper.swift`. `set(value:for:)`, `get(key:)`, `delete(key:)` methods using `kSecClassGenericPassword`. Injectable `service:` for test isolation. 5 new tests in `KeychainHelperTests.swift`. Commit `c001d7e`, bundled with REP-234.
 
 ### REP-211 — AGENTS.md: correct stale SHA `05e7035` → `4035c5a` (docs-only)
 - status: done

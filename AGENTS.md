@@ -129,6 +129,7 @@ Tests/ReplyAITests/                502 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `c001d7e` KeychainHelper set/get/delete Keychain wrapper + SlackChannel ChannelService stub with token gate (REP-233, REP-234, worker-2026-04-23-171932, 502→510 tests)
 - `43d735b` FTS5 snippet extraction (SearchResult type + snippet() col-3 wiring), concurrent-prime stress test, insertion-order disk round-trip, error→idle state transition (REP-067, REP-169, REP-188, REP-189, worker-2026-04-23-111853, 493→502 tests)
 - `c8c3a04` InboxViewModelAutoPrimeTests data-race fix via Locked<T> migration + AGENTS.md test count 463→493 (REP-199, REP-201, worker-2026-04-23-091326)
 - `1f170b0` SearchIndex.clear(), DraftEngine empty-stream idle fix, +18 contract tests (REP-165,176,180,181,182,184,185,186, worker-2026-04-23-075700)
@@ -205,7 +206,8 @@ Commits (newest first; run `git log` for detail):
 ## What's still stubbed
 - **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
 - ~~**UNNotification inline reply.**~~ Resolved: `InboxViewModel` observes `pendingNotificationReply` via `NotificationCoordinator` callback, looks up the thread by ID, calls `IMessageSender.send(text:toChatGUID:)`, then clears the pending state. Unknown thread IDs are logged and discarded without crash (REP-072, commit `bbedd1a`). Test coverage: 2 cases in `InboxViewModelTests.swift`.
-- **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists; only `IMessageChannel` conforms. Slack is next (OAuth loopback on `:4242`, Socket Mode for RTM).
+- **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists. `SlackChannel` stub + `KeychainHelper` now shipped (REP-233, REP-234, commit `c001d7e`) — Slack throws `authorizationDenied` until OAuth token present. Next: `LocalhostOAuthListener` (REP-230), `SlackHTTPClient` (REP-237), then real `conversations.list` fetch (REP-242). WhatsApp/Teams/Telegram remain unstarted.
+- **AppleScript message-source fallback**. `AppleScriptMessageReader.recentChats()` implementation complete on `wip/2026-04-23-191507-appleScript-fallback` (REP-236, +4 tests). Pending human `swift test` + merge. No FDA required — uses Automation permission.
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.
 - ~~**FTS5 watcher updates.**~~ Resolved: `SearchIndex` now has an incremental upsert path keyed by `(thread_id, message_rowid)` for watcher-driven syncs (REP-015, commit `687c5a3`). Full rebuild is still the fallback for first-boot / settings changes.
