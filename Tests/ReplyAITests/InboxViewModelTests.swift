@@ -711,6 +711,48 @@ final class InboxViewModelOrderingTests: XCTestCase {
                        "pinned thread must sort above unpinned thread regardless of recency")
         XCTAssertEqual(vm.threads.last?.id, "t-unpinned")
     }
+
+    // REP-190: two non-pinned threads with the same effective timestamp must
+    // retain channel-provided order across repeated syncs.  InboxViewModel's
+    // sort is { pinned > unpinned }, which Swift guarantees to be stable, so
+    // equal-pinned threads preserve their input order.
+    func testEqualTimestampThreadsSortStably() async throws {
+        let a = MessageThread(id: "stable-a", channel: .imessage, name: "A",
+                              avatar: "A", preview: "msg", time: "10:00")
+        let b = MessageThread(id: "stable-b", channel: .imessage, name: "B",
+                              avatar: "B", preview: "msg", time: "10:00")
+
+        let channel = StaticMockChannel(threads: [a, b])
+        let vm = InboxViewModel(imessage: channel,
+                                contacts: ContactsResolver(store: DeniedContactStore()))
+
+        await vm.syncFromIMessage()
+        let firstOrder = vm.threads.map(\.id)
+
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.threads.map(\.id), firstOrder,
+                       "equal-timestamp (non-pinned) threads must not swap positions between syncs")
+    }
+
+    // REP-190: channel insertion order acts as the tiebreaker for threads
+    // that compare equal under the sort predicate.  The channel provides [A, B];
+    // after any number of syncs the ViewModel must expose [A, B], not [B, A].
+    func testEqualTimestampSortPreservesChannelOrder() async throws {
+        let a = MessageThread(id: "order-a", channel: .imessage, name: "Alice",
+                              avatar: "A", preview: "hi", time: "09:00")
+        let b = MessageThread(id: "order-b", channel: .imessage, name: "Bob",
+                              avatar: "B", preview: "hey", time: "09:00")
+
+        let channel = StaticMockChannel(threads: [a, b])
+        let vm = InboxViewModel(imessage: channel,
+                                contacts: ContactsResolver(store: DeniedContactStore()))
+
+        for _ in 0..<3 {
+            await vm.syncFromIMessage()
+        }
+        XCTAssertEqual(vm.threads.map(\.id), ["order-a", "order-b"],
+                       "channel-provided order must be preserved when threads are equal under the sort predicate")
+    }
 }
 
 // MARK: - REP-118: archive evicts DraftEngine cache entry
@@ -1095,5 +1137,95 @@ final class InboxViewModelMessagesActivationTests: XCTestCase {
         obs.onMessagesActivated?()
         try await Task.sleep(nanoseconds: 50_000_000)
         // Reaching here without a crash means the weak capture is correct
+    }
+}
+
+// MARK: - REP-212: selectThread seeds userEdits from DraftStore
+
+@MainActor
+final class InboxViewModelDraftStoreSeedTests: XCTestCase {
+
+    private func makeDefaults() -> UserDefaults {
+        let suite = "test.ReplyAI.draftstore-seed.\(UUID())"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        return d
+    }
+
+    private func makeChannel() -> BlockingMockChannel {
+        let ch = BlockingMockChannel()
+        ch.blocking = false
+        return ch
+    }
+
+    private func makeRules() -> RulesStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-draftstore-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let store = RulesStore(fileURL: url)
+        store.rules.forEach { store.remove($0.id) }
+        return store
+    }
+
+    // REP-212: when a draft exists in the DraftStore for the newly selected thread,
+    // selectThread must pre-populate userEdits so the composer shows the stored text
+    // immediately — before the LLM re-primes. Guards the path in selectThread:
+    //   if let stored = draftStore?.read(threadID: id) { setEdit(...) }
+    func testSelectThreadSeedsUserEditsFromDraftStore() {
+        let d = makeDefaults()
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-seed-\(UUID())")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = DraftStore(draftsDirectory: tempDir)
+        store.write(threadID: "ds-t2", text: "Stored draft text")
+
+        let t1 = MessageThread(id: "ds-t1", channel: .imessage, name: "Alice",
+                               avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "ds-t2", channel: .imessage, name: "Bob",
+                               avatar: "B", preview: "", time: "")
+
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(),
+                                contacts: fastContacts(), rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
+        vm.draftStore = store
+
+        // t1 is pre-selected (first thread); switch to t2 to trigger isNewSelection path.
+        vm.selectThread("ds-t2")
+
+        let key = InboxViewModel.editKey(threadID: "ds-t2", tone: vm.activeTone)
+        XCTAssertEqual(vm.userEdits[key], "Stored draft text",
+                       "selectThread must seed userEdits from DraftStore when autoPrime is true and a draft exists")
+    }
+
+    // REP-212: when no draft is stored for the selected thread, userEdits must
+    // remain empty — no accidental seeding from another thread's stored draft.
+    func testSelectThreadWithNoStoredDraftLeavesUserEditsEmpty() {
+        let d = makeDefaults()
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAI-noseed-\(UUID())")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = DraftStore(draftsDirectory: tempDir)
+        // Intentionally write nothing — no stored draft for "ds-empty-t2".
+
+        let t1 = MessageThread(id: "ds-empty-t1", channel: .imessage, name: "Alice",
+                               avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "ds-empty-t2", channel: .imessage, name: "Bob",
+                               avatar: "B", preview: "", time: "")
+
+        let vm = InboxViewModel(threads: [t1, t2], imessage: makeChannel(),
+                                contacts: fastContacts(), rules: makeRules(), defaults: d,
+                                searchIndex: SearchIndex(databaseURL: nil))
+        vm.draftStore = store
+
+        vm.selectThread("ds-empty-t2")
+
+        let key = InboxViewModel.editKey(threadID: "ds-empty-t2", tone: vm.activeTone)
+        XCTAssertNil(vm.userEdits[key],
+                     "selectThread must not set userEdits when no draft is stored for the selected thread")
     }
 }

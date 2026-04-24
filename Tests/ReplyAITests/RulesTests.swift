@@ -2121,3 +2121,27 @@ final class ThreadNameMatchesRegexTests: XCTestCase {
         XCTAssertEqual(decoded, original, "threadNameMatchesRegex must round-trip through JSON unchanged")
     }
 }
+
+// MARK: - REP-215: validateRegex boundary cases
+
+final class ValidateRegexBoundaryCasesTests: XCTestCase {
+
+    // An empty pattern matches everything — valid by design for "catch-all" rules.
+    func testEmptyPatternAccepted() {
+        XCTAssertNoThrow(try SmartRule.validateRegex(""),
+                         "empty pattern is valid ICU regex (matches everything) and must not throw")
+    }
+
+    // Python named-group syntax (?P<name>...) is not part of ICU regex.
+    // NSRegularExpression uses ICU which requires (?<name>...) instead.
+    // Passing Python syntax must surface as invalidRegex so the user can correct it.
+    func testPythonNamedGroupSyntaxThrows() {
+        XCTAssertThrowsError(try SmartRule.validateRegex("(?P<name>x)")) { error in
+            guard let ve = error as? RuleValidationError,
+                  case .invalidRegex = ve else {
+                XCTFail("Expected RuleValidationError.invalidRegex for Python-syntax named group, got \(error)")
+                return
+            }
+        }
+    }
+}

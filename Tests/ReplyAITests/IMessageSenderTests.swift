@@ -497,3 +497,30 @@ final class IMessageSenderEscapeTests: XCTestCase {
                        "emoji must pass through escaping without modification")
     }
 }
+
+// MARK: - REP-210: combined newline + backslash escaping boundary cases
+
+final class IMessageSenderCombinedEscapeTests: XCTestCase {
+
+    // REP-210: a message containing both \n and \\ must have both escaped
+    // correctly in the same pass.  Escaping is applied left-to-right:
+    // first \\ → \\\\, then \n → \\n, so the two substitutions don't
+    // interfere with each other.
+    func testNewlineAndBackslashBothEscapedInAppleScript() {
+        let input = "line one\nline two\nbackslash: \\"
+        let result = IMessageSender.escapeForAppleScriptLiteral(input)
+        XCTAssertEqual(result, "line one\\nline two\\nbackslash: \\\\",
+                       "\\n must become \\\\n and \\\\ must become \\\\\\\\ in the same escape pass")
+        XCTAssertFalse(result.contains("\n"),
+                       "no literal newline must survive after escaping")
+    }
+
+    // Tab characters are legal in AppleScript string literals and must
+    // pass through unchanged (escaping only touches \, " and \n).
+    func testTabCharacterPassesThroughUnescaped() {
+        let input = "column\there"
+        let result = IMessageSender.escapeForAppleScriptLiteral(input)
+        XCTAssertEqual(result, "column\there",
+                       "tab is a legal AppleScript literal character and must not be escaped")
+    }
+}
