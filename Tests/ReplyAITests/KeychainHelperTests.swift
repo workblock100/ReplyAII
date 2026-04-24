@@ -1,4 +1,5 @@
 import XCTest
+import Security
 @testable import ReplyAI
 
 final class KeychainHelperTests: XCTestCase {
@@ -42,5 +43,61 @@ final class KeychainHelperTests: XCTestCase {
         try keychain.set(value: "value2", for: "key2")
         XCTAssertEqual(keychain.get(key: "key1"), "value1")
         XCTAssertEqual(keychain.get(key: "key2"), "value2")
+    }
+
+    // MARK: - deleteAll(prefix:)
+
+    func testDeleteAllRemovesPrefixedKeys() throws {
+        try keychain.set(value: "v1", for: "Slack-token")
+        try keychain.set(value: "v2", for: "Slack-other")
+        try keychain.set(value: "v3", for: "iMessage-token")
+
+        keychain.deleteAll(prefix: "ReplyAI-")
+
+        XCTAssertNil(keychain.get(key: "Slack-token"))
+        XCTAssertNil(keychain.get(key: "Slack-other"))
+        XCTAssertNil(keychain.get(key: "iMessage-token"))
+    }
+
+    func testDeleteAllLeavesNonPrefixedKeys() throws {
+        // Add an item directly without the "ReplyAI-" prefix to verify selectivity.
+        let unprefixed = "TestApp-unrelated"
+        let addQuery: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrService: keychain.service,
+            kSecAttrAccount: unprefixed,
+            kSecValueData:   Data("survivor".utf8)
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+        defer {
+            let del: [CFString: Any] = [
+                kSecClass:       kSecClassGenericPassword,
+                kSecAttrService: keychain.service,
+                kSecAttrAccount: unprefixed
+            ]
+            SecItemDelete(del as CFDictionary)
+        }
+
+        try keychain.set(value: "to-delete", for: "Slack-token")
+        keychain.deleteAll(prefix: "ReplyAI-")
+
+        XCTAssertNil(keychain.get(key: "Slack-token"))
+
+        // The unprefixed item must still be in Keychain.
+        let readQuery: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrService: keychain.service,
+            kSecAttrAccount: unprefixed,
+            kSecMatchLimit:  kSecMatchLimitOne,
+            kSecReturnData:  kCFBooleanTrue as Any
+        ]
+        var result: AnyObject?
+        XCTAssertEqual(SecItemCopyMatching(readQuery as CFDictionary, &result), errSecSuccess)
+        XCTAssertEqual(result as? Data, Data("survivor".utf8))
+    }
+
+    func testDeleteAllOnEmptyKeychainIsNoop() {
+        // Must not throw or crash when no items exist for this service.
+        keychain.deleteAll(prefix: "ReplyAI-")
     }
 }

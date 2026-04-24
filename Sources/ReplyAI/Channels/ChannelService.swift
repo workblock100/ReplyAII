@@ -52,6 +52,8 @@ enum ChannelError: LocalizedError, Sendable {
     /// a valid SQLite database. Can happen after a macOS crash during iCloud sync.
     /// Callers should surface a "re-sync from iCloud" recovery path.
     case databaseCorrupted
+    /// An HTTP or transport-level failure from a remote channel API (e.g. Slack).
+    case networkError(String)
 
     var errorDescription: String? {
         switch self {
@@ -62,6 +64,7 @@ enum ChannelError: LocalizedError, Sendable {
         case .databaseError(_, let message):        message
         case .databaseCorrupted:
             "The Messages database appears corrupted. Try signing out of iCloud Messages and back in to rebuild it."
+        case .networkError(let s):                  s
         }
     }
 }

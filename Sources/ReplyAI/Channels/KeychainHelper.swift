@@ -60,6 +60,31 @@ struct KeychainHelper: Sendable {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    /// Deletes all items in this service whose account key starts with `prefix`.
+    /// Factory reset calls this with `"ReplyAI-"` to wipe every channel token.
+    func deleteAll(prefix: String) {
+        let listQuery: [CFString: Any] = [
+            kSecClass:            kSecClassGenericPassword,
+            kSecAttrService:      service,
+            kSecMatchLimit:       kSecMatchLimitAll,
+            kSecReturnAttributes: kCFBooleanTrue as Any
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(listQuery as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[CFString: Any]] else { return }
+
+        for item in items {
+            guard let account = item[kSecAttrAccount] as? String,
+                  account.hasPrefix(prefix) else { continue }
+            let deleteQuery: [CFString: Any] = [
+                kSecClass:       kSecClassGenericPassword,
+                kSecAttrService: service,
+                kSecAttrAccount: account
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+        }
+    }
 }
 
 enum KeychainError: LocalizedError, Sendable {
