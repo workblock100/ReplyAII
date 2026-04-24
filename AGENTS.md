@@ -129,6 +129,7 @@ Tests/ReplyAITests/                527 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `08f2e4b` AGENTS.md + worker.prompt: MLX cold-build warning and wip-branch protocol documented (REP-271, worker-2026-04-24-110000, 527 tests unchanged)
 - `9a6c3d1` MessagesAppActivationObserver (NSWorkspace activation watcher, 600ms debounce, injectable seams) + InboxViewModel activation re-sync wiring (5s debounce, weak capture, handleMessagesActivation) (REP-239, REP-265, worker-2026-04-24-102657, 521→527 tests)
 - `31534e1` NotificationCoordinator/InboxViewModel: chatGUID extraction from `CKChatIdentifier`/`CKChatGUID` userInfo keys, thread deduplication in applyIncomingNotification (REP-263, worker-2026-04-24-060000, 516→521 tests)
 - `fbba843` LocalhostOAuthListener: NWListener-backed loopback HTTP server for OAuth callbacks, `actualPort`/`onReady` test hooks, `OAuthError` enum + 3 new tests; AGENTS.md sync (REP-230, REP-253, worker-2026-04-24-042000, 513→516 tests)
