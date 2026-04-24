@@ -303,6 +303,19 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - test_plan: Worker runs `swift test` on the target branch; all tests must pass before merge.
 
 ### REP-286 — human: review + merge wip/2026-04-24-143143-prefs-channels-negation-concurrent (REP-231+208+220)
+### REP-287 — human: review + merge wip/2026-04-24-152614-unread-bulk-concurrent (REP-246+248+209+249)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: wip/2026-04-24-152614-unread-bulk-concurrent
+- scope: Review + run `swift test` on the wip branch. Adds `totalUnreadCount`, `bulkArchiveRead()` to InboxViewModel and 14 new tests (InboxViewModelSelectUnreadTests, InboxViewModelBulkTests, ContactsResolver concurrent tests). No source changes outside InboxViewModel. If green, merge to main.
+- success_criteria:
+  - `swift test` green on the wip branch
+  - merged to main
+- test_plan: run `swift test` from repo root on the branch
+
 - priority: P1
 - effort: S
 - ui_sensitive: false
