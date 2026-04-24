@@ -4,12 +4,17 @@ Autonomous work loop for ReplyAI. Three Claude agents run on cron in Anthropic s
 
 ## The three agents
 
-| Agent | Cadence | Max runtime | Touches |
-| --- | --- | --- | --- |
-| `replyai-planner` | every 2 hours | 13 min (platform cap) | `BACKLOG.md`, `.automation/logs/planner-*` |
-| `replyai-worker` | every 15 min | 13 min (platform cap) | code under `Sources/`, `Tests/`, `BACKLOG.md`, `wip/*` branches |
-| `replyai-merger` | every 30 min | 13 min (platform cap) | fast-forward `wip/*` → `main`, delete merged branches, `.automation/logs/merge-*` |
-| `replyai-reviewer` | every 6 hours | 13 min (platform cap) | `REVIEW.md`, `AGENTS.md`, `.automation/logs/review-*` |
+| Agent | Cadence | Day throttle | Max runtime | Touches |
+| --- | --- | --- | --- | --- |
+| `replyai-planner` | every 2 hours | skip odd hours in 08–22 local (so 08/12/16/20 run, 10/14/18 skip) | 13 min | `BACKLOG.md`, `.automation/logs/planner-*` |
+| `replyai-worker` | every 15 min | 08–22 local: only :00 and :30 fires run | 13 min | code under `Sources/`, `Tests/`, `BACKLOG.md`, `wip/*` branches |
+| `replyai-merger` | every 30 min | 08–22 local: only :00 fires run | 13 min | fast-forward `wip/*` → `main`, delete merged branches, `.automation/logs/merge-*` |
+| `replyai-reviewer` | every 6 hours | none | 13 min | `REVIEW.md`, `AGENTS.md`, `.automation/logs/review-*` |
+| `replyai-architect` | every 6 hours | none | 13 min | `BACKLOG.md` (decompose L-effort tasks into S/M chains), `.automation/logs/architect-*` |
+| `replyai-polisher` | every 1 hour | 08–22 local: only :00 fires run | 13 min | `wip/polish-*` branches (error copy, a11y labels, empty-state strings, onboarding copy) |
+| `replyai-operator` | twice daily (08:00, 20:00 local) | none | 13 min | `.automation/logs/operator-*`, `BACKLOG.md` (REP-ALERT-* only if pipeline BROKEN) |
+
+All agents use the fixed commit trailer `Co-Authored-By: ReplyAI Automation <automation@replyai.co>` regardless of which model Anthropic provisions for a given fire. Day = 08:00–22:00 `America/New_York`. Night = 22:00–08:00.
 
 All three use the prompts in `.automation/*.prompt`. The prompts are the source of truth — the schedule definitions just point at them.
 
