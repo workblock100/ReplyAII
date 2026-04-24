@@ -279,6 +279,59 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing SlackChannelTests remain green
 - test_plan: 4 new tests in `SlackChannelTests.swift`; mock `SlackHTTPClient` returns configured JSON Data.
 
+### REP-260 — WhatsAppChannel: ChannelService conformance stub with session token gate
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Tests/ReplyAITests/WhatsAppChannelTests.swift` (new)
+- scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-233/234 (Slack). `WhatsAppChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-WhatsApp")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no session token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported` (real send comes in a follow-up). `channel` property returns `.whatsapp` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.whatsapp`.
+- success_criteria:
+  - `WhatsAppChannel: ChannelService` in new file
+  - `recentThreads()` throws `authorizationDenied` when no Keychain entry
+  - `testWhatsAppChannelThrowsWhenNoToken` — no Keychain entry → `authorizationDenied`
+  - `testWhatsAppChannelReturnsEmptyWithToken` — token present → `[]` (stub)
+  - `testWhatsAppChannelPropertyReturnsWhatsApp` — `channel == .whatsapp`
+  - Existing tests remain green
+- test_plan: 3 new tests in `WhatsAppChannelTests.swift`; injectable `KeychainHelper` with test-scoped service name.
+
+### REP-261 — TeamsChannel: ChannelService conformance stub with Graph API token gate
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Tests/ReplyAITests/TeamsChannelTests.swift` (new)
+- scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) for Microsoft Teams. `TeamsChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-Teams")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no Graph API token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.teams` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.teams`.
+- success_criteria:
+  - `TeamsChannel: ChannelService` in new file
+  - `recentThreads()` throws `authorizationDenied` when no Keychain entry
+  - `testTeamsChannelThrowsWhenNoToken` — no Keychain entry → `authorizationDenied`
+  - `testTeamsChannelReturnsEmptyWithToken` — token present → `[]` (stub)
+  - `testTeamsChannelPropertyReturnsTeams` — `channel == .teams`
+  - Existing tests remain green
+- test_plan: 3 new tests in `TeamsChannelTests.swift`; injectable `KeychainHelper` with test-scoped service name.
+
+### REP-262 — ShortcutsExportHandler: URL scheme handler for manual iMessage export via Shortcuts.app
+- priority: P2
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Channels/ShortcutsExportHandler.swift` (new), `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/ShortcutsExportHandlerTests.swift` (new)
+- scope: **Pivot-aligned (alt message-source, no FDA required).** Shortcuts.app can export recent iMessage threads as JSON via a user-triggered shortcut; ReplyAI registers a URL scheme handler to receive that data. `ShortcutsExportHandler` registers for `replyai://import-messages` URL scheme callbacks (via `NSApplication.EventType.openURLs` / `onOpenURL` in SwiftUI Scene). Parses the URL's `data` query parameter (percent-encoded JSON) into `[MessageThread]`. Schema: `[{"id": String, "displayName": String, "preview": String, "channel": "iMessage", "messages": [...]}]`. Injectable URL parser for tests. Returns `[MessageThread]` on success; throws `ShortcutsExportError.malformedPayload` on bad JSON. `ReplyAIApp` wires `onOpenURL` to pass the URL to `ShortcutsExportHandler`; handler calls `InboxViewModel.injectThreads(_:)` (REP-244 provides the multi-source architecture). No FDA required — user triggers the Shortcut manually. Tests: valid JSON URL → `[MessageThread]` with correct fields; malformed JSON → `malformedPayload` error; missing `data` param → `malformedPayload`; empty messages array → thread with empty messages.
+- success_criteria:
+  - `ShortcutsExportHandler.parse(url:) throws -> [MessageThread]` implemented
+  - `ShortcutsExportError.malformedPayload` error case
+  - URL scheme `replyai://import-messages` handled in `ReplyAIApp`
+  - `testValidJSONPayloadParsesThreads` — correct JSON → `[MessageThread]`
+  - `testMalformedJSONThrowsMalformedPayload` — bad JSON → `malformedPayload`
+  - `testMissingDataParamThrows` — URL with no `data` param → `malformedPayload`
+  - `testEmptyMessagesArrayProducesThreadWithNoMessages` — empty messages → thread with `messages: []`
+  - Existing tests remain green
+- test_plan: 4 new tests in `ShortcutsExportHandlerTests.swift`; pass literal URL strings to `parse(url:)`; no real URL scheme registration in tests.
+
 
 ---
 

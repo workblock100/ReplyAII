@@ -129,7 +129,7 @@ Tests/ReplyAITests/                513 tests
 
 Commits (newest first; run `git log` for detail):
 
-- `TBD` NotificationCoordinator passive incoming-message capture via willPresent + InboxViewModel applyIncomingNotification (REP-235, worker-2026-04-24-015900, 502→513 tests)
+- `b2af590` NotificationCoordinator passive incoming-message capture via willPresent + InboxViewModel applyIncomingNotification (REP-235, worker-2026-04-24-015900, 510→513 tests)
 - `c001d7e` KeychainHelper set/get/delete Keychain wrapper + SlackChannel ChannelService stub with token gate (REP-233, REP-234, worker-2026-04-23-171932, 502→510 tests)
 - `43d735b` FTS5 snippet extraction (SearchResult type + snippet() col-3 wiring), concurrent-prime stress test, insertion-order disk round-trip, error→idle state transition (REP-067, REP-169, REP-188, REP-189, worker-2026-04-23-111853, 493→502 tests)
 - `c8c3a04` InboxViewModelAutoPrimeTests data-race fix via Locked<T> migration + AGENTS.md test count 463→493 (REP-199, REP-201, worker-2026-04-23-091326)
