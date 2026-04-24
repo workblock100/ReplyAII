@@ -377,6 +377,20 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` locally; confirms 8 new tests appear.
 
+### REP-288 — human: review + merge wip/2026-04-24-161734-accessibility-retrydelay (REP-258+269)
+- priority: P2
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new), `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
+- scope: Worker-2026-04-24-161734 implemented REP-258 (AccessibilityAPIReader: alt message source via macOS Accessibility API, 6 tests) and REP-269 (IMessageSender.retryDelay injectable, removes hardcoded 0.5s sleep, 1 new test + 3 updated). Both complete on `wip/2026-04-24-161734-accessibility-retrydelay`. MLX cold build exceeds budget. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-258 and REP-269 done.
+- success_criteria:
+  - `swift test` green on the wip branch (est. 527→534 tests)
+  - merged to main
+  - REP-258 and REP-269 marked done
+- test_plan: Human runs `swift test` locally; confirms 7 new/updated tests pass.
+
 ### REP-281 — human: review + merge wip/2026-04-24-114653-slack-socket-client (REP-267)
 - priority: P1
 - effort: S

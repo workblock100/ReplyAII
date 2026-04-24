@@ -129,6 +129,7 @@ Tests/ReplyAITests/                527 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `e5074e2` AccessibilityAPIReader (AX-based alt message source, injectable seams, 6 tests) + IMessageSender.retryDelay injectable (removes hardcoded 0.5s sleep, 1 new test + 3 updated) — wip/2026-04-24-161734-accessibility-retrydelay (REP-258+269, worker-2026-04-24-161734, 527→534 tests est., unverified pending warm build)
 - `8cf5a15` per-channel Preferences keys + not(not(pred)) guard + concurrent add+remove tests — wip/2026-04-24-143143-prefs-channels-negation-concurrent (REP-231+208+220, worker-2026-04-24-143143, 541→549 tests est., unverified pending warm build)
 - `ce76f2a` SlackSocketClient: WebSocket wrapper for Socket Mode, injectable seams, 5 tests — wip/2026-04-24-114653-slack-socket-client (REP-267, worker-2026-04-24-114653, 536→541 tests est., unverified pending warm build)
 - `6ae9022` Thread-list cache for cold-launch resilience — wip/2026-04-24-152005-thread-cache (REP-278, worker-2026-04-24-152005, 531→536 tests est., unverified pending warm build)
