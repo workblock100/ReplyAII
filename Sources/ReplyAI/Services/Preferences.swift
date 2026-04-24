@@ -20,9 +20,13 @@ enum PreferenceKey {
     /// Date of first ever launch. Set once on first init, never overwritten,
     /// excluded from wipe() so upgrade banners ("using ReplyAI since…") survive resets.
     static let firstLaunchDate = "pref.app.firstLaunchDate"
+    /// Whether the app is showing demo fixture threads because no real sync has succeeded yet.
+    /// Starts true; cleared to false after any sync returns ≥1 real thread. Exempt from wipe()
+    /// so the user doesn't see demo mode re-appear after a factory reset.
+    static let demoModeActive = "pref.inbox.demoModeActive"
 
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
-    static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate]
+    static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive]
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
@@ -39,6 +43,8 @@ enum PreferenceDefaults {
     static let autoPrime        = true
     /// When true, rules run during every `syncFromIMessage` pass.
     static let autoApplyRulesOnSync = true
+    /// Starts true on fresh install; cleared after first successful real sync.
+    static let demoModeActive = true
 }
 
 /// File-system paths that ReplyAI reads or writes at runtime.
@@ -86,6 +92,7 @@ extension UserDefaults {
             PreferenceKey.inboxThreadLimit: PreferenceDefaults.inboxThreadLimit,
             PreferenceKey.autoPrime:            PreferenceDefaults.autoPrime,
             PreferenceKey.autoApplyRulesOnSync: PreferenceDefaults.autoApplyRulesOnSync,
+            PreferenceKey.demoModeActive:       PreferenceDefaults.demoModeActive,
         ])
     }
 

@@ -12,6 +12,34 @@ final class InboxViewModel {
         case failed(String)       // some other problem
     }
 
+    /// Why the inbox is empty when `viewState == .empty`.
+    enum EmptyReason: Equatable {
+        case noMessages      // sync succeeded but returned zero threads
+        case noPermissions   // channel threw authorizationDenied / permissionDenied
+    }
+
+    /// Explicit state machine for what the inbox is showing.
+    /// Replaces ad-hoc thread-count checks scattered across the view layer.
+    enum ViewState: Equatable {
+        case loading
+        case populated
+        case empty(EmptyReason)
+        case demo
+        case error(Error)
+
+        static func == (lhs: ViewState, rhs: ViewState) -> Bool {
+            switch (lhs, rhs) {
+            case (.loading, .loading):             return true
+            case (.populated, .populated):         return true
+            case (.empty(let a), .empty(let b)):   return a == b
+            case (.demo, .demo):                   return true
+            case (.error(let a), .error(let b)):
+                return a.localizedDescription == b.localizedDescription
+            default: return false
+            }
+        }
+    }
+
     var selectedThreadID: String
     var activeFolder: Folder.Kind = .all
     var activeTone: Tone = .warm
@@ -21,6 +49,8 @@ final class InboxViewModel {
     let channels: [Channel]
 
     var syncStatus: SyncStatus = .idle
+    /// Explicit inbox state. Starts `.loading`; transitions after each `syncFromIMessage()` call.
+    var viewState: ViewState = .loading
     var liveMessages: [String: [Message]] = [:]   // threadID → messages, filled on sync
 
     /// Per-thread watermark. Incoming messages with `rowID > lastSeenRowID[tid]`
@@ -425,6 +455,8 @@ final class InboxViewModel {
             let threadLimit = defaults.integer(forKey: PreferenceKey.inboxThreadLimit)
             let live = try await imessage.recentThreads(limit: max(1, threadLimit == 0 ? PreferenceDefaults.inboxThreadLimit : threadLimit))
             guard !live.isEmpty else {
+                let demoMode = defaults.bool(forKey: PreferenceKey.demoModeActive)
+                viewState = demoMode ? .demo : .empty(.noMessages)
                 syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
                 return
             }
@@ -461,6 +493,7 @@ final class InboxViewModel {
 
             syncStatus = .live(at: Date())
             saveThreadCache(threads)
+            viewState = .populated
 
             // Preload messages for the focused thread so the detail pane
             // is populated without a second permission round-trip.
@@ -503,13 +536,20 @@ final class InboxViewModel {
             // value at init time) so the app remains usable. Console-log so
             // diagnostics still capture the denial.
             if case .permissionDenied(let hint) = err {
+                // Pivot 2026-04-23: silently fall back to fixtures, no FDA banner.
                 NSLog("[ReplyAI] iMessage permissionDenied (FDA): \(hint) — falling back to demo fixtures")
                 syncStatus = .idle
+                viewState = .empty(.noPermissions)
+            } else if case .authorizationDenied = err {
+                syncStatus = .failed(err.localizedDescription)
+                viewState = .empty(.noPermissions)
             } else {
                 syncStatus = .failed(err.localizedDescription)
+                viewState = .error(err)
             }
         } catch {
             syncStatus = .failed(error.localizedDescription)
+            viewState = .error(error)
         }
     }
 

@@ -101,3 +101,44 @@ final class KeychainHelperTests: XCTestCase {
         keychain.deleteAll(prefix: "ReplyAI-")
     }
 }
+
+// MARK: - SlackTokenStore (REP-274)
+
+final class SlackTokenStoreTests: XCTestCase {
+    private var store: SlackTokenStore!
+
+    override func setUpWithError() throws {
+        let keychain = KeychainHelper(service: "co.replyai.test-slack-\(UUID().uuidString)")
+        store = SlackTokenStore(keychain: keychain)
+    }
+
+    override func tearDownWithError() throws {
+        store.delete()
+    }
+
+    func testSlackTokenStoreRoundTrip() throws {
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme Corp")
+        let result = store.get()
+        XCTAssertEqual(result?.token, "xoxb-test-token")
+        XCTAssertEqual(result?.workspaceName, "Acme Corp")
+    }
+
+    func testSlackTokenStoreDeleteRemovesEntry() throws {
+        try store.set(token: "xoxb-delete-me", workspaceName: "Test WS")
+        store.delete()
+        XCTAssertNil(store.get())
+    }
+
+    func testSlackTokenStoreMissingEntryReturnsNil() {
+        XCTAssertNil(store.get())
+    }
+
+    func testSlackTokenStoreMalformedJSONReturnsNil() throws {
+        // Write raw non-JSON bytes under the store's key via the underlying KeychainHelper.
+        let keychain = KeychainHelper(service: "co.replyai.test-slack-malformed-\(UUID().uuidString)")
+        let corruptStore = SlackTokenStore(keychain: keychain)
+        try keychain.set(value: "not-valid-json{{{{", for: "slack-access-token")
+        XCTAssertNil(corruptStore.get(), "malformed JSON should return nil without crashing")
+        keychain.delete(key: "slack-access-token")
+    }
+}

@@ -96,3 +96,44 @@ enum KeychainError: LocalizedError, Sendable {
         }
     }
 }
+
+/// Structured storage for the Slack OAuth access token and workspace name.
+/// The Slack v2.access response includes both; storing them together avoids
+/// a second API round-trip in Settings when displaying "Connected: <workspace>".
+struct SlackTokenStore: Sendable {
+    private let keychain: KeychainHelper
+    private static let storageKey = "slack-access-token"
+
+    private struct Entry: Codable {
+        let token: String
+        let workspaceName: String
+    }
+
+    init(keychain: KeychainHelper = KeychainHelper(service: "co.replyai.app")) {
+        self.keychain = keychain
+    }
+
+    /// Encode token + workspaceName as JSON and persist to Keychain.
+    func set(token: String, workspaceName: String) throws {
+        let data = try JSONEncoder().encode(Entry(token: token, workspaceName: workspaceName))
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw KeychainError.unhandledError(status: OSStatus(-1))
+        }
+        try keychain.set(value: json, for: Self.storageKey)
+    }
+
+    /// Returns stored (token, workspaceName), or nil if absent or unreadable.
+    func get() -> (token: String, workspaceName: String)? {
+        guard let json = keychain.get(key: Self.storageKey),
+              let data = json.data(using: .utf8),
+              let entry = try? JSONDecoder().decode(Entry.self, from: data) else {
+            return nil
+        }
+        return (entry.token, entry.workspaceName)
+    }
+
+    /// Remove the stored entry. No-op if absent.
+    func delete() {
+        keychain.delete(key: Self.storageKey)
+    }
+}

@@ -1379,3 +1379,60 @@ final class InboxViewModelThreadCacheTests: XCTestCase {
                       "absent cache must produce empty thread list without crashing")
     }
 }
+
+// MARK: - ViewState transitions (REP-247)
+
+@MainActor
+final class InboxViewModelViewStateTests: XCTestCase {
+
+    private final class AuthDeniedChannel: ChannelService, @unchecked Sendable {
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            throw ChannelError.authorizationDenied
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    func testViewStateTransitionsToPopulated() async {
+        let thread = MessageThread(
+            id: "vs-t1", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "now", unread: 1)
+        let vm = InboxViewModel(
+            imessage: StaticMockChannel(threads: [thread]),
+            contacts: fastContacts())
+        XCTAssertEqual(vm.viewState, .loading, "viewState should start as .loading")
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .populated)
+    }
+
+    func testViewStateTransitionsToDemoOnEmptySync() async {
+        let suite = "test.ReplyAI.viewState.demo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(true, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: StaticMockChannel(threads: []),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .demo)
+    }
+
+    func testViewStateTransitionsToEmptyNoPermissions() async {
+        let vm = InboxViewModel(
+            imessage: AuthDeniedChannel(),
+            contacts: fastContacts())
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .empty(.noPermissions))
+    }
+
+    func testViewStateTransitionsToEmptyNoMessages() async {
+        let suite = "test.ReplyAI.viewState.noMessages.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(false, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: StaticMockChannel(threads: []),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .empty(.noMessages))
+    }
+}
