@@ -375,8 +375,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-102657
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` (REP-239, open) fires when `com.apple.MobileSMS` becomes frontmost. Wire this into `InboxViewModel`: accept an injectable `MessagesAppActivationObserver?` (default nil = disabled). In `init()`, set `activationObserver.onMessagesActivated = { [weak self] in Task { await self?.handleMessagesActivation() } }`. `handleMessagesActivation()` calls `syncFromIMessage()` (conservative until REP-236 merges) and merges results without discarding existing threads. 5-second debounce guards against rapid app-switch thrash: track `lastActivationDate` and skip if < 5s ago. Tests: observer fires → sync triggered; second fire within 5s → sync skipped (debounce); ViewModel deinited before callback fires → no crash (weak capture). Prereq: REP-239 must be completed first (or implemented inline as a stub for testability).
 - success_criteria:
@@ -1222,8 +1222,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-102657
 - files_to_touch: `Sources/ReplyAI/Channels/MessagesAppActivationObserver.swift` (new), `Tests/ReplyAITests/MessagesAppActivationObserverTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` watches `NSWorkspace.shared.notificationCenter` for `NSWorkspace.didActivateApplicationNotification`. When the frontmost app's `bundleIdentifier` is `"com.apple.MobileSMS"`, fires `onMessagesActivated: (() -> Void)?` callback. Injectable `NSWorkspace` and notification center for tests. 600ms debounce so rapid app switches don't trigger multiple syncs. Tests: notification with Messages bundle ID → callback fires; notification with other bundle ID → callback silent; two rapid activations within 600ms → only one callback; injectable workspace observer captures posted notification.
 - success_criteria:
