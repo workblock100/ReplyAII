@@ -421,8 +421,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-114653
 - files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
 - scope: **Pivot-aligned (real-time Slack updates without polling).** Slack Socket Mode pushes new messages over `wss://` WebSocket from a URL obtained via `apps.connections.open`. `SlackSocketClient(connectionURL: URL, urlSession: URLSession = .shared, reconnectDelay: TimeInterval = 5.0)`: `start()` creates `URLSessionWebSocketTask` and starts receiving. `stop()` cancels task. `onEventReceived: ((Data) -> Void)?` fires for each non-control frame. Envelope filter: silently drop `{"type":"ping"}` and `{"type":"hello"}`; forward only `{"type":"events_callback",...}`. Auto-reconnects up to 3 times on `.abnormalClosure` or `.goingAway` using injectable `reconnectDelay`. Tests: mock WebSocket task delivers `events_callback` message → `onEventReceived` called; `stop()` cancels task; abnormal close → reconnect attempted (count ≤3 with injected 0s delay); `hello` message → callback not fired; fourth disconnect after 3 reconnects → no further reconnect.
 - success_criteria:
