@@ -49,11 +49,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: open
 - claimed_by: human
 - files_to_touch: `.automation/worker.prompt` (build hints), `scripts/build.sh` (pre-warm artifacts)
-- scope: **Structural blocker for main-branch throughput.** 7 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is piling up. **All 7 pending wip branches as of 2026-04-24:** `wip/2026-04-23-085959-stats-session-acceptance` (REP-200, covers REP-135/177/179/183/187), `wip/2026-04-23-130000-thread-name-regex` (REP-217, covers REP-129), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236, covers REP-229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (covers REP-237+REP-238), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255). Additionally, the 8 quality/* branches from 2026-04-21 (REP-016, REP-017, REP-048) remain unmerged. Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close any duplicate wip branches (pick 1 of the 2 REP-228 impls). Document the structural fix chosen in AGENTS.md.
+- scope: **Structural blocker for main-branch throughput — ESCALATED.** 22 wip branches are now stuck awaiting human `swift test` + merge because MLX fresh-clone compile takes 20+ min (exceeds 13-min worker budget). Every worker run creates another blocked branch; code is accumulating faster than it ships. **Pending wip branches as of 2026-04-24 (planner run 7):** `wip/quality-*` (8 branches, REP-016/017/048, since 2026-04-21), `wip/2026-04-23-085959-stats-session-acceptance` (REP-200), `wip/2026-04-23-130000-thread-name-regex` (REP-217), `wip/2026-04-23-145504-demo-mode` (REP-228 impl-A), `wip/worker-2026-04-23-161500-demo-mode` (REP-228 impl-B), `wip/2026-04-23-191507-appleScript-fallback` (REP-236/229), `wip/2026-04-23-200831-slack-http-keychain-deleteall` (REP-237/238), `wip/2026-04-23-230824-telegram-channel-tests` (REP-256/205/206), `wip/2026-04-24-005143-rep255-notification-permission` (REP-255), `wip/2026-04-24-031929-channel-stubs` (REP-243/260/261/264), `wip/2026-04-24-083949-rep266-slack-oauth-flow` (REP-266), `wip/worker-2026-04-24-113000-viewstate` (REP-247 standalone), `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled), `wip/2026-04-24-113000-slack-socket-token-store` (REP-267+274 claim, no code yet). **Reviewer has flagged this for 4+ consecutive windows; ⭐⭐⭐ rating threshold met.** Human should: (a) run `swift test` locally for each wip branch and merge if green; (b) implement GitHub Actions `.build/` artifact caching so future worker `swift test` runs complete in <12 min; (c) close duplicate wip branches (pick 1 of the 2 REP-228 impls, pick 1 of the 2 REP-247 impls). Document the structural fix chosen in AGENTS.md.
 - success_criteria:
   - At least one structural fix is in place so a fresh-worker `swift test` completes in <12 min (OR)
   - The worker prompt is updated with guidance on detecting cold-cache state and parking MLX tasks
-  - All 7 current stuck wip branches manually reviewed and either merged or closed
+  - All 22 current stuck wip branches manually reviewed and either merged or closed
   - Reviewer confirms throughput improved in next 6h window
 - test_plan: Human runs `swift test` locally to baseline build time; implements fix; verifies subsequent worker run can complete `swift test` within budget.
 
@@ -118,21 +118,25 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing tests remain green
 - test_plan: 5 new tests in `SlackOAuthFlowTests.swift`; inject mock `URLOpener`, listener factory, and `URLSession`; no real network or OS calls.
 
-### REP-271 — AGENTS.md + worker.prompt: document MLX build-time budget workaround and wip-branch protocol
+### REP-278 — InboxViewModel: persist last-known thread list to disk for cold-launch resilience
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-24-110000
-- files_to_touch: `AGENTS.md` (Gotchas section), `.automation/worker.prompt` (Gotchas section)
-- scope: **Structural infra — docs-only, auto-merge eligible.** Three reviewer windows have flagged the MLX fresh-clone C++ compile (~45–90 min) exceeding the 13-min worker budget as the primary throughput bottleneck. Without documented guidance, each new worker hits the same wall and produces another wip branch. Add two doc changes: (1) **AGENTS.md Gotchas**: "**MLX fresh-clone C++ compile exceeds the 13-min worker budget (~45–90 min on a cold machine).** Do not attempt `swift test` from a clean repo — it will time out. Check for `SWIFTPM_BUILD_PATH` or `.build/` left by a prior run. If `.build/` is stale or missing, push to `wip/` with a note that the MLX build time exceeded the budget. Workers running on a hot machine (`.build/` present, <6h old) can do `swift build && swift test` incrementally (~9 min)." (2) **`.automation/worker.prompt`**: same warning prominently at the top of the "Running tests" section. Also document: if the worker detects a fresh clone with no `.build/` AND the task requires `swift test`, it MUST push to `wip/` — merging unverified code is banned. This resolves the protocol ambiguity that has produced 10+ wip branches so far. Reviewer will downgrade to ⭐⭐⭐ if this task is not in BACKLOG by next review cycle.
+- status: open
+- claimed_by: null
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: **Pivot P0: app must show something useful when all channels fail at cold launch.** When FDA is denied, Automation is denied, and no Slack token exists, the inbox is blank. If a prior launch had real threads, persisting the thread list means the user sees recognizable conversation rows immediately, not a blank screen. After every successful `syncFromIMessage()` (or any channel sync) that returns ≥1 thread, JSON-serialize the thread list (fields: `id, displayName, chatGUID, previewText, channel, isRead`) to `~/Library/Application Support/ReplyAI/last-threads-cache.json`. On `InboxViewModel.init()`, if `threads.isEmpty`, read this file and populate `threads` from cache. Cache is only used as initial-state fill — any real sync result (even empty) replaces it. Cache entries do NOT carry `isDemoThread: true`; they are presented as-is. `Preferences.lastThreadsCacheURL: URL` is a computed property returning the cache path. Tests: successful sync → cache file written with correct JSON; cold-init with cache present → `threads` populated; second sync → cache updated; failed sync → existing in-memory threads unchanged (cache file unchanged); cache file absent at init → empty threads (no crash).
 - success_criteria:
-  - AGENTS.md Gotchas section includes the MLX build-time warning (one paragraph)
-  - `.automation/worker.prompt` includes the same warning at the top of the test-running section
-  - The wip-branch protocol (push if `.build/` absent + MLX dep) is explicitly documented
-  - No code changes — docs only
-- test_plan: N/A (docs-only). Worker verifies via `grep -i "MLX" AGENTS.md` and `grep -i "MLX" .automation/worker.prompt` to confirm both files updated.
-
+  - `InboxViewModel` writes thread-list JSON after successful sync
+  - `InboxViewModel.init()` populates from cache when threads are empty
+  - `Preferences.lastThreadsCacheURL: URL` computed property
+  - `testSuccessfulSyncWritesCache` — sync returns threads → cache file exists with serialized threads
+  - `testColdInitFromCache` — fresh ViewModel + cache file present → threads populated
+  - `testSecondSyncUpdatesCacheFile` — sync twice → cache reflects second sync's thread list
+  - `testFailedSyncLeavesThreadsUnchanged` — cache loaded, sync throws → threads unchanged
+  - `testMissingCacheAtInitProducesEmptyThreads` — no cache file → threads empty, no crash
+  - Existing InboxViewModelTests remain green
+- test_plan: 5 new tests in `InboxViewModelTests.swift`; use injected temp directory URL for cache; `StaticMockChannel` for sync results; no file system side-effects in existing tests.
 
 ---
 
@@ -224,6 +228,48 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - `swift test` all green after merge
 - test_plan: Human runs `swift test` before and after merge to confirm baseline and pass.
 
+### REP-275 — human: resolve competing REP-247 ViewState implementations (pick one wip branch, merge)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Two competing ViewState implementations exist and one must be selected. `wip/worker-2026-04-24-113000-viewstate` contains REP-247 alone (527→531 tests, +4 tests). `wip/2026-04-24-120000-viewstate-slacktokenstore` contains REP-247 + REP-274 (SlackTokenStore) bundled (more tests). Human should: (1) diff both branches; (2) run `swift test` on each; (3) pick the cleaner implementation — prefer the bundled branch if both pass, since REP-274 is also needed; (4) close the other branch; (5) mark REP-247 and REP-274 done after merge; (6) close the orphaned `wip/2026-04-24-113000-slack-socket-token-store` branch (only a claim commit, no code).
+- success_criteria:
+  - Exactly one wip branch merged to main
+  - The other wip branch closed
+  - REP-247 and (if bundled) REP-274 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` on each branch before choosing; verifies 4+ new tests present.
+
+### REP-276 — human: review + merge wip/2026-04-23-230824-telegram-channel-tests (REP-256+205+206)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new), `Tests/ReplyAITests/SearchIndexTests.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`
+- scope: Worker-2026-04-23-230824 implemented REP-256 (TelegramChannel stub), REP-205 (SearchIndex.delete regression test), and REP-206 (PromptBuilder drop-oldest test) but was blocked by MLX build time. Code is complete on `wip/2026-04-23-230824-telegram-channel-tests`. Human should: (1) review the diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-256, REP-205, REP-206 done.
+- success_criteria:
+  - wip/2026-04-23-230824-telegram-channel-tests merged into main
+  - REP-256, REP-205, REP-206 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge.
+
+### REP-277 — human: review + merge wip/2026-04-24-031929-channel-stubs (REP-243+260+261+264)
+- priority: P1
+- effort: S
+- ui_sensitive: false
+- status: open
+- claimed_by: human
+- files_to_touch: `Sources/ReplyAI/Models/Channel.swift`, `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Sources/ReplyAI/Channels/SMSChannel.swift` (new), and corresponding test files
+- scope: Worker-2026-04-24-031929 implemented REP-243 (Channel enum `.telegram/.whatsapp/.teams/.sms` cases + `displayName/iconName`), REP-260 (WhatsAppChannel stub), REP-261 (TeamsChannel stub), and REP-264 (SMSChannel stub) bundled with 13 new tests (4 ChannelTests + 3 per channel stub). Code complete on `wip/2026-04-24-031929-channel-stubs`. Human should: (1) review diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-243, REP-260, REP-261, REP-264 done.
+- success_criteria:
+  - wip/2026-04-24-031929-channel-stubs merged into main
+  - REP-243, REP-260, REP-261, REP-264 marked done
+  - `swift test` all green after merge
+- test_plan: Human runs `swift test` locally before and after merge; confirms 13 new tests appear.
 
 ### REP-237 — SlackHTTPClient: injectable URL session wrapper for Slack API GET calls
 - priority: P1
@@ -371,24 +417,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing tests remain green
 - test_plan: 3 new tests in `SMSChannelTests.swift`; injectable `KeychainHelper` with test-scoped service name.
 
-### REP-265 — InboxViewModel: wire MessagesAppActivationObserver to trigger re-sync when Messages becomes active
-- priority: P1
-- effort: M
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-24-102657
-- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` (REP-239, open) fires when `com.apple.MobileSMS` becomes frontmost. Wire this into `InboxViewModel`: accept an injectable `MessagesAppActivationObserver?` (default nil = disabled). In `init()`, set `activationObserver.onMessagesActivated = { [weak self] in Task { await self?.handleMessagesActivation() } }`. `handleMessagesActivation()` calls `syncFromIMessage()` (conservative until REP-236 merges) and merges results without discarding existing threads. 5-second debounce guards against rapid app-switch thrash: track `lastActivationDate` and skip if < 5s ago. Tests: observer fires → sync triggered; second fire within 5s → sync skipped (debounce); ViewModel deinited before callback fires → no crash (weak capture). Prereq: REP-239 must be completed first (or implemented inline as a stub for testability).
-- success_criteria:
-  - `InboxViewModel` accepts injectable `MessagesAppActivationObserver?` (default nil)
-  - `handleMessagesActivation()` method triggers sync
-  - 5-second debounce via `lastActivationDate` tracking
-  - `testMessagesActivationTriggersSyncOnObserverFire` — observer fires → handleMessagesActivation called
-  - `testMessagesActivationDebounceSkipsRapidSecondFire` — second fire within 5s → sync not triggered
-  - `testMessagesActivationWeakCaptureNoCrashAfterDeinit` — observer fires after ViewModel deinited → no crash
-  - Existing InboxViewModelTests remain green
-- test_plan: 3 new tests in `InboxViewModelTests.swift`; injectable mock observer that manually fires `onMessagesActivated`.
-
 ### REP-267 — SlackSocketClient: injectable WebSocket wrapper for Slack Socket Mode real-time event stream
 - priority: P1
 - effort: M
@@ -448,8 +476,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-120000
+- blocker: code complete on wip/2026-04-24-120000-viewstate-slacktokenstore (bundled with REP-247, +4 tests); MLX cold-build exceeds 13-min budget; human reviews via REP-275
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (extends REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift`
 - scope: **Pivot-aligned (Slack token management, prereq: REP-233).** The Slack OAuth `v2.access` response includes both `access_token` and `team.name` (workspace name for display). Storing only the token (as REP-266/272 currently does via raw `KeychainHelper.set`) loses the workspace name needed for Settings UI (REP-273). Add `struct SlackTokenStore` (in `KeychainHelper.swift` or a adjacent file): `set(token: String, workspaceName: String)` JSON-encodes and stores under `"slack-access-token"` key; `get() -> (token: String, workspaceName: String)?` retrieves and decodes; `delete()` removes the entry. `SlackOAuthFlow` (REP-266) and `SlackChannel.authorize()` (REP-272) should be updated to use `SlackTokenStore.set(...)` instead of raw `KeychainHelper.set`. Tests: round-trip through set/get preserves both fields; delete removes entry; missing entry returns nil; malformed JSON stored returns nil gracefully.
 - success_criteria:
@@ -1269,26 +1298,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing IMessageChannelTests and thread-preview filter remain green
 - test_plan: 4 new tests in `IMessageChannelTests.swift` using in-memory SQLite fixture with varied `associated_message_type` values.
 
-### REP-239 — MessagesAppActivationObserver: notify when Messages.app becomes frontmost
-- priority: P1
-- effort: S
-- ui_sensitive: false
-- status: done
-- claimed_by: worker-2026-04-24-102657
-- files_to_touch: `Sources/ReplyAI/Channels/MessagesAppActivationObserver.swift` (new), `Tests/ReplyAITests/MessagesAppActivationObserverTests.swift` (new)
-- scope: **Pivot-aligned (alt message-source trigger, no FDA).** `MessagesAppActivationObserver` watches `NSWorkspace.shared.notificationCenter` for `NSWorkspace.didActivateApplicationNotification`. When the frontmost app's `bundleIdentifier` is `"com.apple.MobileSMS"`, fires `onMessagesActivated: (() -> Void)?` callback. Injectable `NSWorkspace` and notification center for tests. 600ms debounce so rapid app switches don't trigger multiple syncs. Tests: notification with Messages bundle ID → callback fires; notification with other bundle ID → callback silent; two rapid activations within 600ms → only one callback; injectable workspace observer captures posted notification.
-- success_criteria:
-  - `MessagesAppActivationObserver` type with `onMessagesActivated` callback
-  - Debounce of 600ms for rapid activations
-  - Injectable `NSWorkspace` + notification center for test isolation
-  - `testActivationCallbackFiresForMessages` — Messages app activated → callback fires
-  - `testActivationCallbackSilentForOtherApps` — Safari activated → callback silent
-  - `testRapidActivationsDebounced` — two activations within 600ms → one callback
-  - Existing tests remain green
-- test_plan: 3 new tests using injectable `MockWorkspace` and `NotificationCenter`; no real NSWorkspace in tests.
-
 ### REP-240 — AppleScriptMessageReader: `messagesForChat(chatGUID:limit:) -> [Message]`
-- priority: P2
+- priority: P1
 - effort: M
 - ui_sensitive: false
 - status: open
@@ -1416,8 +1427,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status:   in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-113000
+- blocker: TWO competing implementations exist — `wip/worker-2026-04-24-113000-viewstate` (REP-247 only, 531 tests) and `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled). Human should pick one via REP-275.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Replace implicit thread-count-based state detection with explicit `ViewState` enum: `case loading, populated, empty(EmptyReason), demo, error(Error)` where `EmptyReason: Equatable { case noMessages, noPermissions }`. `InboxViewModel.viewState: ViewState` is `@Published`. Transitions: on init → `.loading`; sync returns threads → `.populated`; sync returns [] with demo mode active → `.demo`; sync returns [] without demo → `.empty(.noMessages)`; sync throws `authorizationDenied` → `.empty(.noPermissions)`; sync throws other → `.error(error)`. Tests: each state transition tested with mock channel; `.loading` → `.populated` on sync; `.loading` → `.demo` when demoMode; `.empty(.noPermissions)` on auth-denied sync.
 - success_criteria:
@@ -1587,6 +1599,16 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-265 — InboxViewModel: wire MessagesAppActivationObserver to trigger re-sync when Messages becomes active
+- status: done
+- claimed_by: worker-2026-04-24-102657
+- scope: InboxViewModel accepts injectable `MessagesAppActivationObserver?`. `handleMessagesActivation()` triggers `syncFromIMessage()` with 5-second debounce. 3 new tests in InboxViewModelTests. Bundled with REP-239 in commit `9a6c3d1`, 521→527 tests.
+
+### REP-239 — MessagesAppActivationObserver: notify when Messages.app becomes frontmost
+- status: done
+- claimed_by: worker-2026-04-24-102657
+- scope: New `MessagesAppActivationObserver` watching `NSWorkspace.didActivateApplicationNotification` for `com.apple.MobileSMS`. Injectable NSWorkspace + NotificationCenter. 600ms debounce. 3 new tests. Commit `9a6c3d1`, 521→527 tests.
 
 ### REP-271 — AGENTS.md + worker.prompt: document MLX build-time budget workaround and wip-branch protocol
 - status: done
