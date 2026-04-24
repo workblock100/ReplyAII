@@ -290,8 +290,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152614
 - files_to_touch: whichever `wip/*` branch is oldest and still referenced in BACKLOG as `status: blocked`
 - scope: **Structural unblock for the entire wip backlog.** Worker MUST check that `.build/` is fresh (<6 hours old via `find .build -maxdepth 0 -mmin -360`) BEFORE claiming this task. If `.build/` is absent or stale, skip this task entirely — `swift test` will time out. If `.build/` IS fresh: (1) run `git stash` to save current state; (2) `git fetch origin && git checkout <oldest-blocked-wip-branch>`; (3) `swift test 2>&1 | tail -20`; (4) if all tests green, `git checkout main && git merge --no-ff <branch> && git push origin main`; (5) update BACKLOG.md: mark the corresponding REP as done; (6) update AGENTS.md: update test count and mark the REP as shipped. If tests fail: push a `fix-wip:<branch>` commit to the wip branch with the minimal fix, then re-run. Do not merge a failing branch. Priority order for wip branches: `wip/2026-04-23-085959-stats-session-acceptance` (oldest), then `wip/2026-04-23-130000-thread-name-regex`, then `wip/2026-04-23-145504-demo-mode` (pick one REP-228 impl, close the other), and so on in chronological order. Skip `wip/quality-*` branches (those need human review per REP-016/017/048).
 - success_criteria:
@@ -1065,8 +1065,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152614
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-076 wired mark-as-read on thread select. Pin the unread-clear contract: start with a thread at `unread: 3`; call `viewModel.selectThread(thread)`; assert `thread.unread == 0`. Also assert: the thread's position in `viewModel.threads` is unchanged after the unread update (no re-sort triggered by the unread change alone). Uses `StaticMockChannel` with a seeded thread.
 - success_criteria:
@@ -1475,8 +1475,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152614
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `totalUnreadCount: Int` to `InboxViewModel` that sums `thread.unread` across all threads. Useful for the MenuBar badge (REP-044) and the sidebar header. Clamped to ≥0 (guard against hypothetical negative unread). Tests: no threads → 0; 3 threads with unread 2, 0, 5 → 7; all unread=0 → 0; single thread unread=1 → 1.
 - success_criteria:
@@ -1510,8 +1510,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152614
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkArchiveRead()` to `InboxViewModel` that calls `archive(_:)` on every thread where `thread.unread == 0`. Useful for a "Clear read" menu action (UI wiring is separate). Complements `bulkMarkAllRead()` (REP-224). Tests: 3 threads with unread 0 and 1 with unread 3 → 3 archived, 1 remains; all threads unread=0 → all archived, `threads` empty; no threads with unread=0 → no archives triggered, `threads` unchanged.
 - success_criteria:
@@ -1526,8 +1526,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: worker-2026-04-24-152614
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: Pin cache-and-lock correctness under real concurrency: call `name(for: "alice@example.com")` 10 times concurrently via `DispatchQueue.concurrentPerform(iterations: 10)`; assert result is consistent (all 10 results equal the resolved name); assert mock store queried exactly once (not 10 times). Complements REP-219 (single cache-hit test) with concurrent-load correctness. Guards `NSLock`-guarded cache against TOCTOU under actual parallel reads.
 - success_criteria:
