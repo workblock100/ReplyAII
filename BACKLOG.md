@@ -209,8 +209,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-200831
+- blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackHTTPClient.swift` (new), `Tests/ReplyAITests/SlackHTTPClientTests.swift` (new)
 - scope: **Pivot-aligned (Slack channel prereq).** `SlackHTTPClient` is the HTTP layer needed by `SlackChannel` for `conversations.list` and `conversations.history` API calls. Protocol: `func get(endpoint: String, token: String, params: [String: String]) async throws -> Data`. Default conformance: `URLSessionSlackClient` sends `GET https://slack.com/api/<endpoint>?<params>` with `Authorization: Bearer <token>` header. Injectable for tests via protocol. Tests: mock session returns valid JSON → Data returned; auth header is `Bearer <token>`; correct base URL + endpoint + params in request; HTTP 200 → Data; HTTP 401 → throws `ChannelError.authorizationDenied`; HTTP 429 → throws `ChannelError.networkError`; network error → throws `ChannelError.networkError`.
 - success_criteria:
@@ -228,8 +229,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-23-200831
+- blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (depends on REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift` (depends on REP-233)
 - scope: **Pivot-aligned (factory reset / channel de-auth).** `Preferences.wipe()` currently clears UserDefaults but leaves Keychain entries (Slack token, future tokens). Add `KeychainHelper.deleteAll(prefix: String)` that uses `SecItemDelete` with a `kSecAttrAccount` prefix match — deletes every item where the account key starts with `prefix`. Called with `"ReplyAI-"` to wipe all channel tokens on factory reset. Tests: 3 keys with `"ReplyAI-"` prefix → all 3 deleted after `deleteAll("ReplyAI-")`; 1 key without prefix → not deleted; calling on empty keychain does not throw.
 - success_criteria:
