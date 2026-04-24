@@ -6,6 +6,56 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-04-24 04:22 – 10:20 UTC (last ~6h) — ⭐⭐⭐⭐
+
+**Rating: 4/5**
+
+Thirteen commits (3 planner refreshes, 10 worker including 2 substantive main-branch code commits). Test suite grew **513 → 521 (+8 tests)** — verified by `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'`. AGENTS.md test-count line reads 521 and matches reality; the planner's in-window archive commit (`64099bf`) already synced it. Zero banned-action violations: no `Package.swift` / `project.yml` / `Info.plist` / `scripts/*` / `*.entitlements` / `design_handoff_replyai/` touches, no `#Preview` additions, no sandbox flip, no test-file shrinkage, no force-pushes. Production-source delta is narrow and fully test-covered: new `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift` (+168, 3 tests), `NotificationCoordinator.swift` (+19, 2 tests), `InboxViewModel.swift` (+20, 3 tests).
+
+**Pivot alignment remains strong and zero-regression.** No FDA / chat.db / AttributedBodyDecoder / ChatDBWatcher cycles this window. Shipped work is non-iMessage channel infrastructure (REP-230 LocalhostOAuthListener — the loopback server that makes Slack OAuth testable on 127.0.0.1) plus a proactive bug fix on last window's UNNotification passive-capture path (REP-263 chatGUID-based thread deduplication). Planner continues to queue pivot-aligned tasks only: REP-266 (SlackOAuthFlow P0), REP-267 (SlackSocketClient P1), REP-268/269 (Preferences + IMessageSender polish). No FDA-dependent tasks added.
+
+**REP-263 is the quality highlight.** Two windows ago the worker shipped REP-235 (`NotificationCoordinator.willPresent` passive capture). This window the worker self-identified a thread-duplication bug in that path — `applyIncomingNotification` matched on a senderHandle heuristic that failed when a thread's chatGUID format didn't line up with the handle — and shipped the fix with 5 behavior-level tests covering the GUID-present-match, GUID-present-unknown, GUID-nil, and fallback-key branches. Both injected parameters default to `nil` so the change is additive; no existing call site needed to change. That's self-auditing the automation has been lacking.
+
+Two reasons the rating is 4 not 5, both **carried forward from prior reviews**:
+
+**1. MLX build-time blocker, now 3 consecutive windows unaddressed.** This window added 2 new `wip/*` branches to the backlog (`wip/2026-04-24-031929-channel-stubs` and `wip/2026-04-24-083949-rep266-slack-oauth-flow`), bringing the total pending-human-merge count to 3 when combined with `wip/2026-04-24-005143-rep255-notification-permission` from the prior window. All blocked on the same root cause: the 13-min worker budget cannot finish `swift test` against an MLX fresh-clone C++ build (worker-031929's log notes ~51 min to first-compile start under SPM lock contention). The worker is behaving correctly (don't merge unverified code), but the pivot's throughput to main is visibly throttled and nobody has promoted this to a P0 infra task despite two prior reviewer flags. If the next window ends without either a wip branch merging or a BACKLOG task addressing build-time, rating should drop to ⭐⭐⭐ with explicit guardrails.
+
+**2. Planner model-pin drift persists.** All 3 planner commits this window co-author `Claude Sonnet 4.6`. User's automation-model memory documents Opus 4.7 + `effortLevel=high` for planner/worker/reviewer cron tasks. Flagged in each of the last 4 reviews, unchanged. The signal is stable, but the automation is still running on a lower-effort tier than the human intended.
+
+One minor new observation: worker-authored commit `61ec320` ("plan: 2026-04-24 run4 (REP-260/261/264/243 blocked on wip branch, MLX build time)") uses a `plan:` prefix despite being a worker run log. Low-severity grep noise — worker should prefix run logs as `log:` or `worker-log:` to keep `plan:` reserved for planner refreshes.
+
+### Shipped this window (feature-level)
+
+- **Slack OAuth loopback listener (REP-230).** `LocalhostOAuthListener` binds an NWListener on `127.0.0.1` (port 0 for OS-assigned in tests, 4242 default in product), resolves the `code` query param from the first inbound GET, fires completion exactly once, and shuts down. `isRunning` bool guards double-start; `actualPort` + `onReady` callback give tests a clean synchronization point; `OAuthError.timeout` / `.listenerFailed` is `Equatable` + `Sendable`. 3 new tests: valid-code extraction, 0.25s timeout fires `.timeout`, double-start is a no-op. Debug log captures two non-obvious gotchas the worker hit and backed out of (`requiredLocalEndpoint` caused silent NWListener bind failure; `listener == nil` guard had a race with `finish()`'s nil-out path) — useful carryover for future NWListener work.
+- **Thread-duplication fix on UNNotification passive capture (REP-263).** `NotificationCoordinator.willPresent` now pulls `CKChatIdentifier` (primary) or `CKChatGUID` (fallback) out of `content.userInfo` and threads it through `handleIncomingNotification(chatGUID:)`. `InboxViewModel.applyIncomingNotification` now does exact `thread.chatGUID` match when the GUID is present, and falls back to the prior senderHandle heuristic only when nil — preserving backward compat for callers that don't know the GUID. 5 new tests cover the full decision tree. Follow-up quality on a shipped feature, not whack-a-mole.
+- **AGENTS.md in-window sync.** Planner archived REP-263 as done the same window it shipped, updated the test count 516 → 521, and pruned the `LocalhostOAuthListener` stub note. Worker commit `1129e97` corrected the post-rebase SHA (`2f6402a` → `fbba843`) so the AGENTS.md reference actually resolves. No drift between docs and repo state at end of window.
+- **Pivot queue extended.** Planner added REP-266 P0 (SlackOAuthFlow orchestrator combining REP-230 + REP-237), REP-267 P1 (SlackSocketClient WebSocket for Socket Mode), and 2 P2 polish tasks (Preferences lastSyncDate, IMessageSender injectable retryDelay). Worker claimed REP-266 within 2h, implementation landed on wip awaiting the MLX-budget unblock.
+
+### Test coverage delta
+
+- **+8 tests (513 → 521).** Verified by `grep -c "func test" Tests/ReplyAITests/*.swift | awk -F: '{s+=$2} END {print s}'`. AGENTS.md header accurate.
+- Test files expanded: `LocalhostOAuthListenerTests.swift` (new, +109), `NotificationCoordinatorTests.swift` (+59), `InboxViewModelTests.swift` (+61). **Zero test files shrunk.**
+- **Production LOC:** +207 (LocalhostOAuthListener +168 new; InboxViewModel +20; NotificationCoordinator +19). Test LOC +229. Test:source LOC ratio ≈ **1.1:1** — thinner than recent pinning-heavy windows, but appropriate for protocol-scaffolding work, and every new branch has behavior-level coverage.
+
+### Concerns
+
+- **Medium (carried forward, 3rd window): MLX build-time blocker is now strictly accumulating wip branches.** Three `wip/*` branches (`005143-rep255`, `031929-channel-stubs`, `083949-rep266`) all stuck on the same 13-min-vs-~51-min gap. Prior reviewer flagged this as "escalate as a P0 infra task"; no task was added. If the 4th wip branch opens without clearing signals next window, the pipeline is structurally drifting faster than it's shipping.
+- **Medium (carried forward, 4th window): planner co-author is still `Claude Sonnet 4.6`.** User-documented required pin is Opus 4.7 + `effortLevel=high`. This review won't downgrade further on this alone — product signal is stable — but the automation config divergence is worth a single line at the top of `.automation/{planner,worker,reviewer}.prompt` asserting the required model, so a prompt-diff would surface it.
+- **Soft: worker commit `61ec320` uses `plan:` prefix for a worker run log.** Subject reads like a planner refresh; body clarifies it's a worker log upload. Would suggest `log:` or `worker-log:` for worker run-log commits to keep the `plan:` namespace clean for grep-based audits.
+
+### Suggestions for next planner cycle
+
+- **Add a P0 infra task for the MLX build-time budget issue.** Concrete options the planner could spec: (a) cache the MLX build artifact via `SWIFTPM_MODULE_CACHE_PATH` pinned to a warm worker-local directory so subsequent runs skip the C++ recompile; (b) raise the worker budget for tasks that touch `Sources/**` under the MLX dependency path only; (c) split the verification job so `swift build` (~compile-check) runs inside budget while `swift test` is a longer async job whose result is polled on next worker fire. Any of the three clears the wip backlog. Not repeating this suggestion next window if a task doesn't exist by then — will downgrade instead.
+- **Seed follow-ons off REP-266 and REP-263 before they merge.** Once REP-266 (SlackOAuthFlow) lands, the planner will want: a task wiring `SlackOAuthFlow` into `SlackChannel.authorize()` (currently throws `authorizationDenied`), a task adding the user-facing Slack "Connect" button in Settings, and a task for refresh-token persistence in `KeychainHelper`. Queue now so worker has pivot-aligned work the moment the wip unblocks.
+- **Consider a `worker-log:` / `plan:` prefix split.** Small commit-hygiene fix, low effort. The reviewer grep pattern for planner refreshes is currently noisy because worker run-log commits use `plan:`.
+- **Snap-verify BACKLOG archiving against actual worker commits.** Planner's run2 correctly cross-checked REP-235 in BACKLOG state before acting; run4's archive of REP-263 was tight and well-justified (referenced commit `31534e1`). Good discipline this window — keep the pattern going.
+
+### Rolling trail
+
+`5 → 4 → 5 → 4 → **4**`. No one-week regression pattern. No STOP AUTO-MERGE trigger (requires four consecutive sub-⭐⭐⭐ windows; we have zero). But the two carry-forward concerns (MLX budget, planner model pin) have now persisted across 3–4 windows each without adjustment, and the MLX one is actively accumulating stranded wip branches. If next window opens a 4th wip branch on the same blocker OR the first wip doesn't merge, next rating drops to ⭐⭐⭐ with explicit BACKLOG guardrails.
+
+---
+
 ## Window 2026-04-23 16:11 – 2026-04-23 22:20 UTC (last ~6h) — ⭐⭐⭐⭐
 
 **Rating: 4/5**
