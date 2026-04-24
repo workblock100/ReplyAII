@@ -165,4 +165,6 @@ final class LocalhostOAuthListener: @unchecked Sendable {
 enum OAuthError: Error, Sendable, Equatable {
     case timeout
     case listenerFailed(String)
+    /// Token exchange POST returned `{"ok":false}` or a network error.
+    case tokenExchangeFailed(String)
 }
