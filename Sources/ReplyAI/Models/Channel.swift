@@ -21,6 +21,21 @@ enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
         }
     }
 
+    /// Human-readable channel name suitable for UI display.
+    var displayName: String { label }
+
+    /// SF Symbol name representing this channel.
+    var iconName: String {
+        switch self {
+        case .imessage: "message.fill"
+        case .whatsapp: "phone.bubble.fill"
+        case .slack:    "number.square.fill"
+        case .teams:    "person.3.fill"
+        case .sms:      "bubble.left.fill"
+        case .telegram: "paperplane.fill"
+        }
+    }
+
     var dotColor: Color {
         switch self {
         case .imessage: Theme.Color.channelIMessage
