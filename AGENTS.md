@@ -129,6 +129,7 @@ Tests/ReplyAITests/                527 tests
 
 Commits (newest first; run `git log` for detail):
 
+- `6ae9022` Thread-list cache for cold-launch resilience — wip/2026-04-24-152005-thread-cache (REP-278, worker-2026-04-24-152005, 531→536 tests est., unverified pending warm build)
 - `ea6fc52` ViewState enum + 4 transition tests — wip/worker-2026-04-24-113000-viewstate (REP-247, worker-2026-04-24-113000, 527→531 tests, unverified pending warm build)
 - `08f2e4b` AGENTS.md + worker.prompt: MLX cold-build warning and wip-branch protocol documented (REP-271, worker-2026-04-24-110000, 527 tests unchanged)
 - `9a6c3d1` MessagesAppActivationObserver (NSWorkspace activation watcher, 600ms debounce, injectable seams) + InboxViewModel activation re-sync wiring (5s debounce, weak capture, handleMessagesActivation) (REP-239, REP-265, worker-2026-04-24-102657, 521→527 tests)
@@ -215,6 +216,7 @@ Commits (newest first; run `git log` for detail):
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists. `SlackChannel` stub + `KeychainHelper` shipped (REP-233, REP-234, commit `c001d7e`) — Slack throws `authorizationDenied` until OAuth token present. `LocalhostOAuthListener` shipped (REP-230, commit `fbba843`). Next: `SlackHTTPClient` (REP-237, complete on `wip/2026-04-23-200831-slack-http-keychain-deleteall`, pending human merge), then real `conversations.list` fetch (REP-242). WhatsApp/Teams/Telegram remain unstarted.
 - **AppleScript message-source fallback**. `AppleScriptMessageReader.recentChats()` implementation complete on `wip/2026-04-23-191507-appleScript-fallback` (REP-236, +4 tests). Pending human `swift test` + merge. No FDA required — uses Automation permission.
 - **NotificationCoordinator `requestPermissionIfNeeded`**. Authorization request on startup (REP-255) implementation complete on `wip/2026-04-24-005143-rep255-notification-permission`. Pending human `swift test` + merge.
+- **Thread-list cache (REP-278)**. `Preferences.lastThreadsCacheURL`, `InboxViewModel.saveThreadCache/loadThreadCache`, 5 new tests — all complete on `wip/2026-04-24-152005-thread-cache`. Pending human `swift test` + merge.
 - **Voice profile training**. `ob-voice` is a UI mock; no LoRA pipeline.
 - ~~**Rich message decoding limits.**~~ Resolved: `AttributedBodyDecoder` now does a real typedstream 0x2B tag scan (REP-003, commit `e760a12`). Hand-crafted hex fixtures cover nested `NSMutableAttributedString`, UTF-8 emoji, malformed blobs.
 - ~~**FTS5 watcher updates.**~~ Resolved: `SearchIndex` now has an incremental upsert path keyed by `(thread_id, message_rowid)` for watcher-driven syncs (REP-015, commit `687c5a3`). Full rebuild is still the fallback for first-boot / settings changes.
