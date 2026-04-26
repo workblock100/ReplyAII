@@ -48,6 +48,15 @@ for ttf in "$REPO/Sources/ReplyAI/Resources/Fonts"/*.ttf; do
     cp "$ttf" "$APP/Contents/Resources/Fonts/"
 done
 
+# App icon — Info.plist's CFBundleIconFile points to AppIcon, which macOS
+# resolves as Contents/Resources/AppIcon.icns. SwiftPM compiles
+# Assets.xcassets to Assets.car but Finder also reads the .icns directly,
+# which is friendlier for ad-hoc-signed dev bundles.
+ICNS_SRC="$REPO/Sources/ReplyAI/Resources/AppIcon.icns"
+if [ -e "$ICNS_SRC" ]; then
+    cp "$ICNS_SRC" "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 # SPM resource bundle (carries anything .process() picked up, e.g. Assets.xcassets).
 BUNDLE_SRC="$REPO/.build/$CONFIG/ReplyAI_ReplyAI.bundle"
 if [ -d "$BUNDLE_SRC" ]; then

@@ -35,6 +35,10 @@ let package = Package(
                 "Resources/Info.plist",
                 "Resources/ReplyAI.entitlements",
                 "Resources/Fonts/README.md",
+                // The .icns is consumed at bundle time by scripts/build.sh,
+                // which copies it directly into Contents/Resources. SwiftPM
+                // doesn't need to process it.
+                "Resources/AppIcon.icns",
             ],
             resources: [
                 .copy("Resources/Fonts"),
