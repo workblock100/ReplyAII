@@ -25,7 +25,14 @@ struct InboxScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if case .denied(let hint) = model.syncStatus {
+            // FDA banner suppressed per 2026-04-23 pivot. The chat.db / FDA
+            // path is no longer the primary route; alternative architectures
+            // (AppleScript, UNNotification capture, demo mode) are taking over.
+            // The `.denied` case in SyncStatus is preserved but no longer
+            // emitted by InboxViewModel.syncFromIMessage — see that method's
+            // catch block. Re-enable here only if you intentionally bring FDA
+            // back as a primary path.
+            if case .denied(let hint) = model.syncStatus, false {
                 FDABanner(hint: hint) {
                     Task { await model.syncFromIMessage() }
                 }

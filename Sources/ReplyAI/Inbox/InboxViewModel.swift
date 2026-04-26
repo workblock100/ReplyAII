@@ -489,8 +489,14 @@ final class InboxViewModel {
 
             startWatchingIfNeeded()
         } catch let err as ChannelError {
+            // Pivot 2026-04-23: chat.db + FDA is unreliable. When the channel
+            // returns permissionDenied, we no longer surface an FDA banner —
+            // fall back silently to fixture/demo threads (the existing `threads`
+            // value at init time) so the app remains usable. Console-log so
+            // diagnostics still capture the denial.
             if case .permissionDenied(let hint) = err {
-                syncStatus = .denied(hint: hint)
+                NSLog("[ReplyAI] iMessage permissionDenied (FDA): \(hint) — falling back to demo fixtures")
+                syncStatus = .idle
             } else {
                 syncStatus = .failed(err.localizedDescription)
             }
