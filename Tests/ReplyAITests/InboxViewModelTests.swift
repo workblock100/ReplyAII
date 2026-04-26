@@ -315,6 +315,28 @@ final class InboxViewModelNotificationReplyTests: XCTestCase {
         XCTAssertEqual(vm.threads.first(where: { $0.id == "t2-76" })?.unread, 2,
             "other thread unread must be unaffected")
     }
+
+    @MainActor
+    func testSelectClearsUnreadWithoutReorderingThreads() {
+        let t1 = MessageThread(
+            id: "t1-order", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "now", unread: 5)
+        let t2 = MessageThread(
+            id: "t2-order", channel: .slack, name: "Team",
+            avatar: "T", preview: "standup", time: "now", unread: 0)
+        let t3 = MessageThread(
+            id: "t3-order", channel: .whatsapp, name: "Maya",
+            avatar: "M", preview: "later", time: "now", unread: 2)
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2, t3], imessage: channel,
+                                contacts: fastContacts())
+
+        vm.selectThread("t1-order")
+
+        XCTAssertEqual(vm.threads.map(\.id), ["t1-order", "t2-order", "t3-order"])
+        XCTAssertEqual(vm.threads.first?.unread, 0)
+    }
 }
 
 // MARK: - Thread selection model (REP-071)

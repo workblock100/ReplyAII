@@ -416,6 +416,40 @@ final class ContactsResolverTests: XCTestCase {
         XCTAssertEqual(fake.lookupCallCount, afterFirst,
                        "ttl=9999 must not re-query the store on the second call (cache still valid)")
     }
+
+    func testConcurrentSameHandleResolvesConsistently() {
+        let fake = FakeContactStore()
+        fake.names["8005559249"] = "Concurrent Alice"
+        let resolver = ContactsResolver(store: fake, ttl: 3600)
+        resolver.overrideAccessForTesting(.granted)
+
+        let results = Locked([String?]())
+        DispatchQueue.concurrentPerform(iterations: 10) { _ in
+            let name = resolver.name(for: "+18005559249")
+            results.withLock { $0.append(name) }
+        }
+
+        let all = results.withLock { $0 }
+        XCTAssertEqual(all.count, 10)
+        XCTAssertTrue(all.allSatisfy { $0 == "Concurrent Alice" })
+    }
+
+    func testConcurrentSameHandleUsesWarmCache() {
+        let fake = FakeContactStore()
+        fake.names["8005559249"] = "Concurrent Alice"
+        let resolver = ContactsResolver(store: fake, ttl: 3600)
+        resolver.overrideAccessForTesting(.granted)
+
+        XCTAssertEqual(resolver.name(for: "+18005559249"), "Concurrent Alice")
+        let callsAfterWarmup = fake.lookupCallCount
+
+        DispatchQueue.concurrentPerform(iterations: 10) { _ in
+            _ = resolver.name(for: "+18005559249")
+        }
+
+        XCTAssertEqual(fake.lookupCallCount, callsAfterWarmup,
+                       "warm cache must serve concurrent same-handle reads without extra store hits")
+    }
 }
 
 // MARK: - Test double
@@ -458,4 +492,3 @@ private final class FakeContactStore: ContactsStoring, @unchecked Sendable {
         return names[handle]
     }
 }
-
