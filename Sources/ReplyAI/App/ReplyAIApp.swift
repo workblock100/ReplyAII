@@ -1,5 +1,20 @@
 import SwiftUI
 
+/// Branches between WelcomeGate (first-run) and AppPrototypeView (returning
+/// user). Reads `PreferenceKey.onboardingCompleted` via @AppStorage so the
+/// view re-renders the moment the gate's "Get started" button writes true.
+struct RootView: View {
+    @AppStorage(PreferenceKey.onboardingCompleted) private var completed = false
+
+    var body: some View {
+        if completed {
+            AppPrototypeView()
+        } else {
+            WelcomeGate()
+        }
+    }
+}
+
 @main
 struct ReplyAIApp: App {
     @State private var coordinator = NotificationCoordinator()
@@ -35,11 +50,13 @@ struct ReplyAIApp: App {
     }
 
     var body: some Scene {
-        // Main window: the 28-screen prototype gallery. This mirrors how
-        // prototype.html was used — sidebar of screens, use ← / → to step.
-        // Swap to `InboxScreen()` to ship only the real app surface.
-        WindowGroup("ReplyAI Prototype") {
-            AppPrototypeView()
+        // Main window: gated by onboarding completion. New users see the
+        // WelcomeGate (intro + permissions) until they click Get started;
+        // returning users land in the prototype gallery, which surfaces
+        // the inbox by default. Swap AppPrototypeView for `InboxScreen()`
+        // to ship only the real app surface (no prototype gallery).
+        WindowGroup("ReplyAI") {
+            RootView()
         }
         .defaultSize(width: 1360, height: 820)
         .windowStyle(.hiddenTitleBar)

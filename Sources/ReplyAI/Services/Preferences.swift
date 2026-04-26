@@ -25,13 +25,19 @@ enum PreferenceKey {
     /// so the user doesn't see demo mode re-appear after a factory reset.
     static let demoModeActive = "pref.inbox.demoModeActive"
 
+    /// Set to true after the user clicks "Get started" on the welcome flow.
+    /// Gates whether the main window opens to the inbox (true) or the
+    /// welcome screen (false). Survives factory wipe via wipeExemptions
+    /// so a returning user never has to re-onboard.
+    static let onboardingCompleted = "pref.app.onboardingCompleted"
+
     /// Per-channel on/off switches. iMessage defaults on; Slack defaults off until OAuth.
     /// Both are wipe-eligible — factory reset should clear channel tokens and state.
     static let iMessageEnabled = "pref.channels.iMessageEnabled"
     static let slackEnabled    = "pref.channels.slackEnabled"
 
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
-    static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive]
+    static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive, onboardingCompleted]
 }
 
 /// Ship-time defaults. Reset to these on factory wipe.
