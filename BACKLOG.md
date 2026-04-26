@@ -155,8 +155,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-04-24-205912
+- blocker: implementation pushed on `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`, "REP-500 fire 1: split Sources/ReplyAI into ReplyAICore + ReplyAIMLX + ReplyAIApp"); pending validation + REP-502 follow-on (cross-module imports). Worker should NOT re-claim — next worker pulls REP-502 against this wip branch as base.
 - depends_on: []
 - files_to_touch:
   - `Package.swift` (rewrite: 4 targets — ReplyAICore library, ReplyAIMLX library, ReplyAI executable, ReplyAITests testTarget)
@@ -426,8 +427,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: L
 - ui_sensitive: false
-- status: open
+- status: deprioritized
 - claimed_by: null
+- blocker: **Superseded by REP-500 (architect-decomposed into REP-501→REP-505).** REP-500 is the same goal — extract MLX into a separate SPM target so test compile doesn't link MLX — but with a concrete 5-step decomposition that fits the 13-min worker budget. REP-501 is already in flight on `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`). Track progress on that chain; do not re-claim REP-285.
 - files_to_touch: `Package.swift` (commit message MUST start with `build:` prefix)
 - scope: **Root structural fix for the wip-queue buildup.** Current `Package.swift` forces SwiftPM to compile MLX C++ dependencies on every fresh clone, taking 20–90 min and exceeding the 13-min worker budget. Fix: move MLX and related AI dependencies into a separate optional target (`ReplyAIML`) that the main app target references conditionally or as a standalone module. After this change `swift test` on any machine should complete in <5 min on a fresh clone. Commit message MUST start with `build:` so the merger agent allows the Package.swift edit through its banned-pattern check. Human should implement and validate on a fresh clone.
 - success_criteria:
@@ -1256,8 +1258,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-152614
+- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-076 wired mark-as-read on thread select. Pin the unread-clear contract: start with a thread at `unread: 3`; call `viewModel.selectThread(thread)`; assert `thread.unread == 0`. Also assert: the thread's position in `viewModel.threads` is unchanged after the unread update (no re-sort triggered by the unread change alone). Uses `StaticMockChannel` with a seeded thread.
 - success_criteria:
@@ -1495,8 +1498,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-143143
+- blocker: implementation complete on `wip/2026-04-24-143143-prefs-channels-negation-concurrent` (commit `8cf5a15`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-286; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkMarkAllRead()` to `InboxViewModel` that iterates `threads` and sets `unread = 0` for each. Useful for a "Mark all read" menu action (UI wiring is separate, human-reviewed). Tests: start with 3 threads each with `unread > 0`; call `bulkMarkAllRead()`; assert all three have `unread == 0`; thread count unchanged.
 - success_criteria:
@@ -1570,25 +1574,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
   - Existing tests remain green
 - test_plan: 4 new tests in `IMessageChannelTests.swift`; inject mock executor; no real AppleScript.
 
-### REP-241 — UNNotificationContentParser: structured parser for iMessage notification payloads
-- priority: P1
-- effort: M
-- ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-24-163229
-- blocker: code complete on wip/2026-04-24-163229-un-notification-parser (+42 LOC source, +96 LOC tests, 7 tests); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
-- files_to_touch: `Sources/ReplyAI/Channels/UNNotificationContentParser.swift` (new), `Tests/ReplyAITests/UNNotificationContentParserTests.swift` (new)
-- scope: **Pivot-aligned (alt message-source, no FDA).** Extract notification payload parsing from `NotificationCoordinator` (REP-235) into a dedicated testable type. `UNNotificationContentParser.parse(_ content: UNNotificationContent) -> ParsedMessageNotification?` where `ParsedMessageNotification` has `senderHandle: String`, `preview: String`, and optional `chatGUID: String?`. Tries `content.userInfo["CKSenderID"]` first, then `content.userInfo["sender"]`, then `content.title` as sender handle. Uses `content.body` as preview. Returns nil if neither sender key is present. Tests: full payload → all fields; missing CKSenderID falls back to sender key; both missing → nil; body-only notification (no userInfo keys) → nil; chatGUID present in userInfo → populated; chatGUID absent → nil.
-- success_criteria:
-  - `UNNotificationContentParser.parse(_:) -> ParsedMessageNotification?` static func
-  - `ParsedMessageNotification` struct with `senderHandle`, `preview`, `chatGUID?` fields
-  - `testFullPayloadParsesAllFields` — all userInfo keys present → all fields populated
-  - `testMissingCKSenderIDFallsBackToSenderKey` — fallback key resolution
-  - `testBothSenderKeysMissingReturnsNil` — nil when no sender recoverable
-  - `testChatGUIDPresentAndAbsent` — both cases tested
-  - Existing tests remain green
-- test_plan: 4 new tests in `UNNotificationContentParserTests.swift`; construct mock `UNNotificationContent` via `UNMutableNotificationContent`.
-
 ### REP-242 — SlackChannel: `recentThreads()` with real `conversations.list` API call
 - priority: P2
 - effort: M
@@ -1630,8 +1615,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-170301
+- blocker: **Pivot P0 implementation complete** on `wip/2026-04-24-170301-sync-all-channels` (commit `984bb13`, +4 tests); pending human review/merge tracked in REP-284; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: the multi-channel aggregation layer that makes alternative sources (AppleScript, Slack, notification-captured) appear alongside iMessage without FDA.** Without this, each channel must be queried independently and there is no unified thread list. Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
 - success_criteria:
@@ -1666,8 +1652,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-152614
+- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `totalUnreadCount: Int` to `InboxViewModel` that sums `thread.unread` across all threads. Useful for the MenuBar badge (REP-044) and the sidebar header. Clamped to ≥0 (guard against hypothetical negative unread). Tests: no threads → 0; 3 threads with unread 2, 0, 5 → 7; all unread=0 → 0; single thread unread=1 → 1.
 - success_criteria:
@@ -1701,8 +1688,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-152614
+- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkArchiveRead()` to `InboxViewModel` that calls `archive(_:)` on every thread where `thread.unread == 0`. Useful for a "Clear read" menu action (UI wiring is separate). Complements `bulkMarkAllRead()` (REP-224). Tests: 3 threads with unread 0 and 1 with unread 3 → 3 archived, 1 remains; all threads unread=0 → all archived, `threads` empty; no threads with unread=0 → no archives triggered, `threads` unchanged.
 - success_criteria:
@@ -1717,8 +1705,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-152614
+- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: Pin cache-and-lock correctness under real concurrency: call `name(for: "alice@example.com")` 10 times concurrently via `DispatchQueue.concurrentPerform(iterations: 10)`; assert result is consistent (all 10 results equal the resolved name); assert mock store queried exactly once (not 10 times). Complements REP-219 (single cache-hit test) with concurrent-load correctness. Guards `NSLock`-guarded cache against TOCTOU under actual parallel reads.
 - success_criteria:
@@ -1790,8 +1779,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-161734
+- blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 6 tests); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source, no FDA required — uses Accessibility permission).** `AccessibilityAPIReader.conversationNames() -> [String]` walks the `AXUIElement` hierarchy of the `com.apple.MobileSMS` process to find conversation names listed in the sidebar. Injectable `AXUIElementFactory` protocol for test isolation (default uses real `AXUIElementCreateApplication`). Returns `[]` gracefully when Accessibility permission not granted (check `AXIsProcessTrusted()` before walking). Tests: mock element tree returns 3 conversation names → `[String]` with correct values; Accessibility not trusted → returns `[]` without crash; empty sidebar → `[]`; injectable factory captures the target PID for assertion.
 - success_criteria:
@@ -1841,8 +1831,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: worker-2026-04-24-161734
+- blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 1 new test + 3 updated); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added -1708 error retry with a hardcoded sleep between attempts. This makes tests slow — each retry cycle pays real wall-clock time. Add `retryDelay: TimeInterval` to `IMessageSender.init(retryDelay: TimeInterval = 0.5)` and use `Thread.sleep(forTimeInterval: retryDelay)` in the retry path. Tests pass `retryDelay: 0.0` to run without sleep. No behavior change in production. Existing retry tests that construct `IMessageSender()` without an explicit `retryDelay` continue to use the 0.5s default; update the tests that exercise the retry path to use `retryDelay: 0` for speed.
 - success_criteria:
@@ -1854,6 +1845,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 
 ## Done / archived
+
+### REP-241 — UNNotificationContentParser: structured parser for iMessage notification payloads
+- status: done
+- claimed_by: worker-2026-04-24-163229
+- scope: Extracted notification payload parsing from `NotificationCoordinator` into `UNNotificationContentParser.parse(_:)` returning `ParsedMessageNotification` (senderHandle/preview/chatGUID). 7 new tests in `UNNotificationContentParserTests.swift`. Shipped directly to main in commit `2836546`. Worker pushed straight to main (not via wip) because the new files are pure additions with no MLX dependency in tests. Human should still verify `swift test` locally; AGENTS.md test count update pending next worker pass that merges a wip with verified counts.
 
 ### REP-265 — InboxViewModel: wire MessagesAppActivationObserver to trigger re-sync when Messages becomes active
 - status: done
