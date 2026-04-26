@@ -456,8 +456,19 @@ final class InboxViewModel {
             let live = try await imessage.recentThreads(limit: max(1, threadLimit == 0 ? PreferenceDefaults.inboxThreadLimit : threadLimit))
             guard !live.isEmpty else {
                 let demoMode = defaults.bool(forKey: PreferenceKey.demoModeActive)
-                viewState = demoMode ? .demo : .empty(.noMessages)
-                syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
+                if demoMode {
+                    // Pivot 2026-04-23: populate from demo fixtures so the app
+                    // is useful without any permissions or real channels granted.
+                    threads = Fixtures.demoChatThreads
+                    if !threads.contains(where: { $0.id == selectedThreadID }) {
+                        selectedThreadID = threads.first?.id ?? selectedThreadID
+                    }
+                    viewState = .demo
+                    syncStatus = .idle
+                } else {
+                    viewState = .empty(.noMessages)
+                    syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
+                }
                 return
             }
             let currentSelection = selectedThreadID
@@ -536,10 +547,18 @@ final class InboxViewModel {
             // value at init time) so the app remains usable. Console-log so
             // diagnostics still capture the denial.
             if case .permissionDenied(let hint) = err {
-                // Pivot 2026-04-23: silently fall back to fixtures, no FDA banner.
+                // Pivot 2026-04-23: silently fall back to demo fixtures, no FDA banner.
                 NSLog("[ReplyAI] iMessage permissionDenied (FDA): \(hint) — falling back to demo fixtures")
+                if defaults.bool(forKey: PreferenceKey.demoModeActive) {
+                    threads = Fixtures.demoChatThreads
+                    if !threads.contains(where: { $0.id == selectedThreadID }) {
+                        selectedThreadID = threads.first?.id ?? selectedThreadID
+                    }
+                    viewState = .demo
+                } else {
+                    viewState = .empty(.noPermissions)
+                }
                 syncStatus = .idle
-                viewState = .empty(.noPermissions)
             } else if case .authorizationDenied = err {
                 syncStatus = .failed(err.localizedDescription)
                 viewState = .empty(.noPermissions)

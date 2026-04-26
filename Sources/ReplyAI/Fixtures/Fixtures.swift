@@ -49,6 +49,19 @@ enum Fixtures {
 
     static let sidebarChannels: [Channel] = [.imessage, .whatsapp, .slack, .teams, .sms, .telegram]
 
+    /// Demo threads shown when no real channel returns data.
+    /// Lets a brand-new user see what the app looks like without granting any
+    /// permissions. Replaced by real threads as soon as a sync returns ≥1 result.
+    /// (REP-228 / 2026-04-23 pivot — channel-agnostic demo experience.)
+    static let demoChatThreads: [MessageThread] = [
+        .init(id: "demo-1", channel: .imessage, name: "ReplyAI",       avatar: "R",  preview: "Welcome — try ⌘K to open the palette, ⌘↵ to send, ⌘J to regenerate.", time: "now",     unread: 1, pinned: true, contextCount: 1),
+        .init(id: "demo-2", channel: .imessage, name: "Sarah Klein",   avatar: "SK", preview: "still on for thursday? want to grab dinner around 7",                  time: "2 min",   unread: 1,               contextCount: 12),
+        .init(id: "demo-3", channel: .slack,    name: "#design-crit",  avatar: "#",  preview: "jamie: pushed v3 of the hero — would love eyes before EOD",            time: "12 min",  unread: 2,               contextCount: 47),
+        .init(id: "demo-4", channel: .imessage, name: "Mom",           avatar: "M",  preview: "Don't forget Sunday dinner ♥",                                          time: "1:08 PM", unread: 0,               contextCount: 22),
+        .init(id: "demo-5", channel: .slack,    name: "Maya Chen",     avatar: "MC", preview: "thanks for the review notes — landing changes now",                    time: "Mon",     unread: 0,               contextCount: 41),
+        .init(id: "demo-6", channel: .whatsapp, name: "Lena Fischer",  avatar: "LF", preview: "berlin trip — should we book the airbnb in mitte or kreuzberg?",       time: "Sun",     unread: 0,               contextCount: 34),
+    ]
+
     static func messages(forThread threadID: String, fallback preview: String, time: String) -> [Message] {
         if let msgs = threadMessages[threadID] { return msgs }
         return [.init(from: .them, text: preview, time: time)]
