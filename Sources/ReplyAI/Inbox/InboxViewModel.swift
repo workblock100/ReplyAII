@@ -46,10 +46,23 @@ final class InboxViewModel {
 
     var threads: [MessageThread]
     var activeChannelFilter: Channel?
+
+    /// Free-text search query bound to the sidebar TextField. Matches the
+    /// thread name and the most-recent preview line. Empty string disables
+    /// the filter; otherwise comparison is case-insensitive substring.
+    var searchQuery: String = ""
+
     var filteredThreads: [MessageThread] {
-        let visible = threads.filter { !archivedThreadIDs.contains($0.id) }
-        guard let channel = activeChannelFilter else { return visible }
-        return visible.filter { $0.channel == channel }
+        var visible = threads.filter { !archivedThreadIDs.contains($0.id) }
+        if let channel = activeChannelFilter {
+            visible = visible.filter { $0.channel == channel }
+        }
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return visible }
+        return visible.filter {
+            $0.name.localizedCaseInsensitiveContains(query) ||
+            $0.preview.localizedCaseInsensitiveContains(query)
+        }
     }
     let folders: [Folder]
     let channels: [Channel]

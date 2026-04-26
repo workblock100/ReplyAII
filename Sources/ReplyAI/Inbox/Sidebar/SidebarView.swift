@@ -85,10 +85,20 @@ struct SidebarView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Color.fgMute)
-            Text("Search anyone, anything")
+            TextField("Search anyone, anything", text: $model.searchQuery)
+                .textFieldStyle(.plain)
                 .font(Theme.Font.sans(12))
-                .foregroundStyle(Theme.Color.fgMute)
-            Spacer()
+                .foregroundStyle(Theme.Color.fg)
+            if !model.searchQuery.isEmpty {
+                Button {
+                    model.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.Color.fgFaint)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
