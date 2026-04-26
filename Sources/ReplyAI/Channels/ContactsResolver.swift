@@ -118,10 +118,12 @@ final class ContactsResolver: @unchecked Sendable {
         }
 
         // Pass 2: query the store for misses (outside the lock).
+        // Use the ORIGINAL (un-normalized) handle so CNPhoneNumber sees the
+        // country code — see `name(for:)` for the same fix.
         guard gate == .granted else { return result }
         var storeResults: [(normalized: String, name: String)] = []
         for pair in missKeys {
-            let resolved = store.lookup(handle: pair.normalized) ?? ""
+            let resolved = store.lookup(handle: pair.original) ?? ""
             storeResults.append((normalized: pair.normalized, name: resolved))
             if !resolved.isEmpty { result[pair.original] = resolved }
         }
@@ -151,7 +153,11 @@ final class ContactsResolver: @unchecked Sendable {
         if let entry, isFresh(entry, now: now) { return entry.name.isEmpty ? handle : entry.name }
         if gate != .granted { return nil }
 
-        let resolved = store.lookup(handle: key) ?? ""
+        // Pass the ORIGINAL handle (e.g. `+15551234567`) to the store so
+        // CNPhoneNumber's matcher sees the country code. Stripping to 10
+        // digits before calling the framework breaks matches against
+        // contacts that store the full E.164 number.
+        let resolved = store.lookup(handle: handle) ?? ""
         let writeAt = Date()
         locked.withLock { $0.cache[key] = CacheEntry(name: resolved, cachedAt: writeAt) }
         return resolved.isEmpty ? handle : resolved
@@ -187,8 +193,16 @@ final class ContactsResolver: @unchecked Sendable {
 /// Production `ContactsStoring` — hits the real `CNContactStore`.
 /// Keeps all Contacts framework specifics out of the resolver proper
 /// so the unit-test path never touches the framework.
-struct CNContactStoreBackedStoring: ContactsStoring {
+final class CNContactStoreBackedStoring: ContactsStoring, @unchecked Sendable {
     private let store = CNContactStore()
+    /// Lazily-built digit-keyed index of every contact's phones + emails.
+    /// We don't trust `CNContact.predicateForContacts(matching: CNPhoneNumber)` —
+    /// it does literal-format comparison and misses common cases like a contact
+    /// stored as `(631) 848-6282` when the iMessage handle is `+16318486282`.
+    /// Building a normalized digit index once lets every subsequent lookup
+    /// hit in O(1) regardless of how the user typed the number.
+    private let indexLock = NSLock()
+    private var digitIndex: [String: String]?
 
     func currentAccess() -> ContactsResolver.Access {
         Self.translate(CNContactStore.authorizationStatus(for: .contacts))
@@ -204,29 +218,59 @@ struct CNContactStoreBackedStoring: ContactsStoring {
     }
 
     func lookup(handle: String) -> String? {
-        let keys: [CNKeyDescriptor] = [CNContactFormatter.descriptorForRequiredKeys(for: .fullName)]
-        do {
-            let predicate: NSPredicate
-            if handle.contains("@") {
-                predicate = CNContact.predicateForContacts(matchingEmailAddress: handle)
-            } else {
-                predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: normalize(handle)))
-            }
-            let matches = try store.unifiedContacts(matching: predicate, keysToFetch: keys)
-            if let first = matches.first,
-               let formatted = CNContactFormatter.string(from: first, style: .fullName),
-               !formatted.isEmpty {
-                return formatted
-            }
-        } catch {
-            return nil
+        let index = ensureIndex()
+        if handle.contains("@") {
+            return index[handle.lowercased()]
         }
-        return nil
+        let digits = Self.phoneDigits(handle)
+        guard !digits.isEmpty else { return nil }
+        return index[digits]
     }
 
-    /// Collapse "+1 (415) 555-0134" and "4155550134" to the same form.
-    private func normalize(_ handle: String) -> String {
-        handle.filter { "+0123456789".contains($0) }
+    /// Build (or return cached) a digit-keyed map of every saved contact.
+    /// Phones are keyed by their normalized 10-digit form (or the raw digit
+    /// string when shorter); emails by lowercased address. Names are stored
+    /// in the order CNContactFormatter formats them.
+    private func ensureIndex() -> [String: String] {
+        if let cached = indexLock.withLock({ digitIndex }) {
+            return cached
+        }
+        var built: [String: String] = [:]
+        let keys: [CNKeyDescriptor] = [
+            CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
+            CNContactPhoneNumbersKey as CNKeyDescriptor,
+            CNContactEmailAddressesKey as CNKeyDescriptor,
+        ]
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        request.unifyResults = true
+        do {
+            try store.enumerateContacts(with: request) { contact, _ in
+                guard let name = CNContactFormatter.string(from: contact, style: .fullName),
+                      !name.isEmpty else { return }
+                for phone in contact.phoneNumbers {
+                    let key = Self.phoneDigits(phone.value.stringValue)
+                    if !key.isEmpty, built[key] == nil { built[key] = name }
+                }
+                for email in contact.emailAddresses {
+                    let key = (email.value as String).lowercased()
+                    if !key.isEmpty, built[key] == nil { built[key] = name }
+                }
+            }
+        } catch {
+            // Permission revoked between currentAccess() and enumeration, or
+            // the store can't be read — fall through with whatever we built.
+        }
+        indexLock.withLock { digitIndex = built }
+        return built
+    }
+
+    /// Strip to digits and drop a leading `1` from 11-digit US numbers so
+    /// `+16318486282`, `1-631-848-6282`, `(631) 848-6282`, and `6318486282`
+    /// all share the same key `6318486282`.
+    static func phoneDigits(_ s: String) -> String {
+        let digits = s.filter(\.isNumber)
+        if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+        return digits
     }
 
     private static func translate(_ status: CNAuthorizationStatus) -> ContactsResolver.Access {
