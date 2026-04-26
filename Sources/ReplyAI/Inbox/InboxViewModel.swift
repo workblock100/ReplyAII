@@ -45,6 +45,12 @@ final class InboxViewModel {
     var activeTone: Tone = .warm
 
     var threads: [MessageThread]
+    var activeChannelFilter: Channel?
+    var filteredThreads: [MessageThread] {
+        let visible = threads.filter { !archivedThreadIDs.contains($0.id) }
+        guard let channel = activeChannelFilter else { return visible }
+        return visible.filter { $0.channel == channel }
+    }
     let folders: [Folder]
     let channels: [Channel]
 
@@ -425,8 +431,13 @@ final class InboxViewModel {
         folders.first(where: { $0.id == activeFolder })?.label ?? "Inbox"
     }
 
-    var needsYouCount: Int { threads.filter { $0.unread > 0 }.count }
-    var handledCount: Int  { threads.count - needsYouCount }
+    var needsYouCount: Int { filteredThreads.filter { $0.unread > 0 }.count }
+    var handledCount: Int  { filteredThreads.count - needsYouCount }
+    var totalUnreadCount: Int { threads.reduce(0) { $0 + $1.unread } }
+
+    func filterByChannel(_ channel: Channel?) {
+        activeChannelFilter = channel
+    }
 
     func cycleTone() { activeTone = activeTone.cycled() }
 
@@ -751,6 +762,21 @@ final class InboxViewModel {
         archivedThreadIDs.insert(threadID)
         dismissHandler?(threadID)
         Task { await searchIndex.delete(threadID: threadID) }
+    }
+
+    func bulkMarkAllRead() {
+        for id in threads.map(\.id) {
+            markUnreadZero(id)
+        }
+    }
+
+    func bulkArchiveRead() {
+        let ids = threads
+            .filter { $0.unread == 0 && !archivedThreadIDs.contains($0.id) }
+            .map(\.id)
+        for id in ids {
+            archive(id)
+        }
     }
 
     /// Undoes an archive — used for the future "Undo" UX in set-privacy /

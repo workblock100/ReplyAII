@@ -140,20 +140,37 @@ struct SidebarView: View {
     private var channelsList: some View {
         VStack(alignment: .leading, spacing: 1) {
             ForEach(model.channels) { channel in
-                HStack(spacing: 10) {
-                    ChannelDot(channel: channel, size: 8, cutout: .clear)
-                    Text(channel.rawValue.capitalized)
-                        .font(Theme.Font.sans(13))
-                        .foregroundStyle(Theme.Color.fgDim)
-                    Spacer()
-                    Text("•")
-                        .font(Theme.Font.mono(10))
-                        .foregroundStyle(Theme.Color.fgFaint)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                channelRow(channel)
             }
         }
+    }
+
+    private func channelRow(_ channel: Channel) -> some View {
+        let active = model.activeChannelFilter == channel
+        return Button {
+            withAnimation(Theme.Motion.std) {
+                model.filterByChannel(active ? nil : channel)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                ChannelDot(channel: channel, size: 8, cutout: .clear)
+                Text(channel.label)
+                    .font(Theme.Font.sans(13, weight: active ? .medium : .regular))
+                    .foregroundStyle(active ? Theme.Color.fg : Theme.Color.fgDim)
+                Spacer()
+                Image(systemName: active ? "line.3.horizontal.decrease.circle.fill" : "circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(active ? Theme.Color.accent : Theme.Color.fgFaint)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.r8, style: .continuous)
+                    .fill(active ? Theme.Color.accent.opacity(0.10) : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(active ? "Show all channels" : "Filter \(channel.label)")
     }
 
     private var syncChip: some View {

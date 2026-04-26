@@ -164,7 +164,10 @@ final class SlackOAuthFlowTests: XCTestCase {
         }
         wait(for: [exp], timeout: 3)
 
-        XCTAssertEqual(result, .success(()))
+        guard case .success = result else {
+            XCTFail("Expected success, got \(String(describing: result))")
+            return
+        }
         XCTAssertEqual(keychain.get(key: "slack-access-token"), "xoxb-stored-token")
     }
 
@@ -216,6 +219,10 @@ final class SlackOAuthFlowTests: XCTestCase {
         }
         wait(for: [exp], timeout: 3)
 
-        XCTAssertEqual(result, .failure(.timeout))
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(String(describing: result))")
+            return
+        }
+        XCTAssertEqual(error, .timeout)
     }
 }

@@ -43,6 +43,7 @@ struct ThreadListView: View {
                     .foregroundStyle(Theme.Color.fgMute)
             }
             Spacer()
+            bulkActions
             aiOnPill
         }
     }
@@ -52,13 +53,43 @@ struct ThreadListView: View {
     /// a stable sort. Archived threads are filtered out entirely — they
     /// still exist in model.threads, just hidden from the main list.
     private var sortedThreads: [MessageThread] {
-        let visible = model.threads.enumerated().filter { !model.archivedThreadIDs.contains($0.element.id) }
+        let visible = model.filteredThreads.enumerated()
         return visible.sorted { lhs, rhs in
             if lhs.element.pinned != rhs.element.pinned {
                 return lhs.element.pinned && !rhs.element.pinned
             }
             return lhs.offset < rhs.offset
         }.map(\.element)
+    }
+
+    private var bulkActions: some View {
+        HStack(spacing: 5) {
+            Button {
+                model.bulkMarkAllRead()
+            } label: {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(model.totalUnreadCount == 0 ? Theme.Color.fgFaint : Theme.Color.fgMute)
+            .disabled(model.totalUnreadCount == 0)
+            .help("Mark all read")
+
+            Button {
+                model.bulkArchiveRead()
+            } label: {
+                Image(systemName: "archivebox")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(hasReadThreads ? Theme.Color.fgMute : Theme.Color.fgFaint)
+            .disabled(!hasReadThreads)
+            .help("Archive read")
+        }
+    }
+
+    private var hasReadThreads: Bool {
+        model.filteredThreads.contains { $0.unread == 0 }
     }
 
     private var aiOnPill: some View {

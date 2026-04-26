@@ -1436,3 +1436,97 @@ final class InboxViewModelViewStateTests: XCTestCase {
         XCTAssertEqual(vm.viewState, .empty(.noMessages))
     }
 }
+
+// MARK: - Bulk thread actions and channel filtering
+
+@MainActor
+final class InboxViewModelBulkFilterTests: XCTestCase {
+    private func makeVM(threads: [MessageThread]) -> InboxViewModel {
+        let suite = "test.ReplyAI.bulkFilter.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        return InboxViewModel(
+            threads: threads,
+            imessage: BlockingMockChannel(),
+            contacts: fastContacts(),
+            defaults: defaults
+        )
+    }
+
+    func testFilterByChannelNarrowsFilteredThreadsWithoutMutatingThreads() {
+        let threads = [
+            MessageThread(id: "im1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: ""),
+            MessageThread(id: "sl1", channel: .slack, name: "Team", avatar: "T", preview: "", time: ""),
+            MessageThread(id: "wa1", channel: .whatsapp, name: "Maya", avatar: "M", preview: "", time: "")
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.filterByChannel(.slack)
+
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sl1"])
+        XCTAssertEqual(vm.threads.map(\.id), ["im1", "sl1", "wa1"])
+    }
+
+    func testFilterByChannelNilRestoresVisibleThreads() {
+        let threads = [
+            MessageThread(id: "im1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: ""),
+            MessageThread(id: "sl1", channel: .slack, name: "Team", avatar: "T", preview: "", time: "")
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.filterByChannel(.imessage)
+        vm.filterByChannel(nil)
+
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["im1", "sl1"])
+    }
+
+    func testFilteredThreadsExcludeArchivedThreads() {
+        let threads = [
+            MessageThread(id: "read", channel: .imessage, name: "Read", avatar: "R", preview: "", time: "", unread: 0),
+            MessageThread(id: "unread", channel: .imessage, name: "Unread", avatar: "U", preview: "", time: "", unread: 2)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.archive("read")
+
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["unread"])
+    }
+
+    func testTotalUnreadCountSumsAcrossChannelsAndIgnoresActiveFilter() {
+        let threads = [
+            MessageThread(id: "im1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", unread: 3),
+            MessageThread(id: "sl1", channel: .slack, name: "Team", avatar: "T", preview: "", time: "", unread: 4)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.filterByChannel(.imessage)
+
+        XCTAssertEqual(vm.totalUnreadCount, 7)
+    }
+
+    func testBulkMarkAllReadClearsEveryUnreadCount() {
+        let threads = [
+            MessageThread(id: "im1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", unread: 3),
+            MessageThread(id: "sl1", channel: .slack, name: "Team", avatar: "T", preview: "", time: "", unread: 4)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.bulkMarkAllRead()
+
+        XCTAssertTrue(vm.threads.allSatisfy { $0.unread == 0 })
+        XCTAssertEqual(vm.totalUnreadCount, 0)
+    }
+
+    func testBulkArchiveReadArchivesOnlyReadThreads() {
+        let threads = [
+            MessageThread(id: "read-im", channel: .imessage, name: "Read", avatar: "R", preview: "", time: "", unread: 0),
+            MessageThread(id: "unread-sl", channel: .slack, name: "Team", avatar: "T", preview: "", time: "", unread: 2),
+            MessageThread(id: "read-wa", channel: .whatsapp, name: "Maya", avatar: "M", preview: "", time: "", unread: 0)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.bulkArchiveRead()
+
+        XCTAssertEqual(vm.archivedThreadIDs, ["read-im", "read-wa"])
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["unread-sl"])
+    }
+}
