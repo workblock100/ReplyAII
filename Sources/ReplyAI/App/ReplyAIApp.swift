@@ -3,14 +3,28 @@ import SwiftUI
 /// Branches between WelcomeGate (first-run) and AppPrototypeView (returning
 /// user). Reads `PreferenceKey.onboardingCompleted` via @AppStorage so the
 /// view re-renders the moment the gate's "Get started" button writes true.
+///
+/// Also runs the global notification setup once at launch — registers the
+/// inline-reply category and installs the UNUserNotificationCenter delegate
+/// so any future system-posted notification routes through
+/// `NotificationCoordinator.handleReply` even if the user never opens the
+/// inbox window. Previously this only ran inside InboxScreen.task, leaving
+/// the delegate unset on app launches that landed on the prototype gallery
+/// or welcome gate.
 struct RootView: View {
     @AppStorage(PreferenceKey.onboardingCompleted) private var completed = false
+    @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?
 
     var body: some View {
-        if completed {
-            AppPrototypeView()
-        } else {
-            WelcomeGate()
+        Group {
+            if completed {
+                AppPrototypeView()
+            } else {
+                WelcomeGate()
+            }
+        }
+        .task(id: "rootview-launch-setup") {
+            await coordinator?.setUp()
         }
     }
 }
@@ -57,6 +71,7 @@ struct ReplyAIApp: App {
         // to ship only the real app surface (no prototype gallery).
         WindowGroup("ReplyAI") {
             RootView()
+                .environment(coordinator)
         }
         .defaultSize(width: 1360, height: 820)
         .windowStyle(.hiddenTitleBar)
