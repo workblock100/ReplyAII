@@ -445,6 +445,31 @@ final class InboxViewModel {
     var handledCount: Int  { filteredThreads.count - needsYouCount }
     var totalUnreadCount: Int { threads.reduce(0) { $0 + $1.unread } }
 
+    /// Live count for a sidebar folder. Replaces `Fixtures.folders[*].count`,
+    /// which were design-time placeholders (14, 3, 6, 2, 812). Derives from
+    /// the actual `threads`, `archivedThreadIDs`, and `silentlyIgnoredThreadIDs`
+    /// state so the sidebar matches reality on every render.
+    func count(for kind: Folder.Kind) -> Int {
+        let live = threads.filter { !archivedThreadIDs.contains($0.id) }
+        switch kind {
+        case .all:
+            return live.count
+        case .priority:
+            // Pinned threads (user explicitly elevated their importance).
+            return live.filter { $0.pinned }.count
+        case .awaiting:
+            // Unread threads currently bubbling to the top — the ones literally
+            // awaiting your reply. Mirrors the "X need you" header.
+            return live.filter { $0.unread > 0 }.count
+        case .snoozed:
+            // Threads the user has silently ignored via a Smart Rule.
+            return silentlyIgnoredThreadIDs.count
+        case .done:
+            // Archived threads — replied, dismissed, or otherwise resolved.
+            return archivedThreadIDs.count
+        }
+    }
+
     func filterByChannel(_ channel: Channel?) {
         activeChannelFilter = channel
     }

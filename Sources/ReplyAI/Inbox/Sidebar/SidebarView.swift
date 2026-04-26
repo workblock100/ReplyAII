@@ -123,7 +123,7 @@ struct SidebarView: View {
                     .font(Theme.Font.sans(13, weight: active ? .medium : .regular))
                     .foregroundStyle(active ? Theme.Color.fg : Theme.Color.fgDim)
                 Spacer()
-                Text("\(folder.count)")
+                Text("\(model.count(for: folder.id))")
                     .font(Theme.Font.mono(10))
                     .foregroundStyle(Theme.Color.fgFaint)
             }
