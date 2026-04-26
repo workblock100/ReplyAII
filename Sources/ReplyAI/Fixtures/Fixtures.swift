@@ -67,11 +67,17 @@ enum Fixtures {
         return [.init(from: .them, text: preview, time: time)]
     }
 
-    static func contextSummary(for threadID: String) -> String {
+    /// Curated context summaries for the design-time fixture threads.
+    /// Returns nil for any thread we don't have a hand-written summary for —
+    /// the view layer treats nil as "hide the context card" so real chat.db
+    /// threads don't render a placeholder ("Live thread — context will land
+    /// once on-device summarization is wired.") that admits the feature is
+    /// stubbed.
+    static func contextSummary(for threadID: String) -> String? {
         switch threadID {
         case "t1": return "Design review is at 4pm. You have the deck open in Figma. Maya usually wants specific line-edits, not vibes."
         case "t3": return "Ravi shipped the billing flow yesterday; Stripe webhooks are live. He owes you a Loom."
-        default:   return "Live thread — context will land once on-device summarization is wired."
+        default:   return nil
         }
     }
 

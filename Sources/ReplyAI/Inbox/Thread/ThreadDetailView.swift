@@ -59,8 +59,15 @@ struct ThreadDetailView: View {
 
                 ForEach(msgs) { MessageBubble(message: $0) }
 
-                ContextCard(summary: Fixtures.contextSummary(for: thread.id))
-                    .padding(.top, 6)
+                // Context card is curated copy on a per-thread basis. Render
+                // only when the thread has a real summary attached or when a
+                // hand-written fixture summary exists. Hides for everything
+                // else so real conversations don't show a "context will land
+                // once summarization is wired" placeholder.
+                if let summary = thread.contextSummary ?? Fixtures.contextSummary(for: thread.id) {
+                    ContextCard(summary: summary)
+                        .padding(.top, 6)
+                }
             }
             .padding(.horizontal, 22)
             .padding(.top, 22)
