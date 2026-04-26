@@ -233,6 +233,11 @@ final class InboxViewModel {
         selectedThreadID = id
         markUnreadZero(id)
         applyRules(for: selectedThread)
+        // Pull message history for this thread on-demand so the right pane
+        // populates instead of showing a placeholder.
+        if liveMessages[id] == nil {
+            Task { [weak self] in await self?.loadMessages(for: id) }
+        }
         // Only prime on a genuine thread switch; DraftEngine handles tone
         // changes via ComposerView's .task(id:).
         if isNewSelection && defaults.bool(forKey: PreferenceKey.autoPrime) {
@@ -886,11 +891,12 @@ final class InboxViewModel {
     }
 
     /// Pull message history for a specific thread on demand.
+    /// Runs regardless of `syncStatus` because the AppleScript fallback
+    /// path leaves status as `.idle` while still serving real chat IDs.
     func loadMessages(for threadID: String) async {
-        guard case .live = syncStatus else { return }
         if liveMessages[threadID] != nil { return }
         if let msgs = try? await imessage.messages(forThreadID: threadID, limit: 40) {
-            liveMessages[threadID] = msgs
+            await MainActor.run { liveMessages[threadID] = msgs }
         }
     }
 

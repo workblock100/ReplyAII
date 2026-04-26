@@ -49,12 +49,16 @@ struct IMessageChannel: ChannelService {
             let rc = sqlite3_open_v2(path, &db, flags, nil)
             return (rc, db)
         },
-        appleScriptReader: AppleScriptMessageReader = AppleScriptMessageReader()
+        appleScriptReader: AppleScriptMessageReader? = nil
     ) {
         self.nameFor = nameFor
         self.dbPathOverride = dbPathOverride
         self.dbOpener = dbOpener
+        // When the caller doesn't inject a reader (production path), wire one
+        // that shares this channel's contact resolver so AppleScript-fallback
+        // threads can upgrade phone/email handles to saved contact names.
         self.appleScriptReader = appleScriptReader
+            ?? AppleScriptMessageReader(nameFor: nameFor)
     }
 
     // SQLite wants transient text to live long enough for bind+step; use
@@ -161,8 +165,15 @@ struct IMessageChannel: ChannelService {
 
             let resolvedName: String = {
                 if !displayName.isEmpty { return displayName }
-                if !firstHandle.isEmpty, let contact = nameFor(firstHandle) { return contact }
-                return firstHandle.isEmpty ? chatID : firstHandle
+                if !firstHandle.isEmpty, let contact = nameFor(firstHandle), !contact.isEmpty,
+                   contact != firstHandle {
+                    return contact
+                }
+                // No contact match — at least format the raw E.164 phone for
+                // display so threads read like `+1 (631) 848-6282` instead of
+                // `+16318486282`. Email addresses and short codes pass through.
+                let rawHandle = firstHandle.isEmpty ? chatID : firstHandle
+                return AppleScriptMessageReader.prettyPhone(rawHandle)
             }()
 
             let channel: Channel = (service.lowercased() == "sms") ? .sms : .imessage
