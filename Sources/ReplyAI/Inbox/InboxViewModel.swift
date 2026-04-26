@@ -197,10 +197,11 @@ final class InboxViewModel {
         // cooperative executor).
         self.contacts = contacts ?? ContactsResolver()
         let resolver = self.contacts
-        self.imessage = imessage ?? IMessageChannel(nameFor: { handle in
+        let resolvedImessage: ChannelService = imessage ?? IMessageChannel(nameFor: { handle in
             resolver.name(for: handle)
         })
-        self.registeredChannels = registeredChannels ?? [self.imessage]
+        self.imessage = resolvedImessage
+        self.registeredChannels = registeredChannels ?? [resolvedImessage]
         self.activationObserver = activationObserver
         activationObserver?.onMessagesActivated = { [weak self] in
             Task { @MainActor [weak self] in
