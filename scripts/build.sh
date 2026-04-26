@@ -60,8 +60,8 @@ fi
 # sandbox-disabled bit isn't honored and FDA can't attach to this bundle.
 echo "==> codesign (ad-hoc, entitlements)"
 ENT="$REPO/Sources/ReplyAI/Resources/ReplyAI.entitlements"
-codesign --force --sign - --timestamp=none --entitlements "$ENT" "$APP/Contents/MacOS/ReplyAI" >/dev/null
-codesign --force --sign - --timestamp=none --entitlements "$ENT" "$APP" >/dev/null
+codesign --force --sign "ReplyAI Dev" --timestamp=none --entitlements "$ENT" "$APP/Contents/MacOS/ReplyAI" >/dev/null
+codesign --force --sign "ReplyAI Dev" --timestamp=none --entitlements "$ENT" "$APP" >/dev/null
 
 echo "==> verify"
 codesign --verify --verbose=2 "$APP" 2>&1 | sed 's/^/    /'
