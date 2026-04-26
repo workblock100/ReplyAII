@@ -30,6 +30,13 @@ struct AppPrototypeView: View {
         .background(Theme.Color.bg0)
         .preferredColorScheme(.dark)
         .background(keyboardCommands)
+        .onReceive(NotificationCenter.default.publisher(for: .replyAIRequestSummonInbox)) { _ in
+            // Global ⌘⇧R hotkey fired. ReplyAIWindowSummoner tries first to
+            // surface an existing inbox window via AppKit; this fallback runs
+            // only if no inbox window was open, in which case `openWindow`
+            // (only callable from a View) creates one.
+            openWindow(id: "inbox")
+        }
     }
 
     private var topBar: some View {

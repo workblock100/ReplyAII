@@ -3,6 +3,11 @@ import SwiftUI
 @main
 struct ReplyAIApp: App {
     @State private var coordinator = NotificationCoordinator()
+    /// Held for the lifetime of the app; releasing it would deregister the
+    /// system-wide ⌘⇧R hotkey. SwiftUI keeps `@StateObject`-style retains for
+    /// any value-type state but a plain `let` is fine here — `App`'s lifetime
+    /// equals the process's.
+    private let globalHotkey = GlobalHotkey()
 
     init() {
         UserDefaults.registerReplyAIDefaults()
@@ -18,6 +23,15 @@ struct ReplyAIApp: App {
             object: nil,
             queue: .main
         ) { _ in Stats.shared.flushNow() }
+
+        // Register the global hotkey if Accessibility permission is granted.
+        // When the user grants it later (via ObPermissionsView), they need to
+        // restart the app — Carbon's RegisterEventHotKey doesn't pick up newly
+        // granted Accessibility on a running process. We surface this as a
+        // hint in onboarding when the toggle goes from needs → granted.
+        globalHotkey.register {
+            ReplyAIWindowSummoner.summon()
+        }
     }
 
     var body: some Scene {
