@@ -208,7 +208,12 @@ final class InboxViewModel {
             resolver.name(for: handle)
         })
         self.imessage = resolvedImessage
-        self.registeredChannels = registeredChannels ?? [resolvedImessage]
+        // Default channel roster: iMessage + Slack. SlackChannel gates on a
+        // stored OAuth token and throws .authorizationDenied when absent;
+        // syncAllChannels() swallows that gracefully so an unconnected Slack
+        // is invisible. Adding more channels here (Telegram, etc.) is a
+        // one-line append once they have a real backing service.
+        self.registeredChannels = registeredChannels ?? [resolvedImessage, SlackChannel()]
         self.activationObserver = activationObserver
         activationObserver?.onMessagesActivated = { [weak self] in
             Task { @MainActor [weak self] in

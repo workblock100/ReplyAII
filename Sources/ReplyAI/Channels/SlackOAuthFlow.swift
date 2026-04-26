@@ -34,23 +34,43 @@ extension LocalhostOAuthListener: OAuthCallbackListener {}
 /// Wires together: LocalhostOAuthListener (callback server) → NSWorkspace URL open
 /// → URLSession token exchange POST → KeychainHelper token storage.
 final class SlackOAuthFlow: @unchecked Sendable {
-    private let keychain: KeychainHelper
+    private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
     private let listenerFactory: OAuthCallbackListenerFactory
 
     init(
-        keychain: KeychainHelper = KeychainHelper(),
+        tokenStore: SlackTokenStore = SlackTokenStore(),
         urlOpener: any URLOpener = WorkspaceURLOpener(),
         session: URLSession = .shared,
         listenerFactory: @escaping OAuthCallbackListenerFactory = { port, timeout in
             LocalhostOAuthListener(port: port, timeout: timeout)
         }
     ) {
-        self.keychain = keychain
+        self.tokenStore = tokenStore
         self.urlOpener = urlOpener
         self.session = session
         self.listenerFactory = listenerFactory
+    }
+
+    /// Convenience init for tests that wire the OAuth flow against a specific
+    /// `KeychainHelper` (e.g. a unique service per test for isolation).
+    /// Wraps the helper in a `SlackTokenStore` so storage stays unified with
+    /// `SlackChannel` (both read/write the same JSON entry).
+    convenience init(
+        keychain: KeychainHelper,
+        urlOpener: any URLOpener = WorkspaceURLOpener(),
+        session: URLSession = .shared,
+        listenerFactory: @escaping OAuthCallbackListenerFactory = { port, timeout in
+            LocalhostOAuthListener(port: port, timeout: timeout)
+        }
+    ) {
+        self.init(
+            tokenStore: SlackTokenStore(keychain: keychain),
+            urlOpener: urlOpener,
+            session: session,
+            listenerFactory: listenerFactory
+        )
     }
 
     /// Start the OAuth2 flow. Opens the Slack auth page in the default browser,
@@ -130,8 +150,11 @@ final class SlackOAuthFlow: @unchecked Sendable {
                 completion(.failure(.tokenExchangeFailed("response missing ok=true or access_token")))
                 return
             }
+            // Slack's oauth.v2.access response embeds `team: { id, name }`.
+            // Pull the workspace name out so the inbox can show "Connected: ACME".
+            let workspaceName: String = (json["team"] as? [String: Any])?["name"] as? String ?? ""
             do {
-                try self.keychain.set(value: token, for: "slack-access-token")
+                try self.tokenStore.set(token: token, workspaceName: workspaceName)
                 completion(.success(()))
             } catch {
                 completion(.failure(.tokenExchangeFailed(error.localizedDescription)))

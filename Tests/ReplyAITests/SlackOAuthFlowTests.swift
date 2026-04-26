@@ -168,7 +168,11 @@ final class SlackOAuthFlowTests: XCTestCase {
             XCTFail("Expected success, got \(String(describing: result))")
             return
         }
-        XCTAssertEqual(keychain.get(key: "slack-access-token"), "xoxb-stored-token")
+        // SlackTokenStore writes the token + workspace name as a JSON blob
+        // under "slack-access-token". Decode via the store rather than reading
+        // raw so the assertion survives schema tweaks.
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.token, "xoxb-stored-token")
     }
 
     // MARK: - testSlackOAuthFailedExchangeThrows
