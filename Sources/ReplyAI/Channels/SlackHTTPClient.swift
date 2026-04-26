@@ -7,10 +7,13 @@ protocol HTTPSessionProtocol: Sendable {
 
 extension URLSession: HTTPSessionProtocol {}
 
-/// HTTP layer for Slack Web API GET requests.
+/// HTTP layer for Slack Web API GET + POST requests.
 /// Injectable via `HTTPSessionProtocol` for test isolation.
 protocol SlackHTTPClient: Sendable {
     func get(endpoint: String, token: String, params: [String: String]) async throws -> Data
+    /// Slack's POST endpoints (chat.postMessage, conversations.archive, etc.)
+    /// take a JSON body with the bearer token in the Authorization header.
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data
 }
 
 /// URLSession-backed `SlackHTTPClient`. Sends `GET https://slack.com/api/<endpoint>?<params>`
@@ -38,6 +41,32 @@ struct URLSessionSlackClient: SlackHTTPClient {
         }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ChannelError.networkError("Non-HTTP response from Slack API")
+        }
+        switch http.statusCode {
+        case 200...299:
+            return data
+        case 401:
+            throw ChannelError.authorizationDenied
+        case 429:
+            throw ChannelError.networkError("Slack API rate limited (HTTP 429)")
+        default:
+            throw ChannelError.networkError("Slack API returned HTTP \(http.statusCode)")
+        }
+    }
+
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
+        guard let url = URL(string: Self.apiBase + endpoint) else {
+            throw ChannelError.networkError("Invalid Slack endpoint: \(endpoint)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: json)
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

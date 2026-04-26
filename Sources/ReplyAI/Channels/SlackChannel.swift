@@ -56,6 +56,30 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
         return try Self.parseMessages(data)
     }
 
+    /// Post `text` to a Slack channel/DM via `chat.postMessage`. Returns
+    /// silently on Slack's `ok: true` and throws `ChannelError` otherwise so
+    /// `InboxViewModel.confirmSend` can surface the error in a toast.
+    func send(text: String, toThreadID id: String) async throws {
+        guard let creds = tokenStore.get() else {
+            throw ChannelError.authorizationDenied
+        }
+        let data = try await http.post(
+            endpoint: "chat.postMessage",
+            token: creds.token,
+            json: [
+                "channel": id,
+                "text": text,
+            ]
+        )
+        // Slack acks 200 OK even when the API call failed; the body has
+        // `ok: false` + an error string. Decode and surface.
+        struct Ack: Decodable { let ok: Bool; let error: String? }
+        let ack = try JSONDecoder().decode(Ack.self, from: data)
+        if !ack.ok {
+            throw ChannelError.networkError(ack.error ?? "Slack chat.postMessage failed")
+        }
+    }
+
     // MARK: - Parsing
 
     private static func parseThreads(_ data: Data, workspaceName: String) throws -> [MessageThread] {

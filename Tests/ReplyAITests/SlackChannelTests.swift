@@ -115,10 +115,13 @@ final class SlackChannelTests: XCTestCase {
 
 // MARK: - Test doubles
 
-/// HTTP client that always returns the same canned payload.
+/// HTTP client that always returns the same canned payload from both verbs.
 private struct StubHTTP: SlackHTTPClient {
     let payload: Data
     func get(endpoint: String, token: String, params: [String: String]) async throws -> Data {
+        payload
+    }
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
         payload
     }
 }
@@ -127,6 +130,10 @@ private struct StubHTTP: SlackHTTPClient {
 /// paths that should refuse to make a request without a token.
 private struct NeverHTTP: SlackHTTPClient {
     func get(endpoint: String, token: String, params: [String: String]) async throws -> Data {
+        XCTFail("HTTP must not be invoked when no token is stored")
+        throw ChannelError.authorizationDenied
+    }
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
         XCTFail("HTTP must not be invoked when no token is stored")
         throw ChannelError.authorizationDenied
     }

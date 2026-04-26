@@ -875,27 +875,42 @@ final class InboxViewModel {
         sendConfirmation = nil
     }
 
-    /// Fire the staged AppleScript. Clears confirmation on success, leaves
+    /// Fire the staged send. Routes per-channel: iMessage/SMS go through
+    /// AppleScript via Messages.app; Slack goes through chat.postMessage on
+    /// the registered SlackChannel. Clears confirmation on success, leaves
     /// an error toast on failure.
     func confirmSend() async {
         guard let pending = sendConfirmation else { return }
         sendConfirmation = nil
         do {
-            // Reconstruct a minimal thread so the sender can make the
-            // guid-vs-synthesized decision using the chat.db-sourced
-            // value when we have one.
-            let threadForSend = MessageThread(
-                id: pending.threadID,
-                channel: pending.channel,
-                name: pending.recipient,
-                avatar: String(pending.recipient.prefix(1)),
-                preview: "",
-                time: "",
-                chatGUID: pending.chatGUID
-            )
-            try await Task.detached(priority: .userInitiated) {
-                try IMessageSender.send(pending.text, to: threadForSend)
-            }.value
+            switch pending.channel {
+            case .imessage, .sms:
+                // Reconstruct a minimal thread so the sender can make the
+                // guid-vs-synthesized decision using the chat.db-sourced
+                // value when we have one.
+                let threadForSend = MessageThread(
+                    id: pending.threadID,
+                    channel: pending.channel,
+                    name: pending.recipient,
+                    avatar: String(pending.recipient.prefix(1)),
+                    preview: "",
+                    time: "",
+                    chatGUID: pending.chatGUID
+                )
+                try await Task.detached(priority: .userInitiated) {
+                    try IMessageSender.send(pending.text, to: threadForSend)
+                }.value
+            case .slack:
+                // Find the SlackChannel in the registered roster and post
+                // through it. Falls back to a fresh instance if no channel
+                // was injected (production default constructs one anyway).
+                let slack = registeredChannels
+                    .compactMap { $0 as? SlackChannel }
+                    .first ?? SlackChannel()
+                try await slack.send(text: pending.text, toThreadID: pending.threadID)
+            default:
+                throw IMessageSender.SendError.unsupported
+            }
             stats.recordDraftSent(tone: pending.tone)
             sendToast = "Sent to \(pending.recipient)"
             advanceToNextThread()
