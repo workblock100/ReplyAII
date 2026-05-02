@@ -590,8 +590,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-05-02-113834
+- blocker: implementation already on main (`SlackChannel.messages(forThreadID:limit:)`); two missing tests (`empty history`, `timestamp parsed`) added on `wip/2026-05-02-113834-rep272-rep257-slack-authorize` (bundled with REP-272). Could not run `swift test` — another SwiftPM session held `.build` lock for the full worker budget. Human should run tests on the wip branch and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class, prereq: REP-237 + REP-242).** After `recentThreads()` populates the thread list, the inbox needs to fetch message history for a selected thread. Implement `SlackChannel.messagesForThread(threadID: String, limit: Int) async throws -> [Message]` using `SlackHTTPClient` (REP-237): `GET api/conversations.history?channel=<threadID>&limit=<limit>`. Parse `messages[]` array — each item has `text`, `user`, `ts` (Unix timestamp as string). Build `Message` with `body: text`, `sender: user`, `sentAt: Date(timeIntervalSince1970: Double(ts))`, `channel: .slack`. Tests: mock client returning 3-message history JSON → `[Message]` with correct fields; empty messages array → `[]`; `ts` string parses to correct Date; no token → `authorizationDenied`; HTTP error → `ChannelError.networkError`.
 - success_criteria:
@@ -707,8 +708,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: blocked
+- claimed_by: worker-2026-05-02-113834
+- blocker: code complete on `wip/2026-05-02-113834-rep272-rep257-slack-authorize` — added `SlackAuthorizing` protocol (SlackOAuthFlow now conforms), `typealias SlackOAuthFlowFactory`, `SlackChannel.authorize(clientID:clientSecret:completion:)` delegating to the factory, plus 3 new tests (correct credentials, success completion, failure completion). Bundled with REP-257 tests. Could not run `swift test` — another SwiftPM session held `.build` lock for the full worker budget. Human should run tests on the wip branch and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class — prereq: REP-266 merged).** `SlackChannel` currently throws `authorizationDenied` for all calls when no token present. Add `authorize(clientID: String, clientSecret: String, completion: @escaping (Result<Void, OAuthError>) -> Void)` that delegates to a `SlackOAuthFlow` instance. Injectable `SlackOAuthFlowFactory: (String, String) -> SlackOAuthFlow` for test isolation. On success: token now in Keychain, completion called with `.success(())`; subsequent `recentThreads()` calls return real data. On failure: completion called with `.failure(error)`. Idempotent: a second `authorize` call while one is in-flight invokes the completion via the existing flow (no double-listener bind). Tests: factory called with correct `clientID` + `clientSecret`; success completion called when flow returns success; failure completion called when flow returns failure.
 - success_criteria:

@@ -104,12 +104,99 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertTrue(msgs.allSatisfy { $0.from == .them })
     }
 
+    func testSlackMessagesForThreadEmptyHistoryReturnsEmpty() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {"ok": true, "messages": []}
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertTrue(msgs.isEmpty)
+    }
+
+    func testSlackMessagesForThreadTimestampParsedCorrectly() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000000.0001", "user": "U999", "text": "hello"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 1)
+        let expected = Date(timeIntervalSince1970: 1700000000.0001)
+        XCTAssertEqual(msgs[0].deliveredAt?.timeIntervalSince1970 ?? 0,
+                       expected.timeIntervalSince1970,
+                       accuracy: 0.001)
+    }
+
     // MARK: - Identity
 
     func testSlackChannelIdentifiesAsSlack() {
         let channel = SlackChannel()
         XCTAssertEqual(channel.channel, .slack)
         XCTAssertEqual(channel.displayName, "Slack")
+    }
+
+    // MARK: - REP-272: authorize() delegation to SlackOAuthFlow
+
+    func testAuthorizeCallsOAuthFlowWithCorrectCredentials() async {
+        let stub = StubSlackAuthorizing(result: .success(()))
+        let channel = SlackChannel(
+            tokenStore: SlackTokenStore(keychain: KeychainHelper(service: testService)),
+            http: NeverHTTP(),
+            oauthFlowFactory: { stub }
+        )
+
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            channel.authorize(clientID: "client-abc", clientSecret: "secret-xyz") { _ in
+                cont.resume()
+            }
+        }
+        XCTAssertEqual(stub.observedClientID, "client-abc")
+        XCTAssertEqual(stub.observedClientSecret, "secret-xyz")
+    }
+
+    func testAuthorizeSuccessCompletionCalled() async {
+        let stub = StubSlackAuthorizing(result: .success(()))
+        let channel = SlackChannel(
+            tokenStore: SlackTokenStore(keychain: KeychainHelper(service: testService)),
+            http: NeverHTTP(),
+            oauthFlowFactory: { stub }
+        )
+
+        let result: Result<Void, OAuthError> = await withCheckedContinuation { cont in
+            channel.authorize(clientID: "id", clientSecret: "secret") { cont.resume(returning: $0) }
+        }
+        guard case .success = result else {
+            return XCTFail("Expected success, got \(result)")
+        }
+    }
+
+    func testAuthorizeFailureCompletionCalled() async {
+        let stub = StubSlackAuthorizing(
+            result: .failure(.tokenExchangeFailed("nope"))
+        )
+        let channel = SlackChannel(
+            tokenStore: SlackTokenStore(keychain: KeychainHelper(service: testService)),
+            http: NeverHTTP(),
+            oauthFlowFactory: { stub }
+        )
+
+        let result: Result<Void, OAuthError> = await withCheckedContinuation { cont in
+            channel.authorize(clientID: "id", clientSecret: "secret") { cont.resume(returning: $0) }
+        }
+        guard case .failure(.tokenExchangeFailed(let msg)) = result else {
+            return XCTFail("Expected failure(.tokenExchangeFailed), got \(result)")
+        }
+        XCTAssertEqual(msg, "nope")
     }
 }
 
@@ -136,5 +223,40 @@ private struct NeverHTTP: SlackHTTPClient {
     func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
         XCTFail("HTTP must not be invoked when no token is stored")
         throw ChannelError.authorizationDenied
+    }
+}
+
+/// Records `authorize` arguments and replays a canned `Result` so the
+/// SlackChannel.authorize delegation can be unit-tested without binding
+/// a real localhost OAuth listener.
+private final class StubSlackAuthorizing: SlackAuthorizing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _observedClientID: String?
+    private var _observedClientSecret: String?
+    private let result: Result<Void, OAuthError>
+
+    var observedClientID: String? {
+        lock.lock(); defer { lock.unlock() }
+        return _observedClientID
+    }
+    var observedClientSecret: String? {
+        lock.lock(); defer { lock.unlock() }
+        return _observedClientSecret
+    }
+
+    init(result: Result<Void, OAuthError>) {
+        self.result = result
+    }
+
+    func authorize(
+        clientID: String,
+        clientSecret: String,
+        completion: @escaping (Result<Void, OAuthError>) -> Void
+    ) {
+        lock.lock()
+        _observedClientID = clientID
+        _observedClientSecret = clientSecret
+        lock.unlock()
+        completion(result)
     }
 }

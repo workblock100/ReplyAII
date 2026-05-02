@@ -30,10 +30,20 @@ extension LocalhostOAuthListener: OAuthCallbackListener {}
 
 // MARK: - SlackOAuthFlow
 
+/// Test seam that lets `SlackChannel.authorize` delegate into a fake flow
+/// without binding a real localhost listener.
+protocol SlackAuthorizing: AnyObject, Sendable {
+    func authorize(
+        clientID: String,
+        clientSecret: String,
+        completion: @escaping (Result<Void, OAuthError>) -> Void
+    )
+}
+
 /// Orchestrates Slack's OAuth2 authorization-code exchange.
 /// Wires together: LocalhostOAuthListener (callback server) → NSWorkspace URL open
 /// → URLSession token exchange POST → KeychainHelper token storage.
-final class SlackOAuthFlow: @unchecked Sendable {
+final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession

@@ -4,19 +4,42 @@ import Foundation
 /// Uses `SlackTokenStore` for credential storage so OAuth and channel reads
 /// share the exact same Keychain entry. Threads + message history come from
 /// `conversations.list` and `conversations.history` respectively.
+/// Factory closure for constructing a `SlackAuthorizing` flow per `authorize`
+/// call. Per-call instances keep the localhost callback listener short-lived
+/// (the listener binds a port for the duration of the OAuth round-trip).
+typealias SlackOAuthFlowFactory = @Sendable () -> any SlackAuthorizing
+
 final class SlackChannel: ChannelService, @unchecked Sendable {
     let channel: Channel = .slack
     let displayName: String = "Slack"
 
     private let tokenStore: SlackTokenStore
     private let http: SlackHTTPClient
+    private let oauthFlowFactory: SlackOAuthFlowFactory
 
     init(
         tokenStore: SlackTokenStore = SlackTokenStore(),
-        http: SlackHTTPClient = URLSessionSlackClient()
+        http: SlackHTTPClient = URLSessionSlackClient(),
+        oauthFlowFactory: @escaping SlackOAuthFlowFactory = { SlackOAuthFlow() }
     ) {
         self.tokenStore = tokenStore
         self.http = http
+        self.oauthFlowFactory = oauthFlowFactory
+    }
+
+    /// Kick off Slack's OAuth2 flow. On success the access token + workspace
+    /// name are written to `SlackTokenStore`, so the next `recentThreads` call
+    /// returns real channels instead of throwing `authorizationDenied`.
+    func authorize(
+        clientID: String,
+        clientSecret: String,
+        completion: @escaping (Result<Void, OAuthError>) -> Void
+    ) {
+        oauthFlowFactory().authorize(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            completion: completion
+        )
     }
 
     /// Returns the most-recent Slack channels (DMs + group DMs + open channels)
