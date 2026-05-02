@@ -44,7 +44,7 @@ struct URLSessionSlackClient: SlackHTTPClient {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw ChannelError.networkError("Non-HTTP response from Slack API")
+            throw ChannelError.networkError("Slack didn't return a usable response. Check your connection and try again.")
         }
         switch http.statusCode {
         case 200...299:
@@ -52,9 +52,9 @@ struct URLSessionSlackClient: SlackHTTPClient {
         case 401:
             throw ChannelError.authorizationDenied
         case 429:
-            throw ChannelError.networkError("Slack API rate limited (HTTP 429)")
+            throw ChannelError.networkError("Slack is rate-limiting us right now. Wait a moment, then try again.")
         default:
-            throw ChannelError.networkError("Slack API returned HTTP \(http.statusCode)")
+            throw ChannelError.networkError("Slack returned an unexpected error (status \(http.statusCode)). Try again shortly.")
         }
     }
 
@@ -70,7 +70,7 @@ struct URLSessionSlackClient: SlackHTTPClient {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw ChannelError.networkError("Non-HTTP response from Slack API")
+            throw ChannelError.networkError("Slack didn't return a usable response. Check your connection and try again.")
         }
         switch http.statusCode {
         case 200...299:
@@ -78,9 +78,9 @@ struct URLSessionSlackClient: SlackHTTPClient {
         case 401:
             throw ChannelError.authorizationDenied
         case 429:
-            throw ChannelError.networkError("Slack API rate limited (HTTP 429)")
+            throw ChannelError.networkError("Slack is rate-limiting us right now. Wait a moment, then try again.")
         default:
-            throw ChannelError.networkError("Slack API returned HTTP \(http.statusCode)")
+            throw ChannelError.networkError("Slack returned an unexpected error (status \(http.statusCode)). Try again shortly.")
         }
     }
 }

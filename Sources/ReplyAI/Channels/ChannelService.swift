@@ -58,7 +58,7 @@ enum ChannelError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .permissionDenied(let hint):           hint
-        case .authorizationDenied:                  "Channel not authorized. Complete the OAuth flow in Settings."
+        case .authorizationDenied:                  "This channel isn't connected yet. Open Settings to sign in."
         case .unavailable(let s):                   s
         case .query(let s):                         s
         case .databaseError(_, let message):        message
