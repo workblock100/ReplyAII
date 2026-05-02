@@ -38,7 +38,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit a1c6d1d
 - claimed_by: worker-2026-04-23-145504
 - blocker: TWO complete implementations available: `wip/2026-04-23-145504-demo-mode` (worker-145504, +193 LOC, 3 tests) and `wip/worker-2026-04-23-161500-demo-mode` (worker-161500, +207 LOC, 3 tests). Human should diff both, pick the cleaner implementation (or cherry-pick best parts), run `swift test`, and merge. Mark done after merge.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Fixtures/Fixtures.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -74,7 +75,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit cf3d379
 - claimed_by: worker-2026-04-23-191507
 - blocker: Implementation complete on wip/2026-04-23-191507-appleScript-fallback (+228 LOC, 4 tests). MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
@@ -93,7 +95,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 949e7a3
 - claimed_by: worker-2026-04-24-005143
 - blocker: code complete; swift test timed out due to MLX fresh-clone build time (REP-254); wip/2026-04-24-005143-rep255-notification-permission
 - files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
@@ -112,7 +115,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit bc267c4
 - claimed_by: worker-2026-04-24-083949
 - blocker: code complete (+115 LOC source, +145 LOC tests, 5 tests); MLX fresh-clone build time exceeded 13-min worker budget (REP-254); human should run `swift test` and merge if green; wip/2026-04-24-083949-rep266-slack-oauth-flow
 - files_to_touch: `Sources/ReplyAI/Channels/SlackOAuthFlow.swift` (new), `Tests/ReplyAITests/SlackOAuthFlowTests.swift` (new)
@@ -134,7 +138,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit cfe50f8
 - claimed_by: worker-2026-04-24-152005
 - blocker: code complete on wip/2026-04-24-152005-thread-cache (est. 531→536 tests, 5 new tests); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green; see REP-279 for human review task
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -527,7 +532,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit e26e72a
 - claimed_by: worker-2026-04-23-200831
 - blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackHTTPClient.swift` (new), `Tests/ReplyAITests/SlackHTTPClientTests.swift` (new)
@@ -547,7 +553,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit e26e72a
 - claimed_by: worker-2026-04-23-200831
 - blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (depends on REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift` (depends on REP-233)
@@ -564,7 +571,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
 - blocker: code complete on wip/2026-04-23-230824-telegram-channel-tests (+27 LOC source, 3 tests, bundled with REP-205/206); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new)
@@ -600,7 +608,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit ac2200b
 - claimed_by: worker-2026-04-24-031929
 - blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-261/264/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Tests/ReplyAITests/WhatsAppChannelTests.swift` (new)
@@ -618,7 +627,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 61ec320
 - claimed_by: worker-2026-04-24-031929
 - blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-260/264/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Tests/ReplyAITests/TeamsChannelTests.swift` (new)
@@ -655,7 +665,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 61ec320
 - claimed_by: worker-2026-04-24-031929
 - blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-260/261/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/SMSChannel.swift` (new), `Tests/ReplyAITests/SMSChannelTests.swift` (new)
@@ -673,7 +684,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 7c62474
 - claimed_by: worker-2026-04-24-114653
 - blocker: code complete on wip/2026-04-24-114653-slack-socket-client; MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
@@ -729,7 +741,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit a819f59
 - claimed_by: worker-2026-04-24-120000
 - blocker: code complete on wip/2026-04-24-120000-viewstate-slacktokenstore (bundled with REP-247, +4 tests); MLX cold-build exceeds 13-min budget; human reviews via REP-275
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (extends REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift`
@@ -903,7 +916,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 8bcfaed
 - claimed_by: worker-2026-04-23-130000
 - blocker: MLX full build on fresh clone exceeded time budget; implementation complete on wip/2026-04-23-130000-thread-name-regex; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
@@ -922,7 +936,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit b163ec1
 - claimed_by: worker-2026-04-23-085959
 - blocker: MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
@@ -963,7 +978,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit c42eb73
 - claimed_by: worker-2026-04-23-135355
 - files_to_touch: `Sources/ReplyAI/Services/DraftStore.swift`, `Tests/ReplyAITests/DraftStoreTests.swift`
 - scope: Add `listStoredDraftIDs() -> [String]` to `DraftStore`. It reads the drafts directory and returns the stem of every `.md` file (each stem is a thread ID). Useful for future "your drafts" UI and detecting orphaned entries whose threads have been deleted. Tests: empty store returns `[]`; after saving 3 drafts returns all 3 IDs; after deleting one draft, that ID is absent from the list; listing is order-independent.
@@ -1107,7 +1123,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
+- done_on: main commit 51e8330
 - claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: When two threads share the same `lastMessageDate`, the sort should be stable (threads don't arbitrarily swap positions between syncs). Test: add threads A and B with identical timestamps; sync multiple times; assert A always appears before B (using thread IDs as tiebreaker or creation order). Unstable sort is user-visible as jumping rows in the thread list during live sync.
@@ -1198,7 +1215,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
 - blocker: tests complete on wip/2026-04-23-230824-telegram-channel-tests (+58 LOC, 3 tests); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
@@ -1214,7 +1232,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
 - blocker: tests complete on wip/2026-04-23-230824-telegram-channel-tests (+36 LOC, 2 tests); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
@@ -1243,7 +1262,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 7e932cf
 - claimed_by: worker-2026-04-24-143143
 - blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
@@ -1259,7 +1279,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
 - blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1395,7 +1416,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 7e932cf
 - claimed_by: worker-2026-04-24-143143
 - blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
@@ -1499,7 +1521,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 87f5001
 - claimed_by: worker-2026-04-24-143143
 - blocker: implementation complete on `wip/2026-04-24-143143-prefs-channels-negation-concurrent` (commit `8cf5a15`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-286; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1597,7 +1620,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit ac2200b
 - claimed_by: worker-2026-04-24-031929
 - blocker: code complete on wip/2026-04-24-031929-channel-stubs (Channel.swift +16 LOC: displayName/iconName props, 4 ChannelTests, bundled with REP-260/261/264); MLX build time exceeded budget; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Models/Channel.swift` (or wherever `Channel` is defined), `Tests/ReplyAITests/ChannelTests.swift` (new or extend)
@@ -1616,7 +1640,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 818ca22
 - claimed_by: worker-2026-04-24-170301
 - blocker: **Pivot P0 implementation complete** on `wip/2026-04-24-170301-sync-all-channels` (commit `984bb13`, +4 tests); pending human review/merge tracked in REP-284; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1653,7 +1678,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 135cfcf
 - claimed_by: worker-2026-04-24-152614
 - blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1670,7 +1696,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit a1c6d1d
 - claimed_by: worker-2026-04-24-113000
 - blocker: TWO competing implementations exist — `wip/worker-2026-04-24-113000-viewstate` (REP-247 only, 531 tests) and `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled). Human should pick one via REP-275.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1689,7 +1716,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
 - blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
@@ -1706,7 +1734,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
 - blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
@@ -1780,7 +1809,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 5e761c9
 - claimed_by: worker-2026-04-24-161734
 - blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 6 tests); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new)
@@ -1832,7 +1862,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: main commit 5e761c9
 - claimed_by: worker-2026-04-24-161734
 - blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 1 new test + 3 updated); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
