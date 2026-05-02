@@ -6,6 +6,45 @@ The reviewer never modifies code — only this file, AGENTS.md, and the planner'
 
 ---
 
+## Window 2026-05-02 08:51 – 14:51 UTC (last ~6h) — ⭐⭐
+
+**Rating: 2/5**
+
+**Zero commits this window from any source — worker, planner, merger, reviewer, or human.** This is the first reviewer fire since 2026-04-24 22:10 UTC, a ~7d 16h gap. The pipeline went dormant after the operator flagged a full automation outage on 2026-04-25 (P0 `REP-ALERT-260425-2010`, still open at top of BACKLOG, claimed_by human). Worker last touched main on 2026-04-23 (`b163ec1`); planner last logged on 2026-04-25; merger has no log file in the last 7 days. No banned actions audited because there was nothing to audit.
+
+The rating is ⭐⭐ rather than ⭐⭐⭐ because the protocol bar for ⭐⭐⭐ is "shipped work but at least one quality concern" — the worker shipped nothing. It's not ⭐ because the worker hasn't *regressed*: no banned actions, no test deletions, no force-pushes, no entitlement flips. This is dormancy, not damage.
+
+**Out-of-window context (informational only).** Between 2026-04-25 and 2026-04-26, **Elijah took over manually** and pushed 15 substantive commits to main covering real product work the automated worker had stranded on wip branches: full Slack OAuth + token store + conversations.list/history wiring (`7ad1295`, `049fb6f`), `⌘⇧R` global hotkey via Carbon (`5b7fa77`), per-channel send routing (AppleScript for iMessage, chat.postMessage for Slack — `ca0644c`), bundled AppIcon.icns + dock asset catalog (`9b6c376`), real Settings → Channels and → Model panels replacing fake stats (`049fb6f`, `e667d53`), sidebar search filtering (`7bd745c`), WelcomeGate first-run onboarding (`4661bd0`), UN delegate registered at app launch (`76377e7`), stable self-signed identity for FDA persistence (`6fc6e4f`), contacts enumerate-and-index lookup (`d10ab7a`), inbox bulk actions + channel filter (`a65fc20`), demo-mode REP-228 merged (`a1c6d1d`), and unread/resolver concurrency coverage (`cf381c5`). Test count on main went **527 → 663** (+136, verified via `grep -h "^[[:space:]]*func test" Tests/ReplyAITests/*.swift | wc -l`). Several "blocked on wip" P0s in BACKLOG are now stale or superseded by Elijah's commits. None of this is in the current 6h window — it's pre-window context for the planner's next fire.
+
+**STOP AUTO-MERGE not triggered.** Protocol requires four consecutive ⭐⭐-or-below windows; the prior four logged ratings were 4, 4, 4, 3, and the 7-day gap since then breaks the consecutive-window streak. The outage is already escalated to the human via `REP-ALERT-260425-2010`, so adding STOP AUTO-MERGE on top would be redundant. Auto-merge cannot regress a product that nothing is auto-merging into. If the worker resumes and produces another sub-par window without reconciling the now-stale backlog, the next reviewer should reconsider.
+
+### Shipped this window (feature-level)
+
+- **Nothing.** Zero commits across all agents. The pipeline was cold for the entire 6-hour window.
+
+### Test coverage delta
+
+- **+0 in this window** (no commits).
+- AGENTS.md line 116 currently reads `527 tests` — this is now stale by +136 against main (actual: 663). Refreshing in this fire per writing-only whitelist (step 6: "Refresh the test count line if it changed").
+
+### Concerns
+
+- **BACKLOG ↔ main divergence.** ~7 days of human-driven main-branch work has likely closed or superseded several "blocked on wip" P0 tickets (REP-228 demo-mode, REP-236 AppleScript fallback, REP-247 ViewState, REP-274 SlackTokenStore, partial REP-266 SlackOAuthFlow). Planner's first post-outage fire must `git log --since="2026-04-25"` and reconcile before claiming any tickets. A worker resuming against the stale BACKLOG would re-implement work already on main.
+- **AGENTS.md test count stale (527 vs. 663 actual).** Refreshing in this fire.
+- **Pipeline-restart visibility unclear.** This reviewer fire is the first automation event in a week. Whether other agents (planner, worker, merger, polisher, operator) are also resuming or whether only the reviewer's schedule survived is unknown from this surface. Operator's next fire is the canonical signal.
+- **REP-285 status (Package.swift MLX split) unknown.** Was the structural fix to unblock the merger. Elijah's `9b6c376` modified Package.swift for AppIcon resources, but the MLX split itself may not have landed. Planner needs to re-audit.
+- **33+ wip branches stale.** Some superseded by Elijah's main-branch commits. Merger should archive aggressively rather than attempt fast-forward merges that will now conflict.
+
+### Suggestions for next planner cycle
+
+- **First task: `REP-RECONCILE-260502` — BACKLOG vs. main reconciliation pass.** Sweep every blocked / claimed_by: worker-* P0 and P1, check whether the wip's intent has been merged to main under a different SHA, close superseded items, mark wip branches for archival.
+- **Second: `REP-AGENTS-REFRESH-260502` — bring AGENTS.md "What's done" current.** Append Elijah's 2026-04-25/26 commit set to the top of the commit log with `human` attribution; prune "What's still stubbed" entries that are no longer stubbed.
+- **Third: ratify or kill REP-ALERT-260425-2010.** If automation is back, mark it done with a note on the underlying fix; if not, escalate.
+- **Worker substantiveness leniency in the immediate post-outage window.** When the worker resumes, expect 1–2 fires to legitimately produce zero substantive commits (because assigned tickets are already merged). Reviewer should not penalize "claimed REP-X, found it's already on main, withdrew claim" — that's correct behavior, not bookkeeping bloat.
+- **Pre-empt the cold-cache failure mode.** If REP-285 still hasn't landed, planner should re-promote it to top-of-queue P0; otherwise the post-outage worker hits the same 13-min budget wall and re-creates the wip pile-up.
+
+---
+
 ## Window 2026-04-24 16:10 – 22:10 UTC (last ~6h) — ⭐⭐⭐
 
 **Rating: 3/5**
