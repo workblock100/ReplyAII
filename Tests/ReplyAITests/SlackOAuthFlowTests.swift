@@ -36,7 +36,21 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        MockURLProtocol.capturedRequests.append(request)
+        // URLSession converts httpBody → httpBodyStream when going through custom protocols.
+        // Read the stream back into httpBody so assertions against req.httpBody work.
+        var mutable = request
+        if mutable.httpBody == nil, let stream = mutable.httpBodyStream {
+            stream.open()
+            var body = Data()
+            var buf = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let n = stream.read(&buf, maxLength: buf.count)
+                if n > 0 { body.append(buf, count: n) }
+            }
+            stream.close()
+            mutable.httpBody = body
+        }
+        MockURLProtocol.capturedRequests.append(mutable)
         let data = try! JSONSerialization.data(withJSONObject: MockURLProtocol.stubbedResponseJSON)
         let response = HTTPURLResponse(
             url: request.url!,

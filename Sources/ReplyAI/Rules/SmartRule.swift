@@ -217,6 +217,9 @@ extension SmartRule {
     /// with the offending pattern and NSRegularExpression's own error message so the
     /// caller can surface both to the user.
     static func validateRegex(_ pattern: String) throws {
+        // Empty pattern is intentionally valid — it matches everything (catch-all rule).
+        // NSRegularExpression rejects "" even though ICU semantics allow it.
+        guard !pattern.isEmpty else { return }
         do {
             _ = try NSRegularExpression(pattern: pattern)
         } catch {
