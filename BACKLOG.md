@@ -963,8 +963,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: blocked
 - claimed_by: autopilot-2026-05-03-181348
+- blocker: code complete on wip/autopilot-2026-05-03-181512-rep162-validate-guid (41 tests pass); full swift test hangs on ContactsResolverTests XPC in headless runner; human should run swift test and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/ChannelService.swift`, `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: `IMessageSender.isValidChatGUID(_:)` is currently iMessage-only (validates the `iMessage;[+-];...` prefix). Reviewer noted this guard will need to widen when SMS or other channels add write capability. Refactor: move `isValidChatGUID` to a `static func validateChatGUID(_ guid: String, for channel: Channel) throws` on `IMessageSender`, and add a comment documenting the extension point for future channels. The iMessage validation logic is unchanged — same regex, same `SenderError.invalidChatGUID` throw. SMS path validates that the GUID matches `SMS;[+-];...` format (not yet enforced since SMS send is not wired, but the structure is ready). Tests: existing `isValidChatGUID` tests migrate to `validateChatGUID(for: .iMessage)`; new test `testSMSGUIDFormatRecognized` verifies the SMS branch doesn't throw for a well-formed SMS GUID; `testWrongChannelGUIDThrows` confirms an iMessage GUID passed with `.slack` channel throws. No behavior change for the iMessage path.
 - success_criteria:
