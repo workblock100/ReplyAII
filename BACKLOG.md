@@ -1586,8 +1586,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: in_progress
+- claimed_by: autopilot-2026-05-03-1733
 - files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (extends REP-236), `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned (alt message-source, no FDA).** Extend `AppleScriptMessageReader` (from REP-236) to fetch messages for a specific chat: `messagesForChat(chatGUID: String, limit: Int) -> [Message]`. AppleScript: `tell application "Messages" to get (items 1 through <limit> of messages of first chat whose id is "<guid>")`. Parses `content`, `sender`, `date` fields from each message. Returns `[Message]` in chronological order (newest last). Injectable executor preserves testability. Tests: mock executor returns 3-message list → `[Message]` with correct bodies; `limit` parameter limits result count; empty chat → empty array; AppleScript returns error → throws `ChannelError.generalError`.
 - success_criteria:
