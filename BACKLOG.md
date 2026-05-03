@@ -1299,7 +1299,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
+- done_on: main (tests at InboxViewModelTests.swift:1165)
 - claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-066 ships `DraftStore` and its scope explicitly states "InboxViewModel.selectThread seeds `userEdits` from the store before the LLM re-primes, so the composer is populated immediately on app open." There is no integration test pinning this end-to-end path. Test: write a draft string to an injected temp `DraftStore` for thread ID "T1"; construct an `InboxViewModel` with that DraftStore injected; call `selectThread` with a thread whose ID is "T1"; assert `viewModel.userEdits == <stored string>` before the LLM prime completes. Also: a thread with no stored draft leaves `userEdits` empty on select.
@@ -1341,7 +1342,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
+- done_on: main (tests at RulesTests.swift:927)
 - claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: REP-031 shipped `SmartRule.validateRegex(_:)` + `RulesStore.addValidating(_:)` + `RuleValidationError.invalidRegex`. These are correctness gates but coverage may be thin. Pin 4 boundary cases: (1) `"[invalid"` throws `.invalidRegex`; (2) `"^hello.*$"` is accepted (no throw); (3) `""` (empty pattern) is accepted — matches everything, which is intentional for "catch-all" rules; (4) `"(?P<name>x)"` (Python named group, unsupported in ICU) throws `.invalidRegex`. Guards the regex validation gate against silent bypass.
@@ -1371,7 +1373,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: in_progress
+- status: done
+- done_on: main (tests at IMessageSenderTests.swift:612)
 - claimed_by: worker-2026-04-24-215706
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-174 fixed `\n → \\n` escaping. Add a combined boundary test: a message containing `"line one\nline two\nbackslash: \\"` produces an AppleScript string literal where `\n` is escaped to `\\n` and `\\` is escaped to `\\\\`. Also: a message containing a tab character `\t` passes through unchanged (tabs are legal in AppleScript string literals). Uses the injectable `executeHook` seam to capture the constructed AppleScript string without executing it.
@@ -1587,9 +1590,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: in_progress
+- status: done
+- done_on: main commit 07f4b16
 - claimed_by: autopilot-2026-05-03-1733
-- blocker: implementation pushed on `wip/autopilot-2026-05-03-1733-rep240-applescript-messagesforchat` (commit `6038409`, +173 LOC, 5 tests). Filter test `swift test --filter testMessagesForChat` passed all 5 cases pre-disruption; full suite run was disrupted by another autopilot fire holding the `.build` lock concurrently. Pending a warm-`.build` `swift test` validation + ff-merge to main (P1 wip-drain).
 - files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (extends REP-236), `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned (alt message-source, no FDA).** Extend `AppleScriptMessageReader` (from REP-236) to fetch messages for a specific chat: `messagesForChat(chatGUID: String, limit: Int) -> [Message]`. AppleScript: `tell application "Messages" to get (items 1 through <limit> of messages of first chat whose id is "<guid>")`. Parses `content`, `sender`, `date` fields from each message. Returns `[Message]` in chronological order (newest last). Injectable executor preserves testability. Tests: mock executor returns 3-message list → `[Message]` with correct bodies; `limit` parameter limits result count; empty chat → empty array; AppleScript returns error → throws `ChannelError.generalError`.
 - success_criteria:
