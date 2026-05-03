@@ -66,6 +66,87 @@ struct AppleScriptMessageReader: Sendable {
         return parse(raw)
     }
 
+    /// Returns the most recent messages for a single chat, in chronological
+    /// order (oldest first, newest last). Limited to the most-recent `limit`
+    /// messages to avoid iterating the chat's full history. Used as the
+    /// FDA-free fallback for opening a thread when chat.db is inaccessible.
+    ///
+    /// AppleScript surface: walks `text messages of first chat whose id is …`
+    /// and emits `body||direction` rows. The parser maps `outgoing` → `.me`
+    /// and anything else → `.them`, so message authorship is preserved
+    /// without requiring a Contacts lookup.
+    func messagesForChat(chatGUID: String, limit: Int) throws -> [Message] {
+        // AppleScript string interpolation: the GUID is embedded inside a
+        // double-quoted string literal in the script. Escape any embedded
+        // quotes or backslashes so a hostile or unusual GUID can't terminate
+        // the string and inject syntax. Real chat GUIDs are ASCII-safe but
+        // we don't trust the caller.
+        let escapedGUID = chatGUID
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        // Clamp limit to a sane positive value. Zero or negative would
+        // produce a degenerate `startIdx` calculation in AppleScript and
+        // return the whole history (or error). One is the smallest useful.
+        let clampedLimit = max(1, limit)
+
+        let script = """
+        tell application "Messages"
+            set output to ""
+            try
+                set theChat to first chat whose id is "\(escapedGUID)"
+                set theMsgs to text messages of theChat
+                set msgCount to count of theMsgs
+                if msgCount > 0 then
+                    set startIdx to msgCount - \(clampedLimit) + 1
+                    if startIdx < 1 then set startIdx to 1
+                    repeat with i from startIdx to msgCount
+                        try
+                            set m to item i of theMsgs
+                            set msgText to ""
+                            try
+                                set msgText to text of m as text
+                            end try
+                            set msgDir to "incoming"
+                            try
+                                set msgDir to direction of m as text
+                            end try
+                            set output to output & msgText & "||" & msgDir & "\n"
+                        end try
+                    end repeat
+                end if
+            end try
+            return output
+        end tell
+        """
+        let raw = try executor(script)
+        return parseMessages(raw, limit: clampedLimit)
+    }
+
+    /// Parses newline-delimited "body||direction" rows from `messagesForChat`
+    /// into `Message` values. `outgoing` maps to `.me`; any other direction
+    /// (typically `incoming`) maps to `.them`. Empty bodies and `missing
+    /// value` leakage are dropped. The `limit` cap is enforced here as well
+    /// as in AppleScript so a misbehaving executor that returns more rows
+    /// than requested still respects the contract.
+    private func parseMessages(_ raw: String, limit: Int) -> [Message] {
+        var out: [Message] = []
+        for line in raw.split(separator: "\n", omittingEmptySubsequences: true) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let parts = trimmed.components(separatedBy: "||")
+            let body = parts.count > 0 ? parts[0] : ""
+            let dir  = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : "incoming"
+            // AppleScript can leak "missing value" when a message has no
+            // text body (e.g. a tapback or attachment-only message). Drop
+            // those rather than surface a literal "missing value" string.
+            if body.isEmpty || body == "missing value" { continue }
+            let from: Message.Author = (dir.lowercased() == "outgoing") ? .me : .them
+            out.append(Message(from: from, text: body, time: ""))
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
     // MARK: - Parsing
 
     /// Parses newline-delimited "name||chatID||preview" rows into MessageThread values.

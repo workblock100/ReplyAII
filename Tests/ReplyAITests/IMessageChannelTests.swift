@@ -1423,6 +1423,98 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
         XCTAssertFalse(fallbackCalled, "AppleScript fallback must not be called when chat.db opens successfully")
     }
 
+    // MARK: - REP-240: AppleScriptMessageReader.messagesForChat
+
+    func testMessagesForChatParsesBodyCorrectly() throws {
+        // Three rows of "body||direction" must parse into three Message values
+        // in the same order, with bodies preserved verbatim and authorship
+        // mapped from direction (outgoing → .me, incoming → .them).
+        let mockOutput = """
+        Hey can you grab milk?||incoming
+        on it||outgoing
+        thanks!||incoming
+        """
+        let executor: @Sendable (String) throws -> String = { _ in mockOutput }
+        let reader = AppleScriptMessageReader(executor: executor)
+
+        let messages = try reader.messagesForChat(chatGUID: "iMessage;-;+15555550100", limit: 50)
+
+        XCTAssertEqual(messages.count, 3)
+        XCTAssertEqual(messages[0].text, "Hey can you grab milk?")
+        XCTAssertEqual(messages[0].from, .them)
+        XCTAssertEqual(messages[1].text, "on it")
+        XCTAssertEqual(messages[1].from, .me)
+        XCTAssertEqual(messages[2].text, "thanks!")
+        XCTAssertEqual(messages[2].from, .them)
+    }
+
+    func testMessagesForChatRespectsLimit() throws {
+        // If the executor returns more rows than the caller asked for, the
+        // parser must still cap at limit so a misbehaving Messages.app or
+        // unbounded AppleScript can't blow past the requested window.
+        let mockOutput = """
+        msg one||incoming
+        msg two||outgoing
+        msg three||incoming
+        """
+        let executor: @Sendable (String) throws -> String = { _ in mockOutput }
+        let reader = AppleScriptMessageReader(executor: executor)
+
+        let messages = try reader.messagesForChat(chatGUID: "iMessage;-;+15555550101", limit: 2)
+
+        XCTAssertEqual(messages.count, 2, "limit must be enforced by the parser even when the executor returns extra rows")
+        XCTAssertEqual(messages[0].text, "msg one")
+        XCTAssertEqual(messages[1].text, "msg two")
+    }
+
+    func testMessagesForChatEmptyResultIsEmpty() throws {
+        // A chat with no messages produces an empty AppleScript output. The
+        // parser must return [] rather than a single "missing value" sentinel.
+        let executor: @Sendable (String) throws -> String = { _ in "" }
+        let reader = AppleScriptMessageReader(executor: executor)
+
+        let messages = try reader.messagesForChat(chatGUID: "iMessage;-;+15555550102", limit: 50)
+
+        XCTAssertTrue(messages.isEmpty, "an empty AppleScript result must produce an empty [Message]")
+    }
+
+    func testMessagesForChatErrorPropagates() throws {
+        // When the executor throws (Messages.app not running, AppleScript
+        // failed to compile, automation permission denied), the error must
+        // surface to the caller rather than be silently swallowed into an
+        // empty array.
+        let executor: @Sendable (String) throws -> String = { _ in
+            throw AppleScriptReaderError.executionError("Messages not running")
+        }
+        let reader = AppleScriptMessageReader(executor: executor)
+
+        XCTAssertThrowsError(try reader.messagesForChat(chatGUID: "iMessage;-;+15555550103", limit: 50)) { err in
+            guard case AppleScriptReaderError.executionError(let msg) = err else {
+                return XCTFail("expected AppleScriptReaderError.executionError, got \(err)")
+            }
+            XCTAssertEqual(msg, "Messages not running")
+        }
+    }
+
+    func testMessagesForChatScriptIncludesGUIDAndLimit() throws {
+        // The executor receives the AppleScript source. Verify the GUID
+        // and the limit are interpolated so a real Messages.app call would
+        // target the right chat and bound the right window.
+        var captured = ""
+        let executor: @Sendable (String) throws -> String = { script in
+            captured = script
+            return ""
+        }
+        let reader = AppleScriptMessageReader(executor: executor)
+
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15555550104", limit: 7)
+
+        XCTAssertTrue(captured.contains("iMessage;-;+15555550104"),
+                      "script must embed the requested chat GUID")
+        XCTAssertTrue(captured.contains("- 7 + 1"),
+                      "script must use the requested limit when computing the start index")
+    }
+
     // MARK: - Helpers
 
     /// Creates the minimum chat.db schema needed for openReadOnly to succeed
