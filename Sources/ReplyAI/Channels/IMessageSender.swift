@@ -61,7 +61,7 @@ enum IMessageSender {
             throw SendError.unsupported
         }
         let guid = chatGUID(for: thread)
-        try sendRaw(text, chatGUID: guid)
+        try sendRaw(text, chatGUID: guid, channel: thread.channel)
     }
 
     /// Legacy by-identifier send — kept so existing call sites compile.
@@ -72,7 +72,7 @@ enum IMessageSender {
             throw SendError.unsupported
         }
         let service = channel == .sms ? "SMS" : "iMessage"
-        try sendRaw(text, chatGUID: "\(service);-;\(id)")
+        try sendRaw(text, chatGUID: "\(service);-;\(id)", channel: channel)
     }
 
     // MARK: - Internal
@@ -88,12 +88,10 @@ enum IMessageSender {
         return "\(service);-;\(thread.id)"
     }
 
-    private static func sendRaw(_ text: String, chatGUID: String) throws {
+    private static func sendRaw(_ text: String, chatGUID: String, channel: Channel) throws {
         // Validate before building the AppleScript so failures produce a clear
         // diagnostic rather than an opaque errOSAScriptError -1708 from Messages.
-        guard isValidChatGUID(chatGUID) else {
-            throw SendError.invalidChatGUID(chatGUID)
-        }
+        try validateChatGUID(chatGUID, for: channel)
         guard text.count <= maxMessageLength else {
             throw SendError.messageTooLong(text.count)
         }
@@ -165,12 +163,36 @@ enum IMessageSender {
         if let err = capturedError { throw err }
     }
 
-    /// Returns true if `guid` matches the pattern `iMessage;[+-];<non-empty>`.
-    /// Exposed as `internal` for unit tests.
-    static func isValidChatGUID(_ guid: String) -> Bool {
+    /// Validates that `guid` matches the expected format for `channel`.
+    /// Throws `SendError.invalidChatGUID` when the format doesn't match.
+    /// Add a new `case` here as each channel gains write capability — this is
+    /// the single place to add per-channel GUID format rules.
+    static func validateChatGUID(_ guid: String, for channel: Channel) throws {
+        let valid: Bool
+        switch channel {
+        case .imessage:
+            valid = isValidIMessageGUID(guid)
+        case .sms:
+            valid = isValidSMSGUID(guid)
+        default:
+            // Channels without GUID-addressed sends don't have a valid format.
+            throw SendError.invalidChatGUID(guid)
+        }
+        if !valid { throw SendError.invalidChatGUID(guid) }
+    }
+
+    private static func isValidIMessageGUID(_ guid: String) -> Bool {
         let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return false }
         guard parts[0] == "iMessage" else { return false }
+        guard parts[1] == "+" || parts[1] == "-" else { return false }
+        return !parts[2].isEmpty
+    }
+
+    private static func isValidSMSGUID(_ guid: String) -> Bool {
+        let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return false }
+        guard parts[0] == "SMS" else { return false }
         guard parts[1] == "+" || parts[1] == "-" else { return false }
         return !parts[2].isEmpty
     }

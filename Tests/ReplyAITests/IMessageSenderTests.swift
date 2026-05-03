@@ -342,16 +342,16 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(callCount, 2, "executor must be invoked exactly twice on a -1708 retry")
     }
 
-    // MARK: - REP-128: chatGUID format pre-flight validation
+    // MARK: - REP-128: chatGUID format pre-flight validation (migrated to validateChatGUID)
 
     func testValidOneToOneGUIDPasses() {
-        XCTAssertTrue(IMessageSender.isValidChatGUID("iMessage;-;+15551234567"),
-                      "valid 1:1 iMessage GUID must pass validation")
+        XCTAssertNoThrow(try IMessageSender.validateChatGUID("iMessage;-;+15551234567", for: .imessage),
+                         "valid 1:1 iMessage GUID must pass validation")
     }
 
     func testValidGroupGUIDPasses() {
-        XCTAssertTrue(IMessageSender.isValidChatGUID("iMessage;+;chat1234567890"),
-                      "valid group iMessage GUID must pass validation")
+        XCTAssertNoThrow(try IMessageSender.validateChatGUID("iMessage;+;chat1234567890", for: .imessage),
+                         "valid group iMessage GUID must pass validation")
     }
 
     func testInvalidGUIDThrowsInvalid() {
@@ -371,18 +371,41 @@ final class IMessageSenderTests: XCTestCase {
     }
 
     func testEmptyGUIDIsValidationFailed() {
-        XCTAssertFalse(IMessageSender.isValidChatGUID(""),
-                       "empty string must fail GUID validation")
+        XCTAssertThrowsError(try IMessageSender.validateChatGUID("", for: .imessage),
+                             "empty string must fail GUID validation")
     }
 
     func testWrongPrefixThrowsInvalid() {
-        XCTAssertFalse(IMessageSender.isValidChatGUID("SMS;-;4155551234"),
-                       "SMS GUID must fail iMessage prefix check")
+        // SMS GUID is not valid for the iMessage channel.
+        XCTAssertThrowsError(try IMessageSender.validateChatGUID("SMS;-;4155551234", for: .imessage),
+                             "SMS GUID must fail iMessage prefix check")
     }
 
     func testMissingSeparatorThrowsInvalid() {
-        XCTAssertFalse(IMessageSender.isValidChatGUID("iMessageNoseparator"),
-                       "GUID without semicolons must fail validation")
+        XCTAssertThrowsError(try IMessageSender.validateChatGUID("iMessageNoseparator", for: .imessage),
+                             "GUID without semicolons must fail validation")
+    }
+
+    // MARK: - REP-162: cross-channel GUID validation
+
+    func testSMSGUIDFormatRecognized() {
+        // Well-formed SMS GUIDs must pass SMS channel validation.
+        XCTAssertNoThrow(try IMessageSender.validateChatGUID("SMS;-;+14155551234", for: .sms),
+                         "well-formed SMS;-;<identifier> must pass SMS channel validation")
+        XCTAssertNoThrow(try IMessageSender.validateChatGUID("SMS;+;groupChat99", for: .sms),
+                         "well-formed SMS;+;<identifier> must pass SMS channel validation")
+    }
+
+    func testWrongChannelGUIDThrows() {
+        // An iMessage GUID is not valid for the Slack channel.
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;-;+15551234567", for: .slack),
+            "iMessage GUID must throw invalidChatGUID when validated against .slack channel"
+        ) { error in
+            guard case IMessageSender.SendError.invalidChatGUID = error else {
+                XCTFail("Expected invalidChatGUID, got \(error)"); return
+            }
+        }
     }
 
     func testNonRetriableErrorFailsImmediately() {
