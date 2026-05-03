@@ -647,7 +647,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 17b2973
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/ShortcutsExportHandler.swift` (new), `Sources/ReplyAI/App/ReplyAIApp.swift`, `Tests/ReplyAITests/ShortcutsExportHandlerTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source, no FDA required).** Shortcuts.app can export recent iMessage threads as JSON via a user-triggered shortcut; ReplyAI registers a URL scheme handler to receive that data. `ShortcutsExportHandler` registers for `replyai://import-messages` URL scheme callbacks (via `NSApplication.EventType.openURLs` / `onOpenURL` in SwiftUI Scene). Parses the URL's `data` query parameter (percent-encoded JSON) into `[MessageThread]`. Schema: `[{"id": String, "displayName": String, "preview": String, "channel": "iMessage", "messages": [...]}]`. Injectable URL parser for tests. Returns `[MessageThread]` on success; throws `ShortcutsExportError.malformedPayload` on bad JSON. `ReplyAIApp` wires `onOpenURL` to pass the URL to `ShortcutsExportHandler`; handler calls `InboxViewModel.injectThreads(_:)` (REP-244 provides the multi-source architecture). No FDA required — user triggers the Shortcut manually. Tests: valid JSON URL → `[MessageThread]` with correct fields; malformed JSON → `malformedPayload` error; missing `data` param → `malformedPayload`; empty messages array → thread with empty messages.
@@ -1314,8 +1315,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (RulesMatchedCountTests in StatsTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.rulesMatchedCount` is incremented in `InboxViewModel` at rule-evaluation time. Pin the per-match semantics: if 3 rules match a single thread evaluation, `rulesMatchedCount` must grow by 3 (not 1). If 0 rules match, the counter is unchanged. Uses `Stats(statsFileURL: nil)` with injected mock rule evaluator results. Guards against an implementation that calls `increment(.rulesMatchedCount)` once per `matching()` call regardless of match count.
 - success_criteria:

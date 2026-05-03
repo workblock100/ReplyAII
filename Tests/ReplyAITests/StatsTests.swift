@@ -714,3 +714,29 @@ extension StatsTests {
             "snapshot with non-zero counters must still produce valid JSON")
     }
 }
+
+// MARK: - REP-213: rulesMatchedCount increments per matched rule
+
+final class RulesMatchedCountTests: XCTestCase {
+
+    // Three rules match one evaluation → rulesMatchedCount grows by 3.
+    // Guards against an impl that calls incrementRulesMatched() once per
+    // evaluation call regardless of how many rules matched.
+    func testRulesMatchedCountIncrementsPerMatchedRule() {
+        let stats = Stats(fileURL: nil)
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0)
+        stats.incrementRulesMatched()
+        stats.incrementRulesMatched()
+        stats.incrementRulesMatched()
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 3,
+                       "3 matched rules must increment counter by 3, not 1")
+    }
+
+    // Zero rules match → counter untouched.
+    func testRulesMatchedCountUnchangedOnZeroMatches() {
+        let stats = Stats(fileURL: nil)
+        // No incrementRulesMatched() calls — simulates an evaluation where nothing matched.
+        XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0,
+                       "zero matched rules must leave counter at 0")
+    }
+}
