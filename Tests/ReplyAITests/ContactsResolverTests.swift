@@ -489,6 +489,21 @@ private final class FakeContactStore: ContactsStoring, @unchecked Sendable {
 
     func lookup(handle: String) -> String? {
         lock.lock(); _lookupCallCount += 1; lock.unlock()
-        return names[handle]
+        // Mirror CNContactStoreBackedStoring's digit-keyed index: callers
+        // populate `names` with either the original handle (e.g. an email)
+        // or the 10-digit canonical form. The resolver passes the original
+        // handle here (so CNPhoneNumber matching works in production), so
+        // we have to normalise on the lookup side to find that canonical
+        // entry.
+        if let direct = names[handle] { return direct }
+        return names[Self.normalize(handle)]
+    }
+
+    private static func normalize(_ handle: String) -> String {
+        guard !handle.contains("@"), !handle.hasPrefix("chat") else { return handle }
+        let digits = handle.filter(\.isNumber)
+        guard digits.count >= 10 else { return handle }
+        if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+        return digits.count == 10 ? digits : handle
     }
 }
