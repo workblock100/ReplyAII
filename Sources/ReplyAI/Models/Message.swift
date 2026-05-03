@@ -1,6 +1,13 @@
 import Foundation
 
+/// One bubble in a thread. The rule engine and search index reference
+/// messages by `rowID` (chat.db's `message.ROWID`) rather than `id`, so
+/// the in-memory `UUID` is safe to regenerate across launches —
+/// stable identity lives on the chat.db side, not on this struct.
 struct Message: Identifiable, Hashable, Sendable {
+    /// Direction of the bubble — `me` is the user, `them` is the contact.
+    /// Stored as a raw String so existing on-disk fixtures and any future
+    /// JSON projections stay stable as the enum evolves.
     enum Author: String, Sendable, Hashable { case them, me }
 
     let id: UUID

@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// One messaging surface ReplyAI unifies. The raw String values are the
+/// on-disk identifier — they're persisted into rules.json, the search
+/// index, per-channel Preferences keys, and the chat-list cache, so
+/// renaming a case is a migration, not a refactor. Add a new case here
+/// only when a corresponding `ChannelService` implementation lands;
+/// otherwise the per-channel filter UI ends up offering toggles for
+/// channels the inbox can't actually source threads from.
 enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     case imessage
     case whatsapp
