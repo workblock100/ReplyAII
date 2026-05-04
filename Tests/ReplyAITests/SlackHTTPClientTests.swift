@@ -6,7 +6,7 @@ import XCTest
 /// Captures the URLRequest and returns a configured response without real network calls.
 private final class MockHTTPSession: HTTPSessionProtocol, @unchecked Sendable {
     var capturedRequest: URLRequest?
-    private let handler: (URLRequest) throws -> (Data, HTTPURLResponse)
+    private let handler: (URLRequest) throws -> (Data, URLResponse)
 
     init(statusCode: Int, body: Data = Data()) {
         self.handler = { request in
@@ -16,6 +16,16 @@ private final class MockHTTPSession: HTTPSessionProtocol, @unchecked Sendable {
                 httpVersion: nil, headerFields: nil
             )!
             return (body, response)
+        }
+    }
+
+    /// Returns a non-HTTPURLResponse so the client's `as? HTTPURLResponse`
+    /// downcast fails — exercises the "didn't return a usable response" path.
+    init(returnsNonHTTPURLResponse: Bool) {
+        precondition(returnsNonHTTPURLResponse)
+        self.handler = { request in
+            let url = request.url ?? URL(string: "https://slack.com")!
+            return (Data(), URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil))
         }
     }
 
@@ -97,5 +107,193 @@ final class SlackHTTPClientTests: XCTestCase {
 
         let data = try await client.get(endpoint: "conversations.list", token: "tok", params: [:])
         XCTAssertEqual(data, expected)
+    }
+
+    // MARK: - GET edge cases
+
+    func testGetWithNoParamsOmitsQueryString() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.get(endpoint: "auth.test", token: "tok", params: [:])
+
+        let url = session.capturedRequest?.url
+        XCTAssertNil(url?.query, "no params should leave URL.query nil, not empty-string")
+        XCTAssertEqual(url?.path, "/api/auth.test")
+    }
+
+    func testGetParamsAreSortedDeterministically() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.get(
+            endpoint: "conversations.list",
+            token: "tok",
+            params: ["zeta": "z", "alpha": "a", "mid": "m"]
+        )
+
+        // The implementation sorts by key — query items must come back alphabetical
+        // so request ordering is deterministic for cache lookups and test asserts.
+        let items = URLComponents(url: session.capturedRequest!.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.map(\.name), ["alpha", "mid", "zeta"])
+    }
+
+    func testGetWith500ThrowsNetworkError() async throws {
+        let session = MockHTTPSession(statusCode: 500)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "tok", params: [:])
+            XCTFail("Expected networkError")
+        } catch let e as ChannelError {
+            guard case .networkError(let msg) = e else {
+                XCTFail("Expected ChannelError.networkError, got \(e)")
+                return
+            }
+            XCTAssertTrue(msg.contains("500"), "5xx error message should include status code, got: \(msg)")
+        }
+    }
+
+    func testGetWithNonHTTPResponseThrowsNetworkError() async throws {
+        let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "tok", params: [:])
+            XCTFail("Expected networkError")
+        } catch let e as ChannelError {
+            guard case .networkError = e else {
+                XCTFail("Expected ChannelError.networkError, got \(e)")
+                return
+            }
+        }
+    }
+
+    // MARK: - POST path
+
+    func testPostUsesPOSTMethod() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.post(
+            endpoint: "chat.postMessage",
+            token: "xoxb-tok",
+            json: ["channel": "C123", "text": "hi"]
+        )
+
+        XCTAssertEqual(session.capturedRequest?.httpMethod, "POST")
+    }
+
+    func testPostSetsBearerAuthAndJSONContentType() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.post(
+            endpoint: "chat.postMessage",
+            token: "xoxb-my-token",
+            json: ["channel": "C1"]
+        )
+
+        let req = session.capturedRequest
+        XCTAssertEqual(req?.value(forHTTPHeaderField: "Authorization"), "Bearer xoxb-my-token")
+        XCTAssertEqual(req?.value(forHTTPHeaderField: "Content-Type"), "application/json; charset=utf-8")
+    }
+
+    func testPostSerializesJSONBody() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.post(
+            endpoint: "chat.postMessage",
+            token: "tok",
+            json: ["channel": "C99", "text": "hello"]
+        )
+
+        let body = session.capturedRequest?.httpBody ?? Data()
+        let decoded = try JSONSerialization.jsonObject(with: body) as? [String: String]
+        XCTAssertEqual(decoded?["channel"], "C99")
+        XCTAssertEqual(decoded?["text"], "hello")
+    }
+
+    func testPostHits401ThrowsAuthDenied() async throws {
+        let session = MockHTTPSession(statusCode: 401)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.post(endpoint: "chat.postMessage", token: "bad", json: [:])
+            XCTFail("Expected authorizationDenied")
+        } catch ChannelError.authorizationDenied {
+            // Expected
+        }
+    }
+
+    func testPostHits429ThrowsNetworkError() async throws {
+        let session = MockHTTPSession(statusCode: 429)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.post(endpoint: "chat.postMessage", token: "tok", json: [:])
+            XCTFail("Expected networkError")
+        } catch let e as ChannelError {
+            guard case .networkError = e else {
+                XCTFail("Expected ChannelError.networkError, got \(e)")
+                return
+            }
+        }
+    }
+
+    func testPostHits500ThrowsNetworkError() async throws {
+        let session = MockHTTPSession(statusCode: 503)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.post(endpoint: "chat.postMessage", token: "tok", json: [:])
+            XCTFail("Expected networkError")
+        } catch let e as ChannelError {
+            guard case .networkError(let msg) = e else {
+                XCTFail("Expected ChannelError.networkError, got \(e)")
+                return
+            }
+            XCTAssertTrue(msg.contains("503"), "5xx error message should include status code, got: \(msg)")
+        }
+    }
+
+    func testPostSuccessfulResponseReturnsBody() async throws {
+        let expected = Data("""
+        {"ok":true,"ts":"1234.5678"}
+        """.utf8)
+        let session = MockHTTPSession(statusCode: 200, body: expected)
+        let client = URLSessionSlackClient(session: session)
+
+        let data = try await client.post(endpoint: "chat.postMessage", token: "tok", json: [:])
+        XCTAssertEqual(data, expected)
+    }
+
+    func testPostURLTargetsCorrectEndpoint() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+
+        _ = try await client.post(endpoint: "conversations.archive", token: "tok", json: [:])
+
+        let url = session.capturedRequest?.url
+        XCTAssertEqual(url?.scheme, "https")
+        XCTAssertEqual(url?.host, "slack.com")
+        XCTAssertEqual(url?.path, "/api/conversations.archive")
+        XCTAssertNil(url?.query, "POST should never put params in the query string")
+    }
+
+    func testPostWithNonHTTPResponseThrowsNetworkError() async throws {
+        let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.post(endpoint: "chat.postMessage", token: "tok", json: [:])
+            XCTFail("Expected networkError")
+        } catch let e as ChannelError {
+            guard case .networkError = e else {
+                XCTFail("Expected ChannelError.networkError, got \(e)")
+                return
+            }
+        }
     }
 }
