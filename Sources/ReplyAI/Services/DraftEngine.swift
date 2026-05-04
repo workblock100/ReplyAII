@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+/// Draft cache + LLM streaming coordinator. Keys generated drafts by
+/// (threadID, tone) so that toggling tone (⌘/) or returning to a thread
+/// reuses an already-streamed reply rather than re-billing the model. At
+/// most one in-flight stream exists per key — re-priming cancels the prior
+/// task. Persists completed drafts via `DraftStore` so the composer rehydrates
+/// across launches.
 @Observable
 @MainActor
 final class DraftEngine {

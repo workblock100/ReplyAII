@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Main inbox surface — wires `InboxViewModel` and `DraftEngine` together,
+/// mounts the sidebar / thread-list / detail layout, and overlays the
+/// command palette and model-load banner. The DraftEngine's underlying
+/// LLM service (MLX vs stub) is selected at construction time off
+/// `pref.useMLX`; toggling that pref takes effect on the next launch.
 struct InboxScreen: View {
     @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
     @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?

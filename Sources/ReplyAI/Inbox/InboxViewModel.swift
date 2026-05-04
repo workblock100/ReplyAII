@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// Mutable state of the live inbox: fetched threads, selection, sync status,
+/// drafts, snooze map, and rule-firing history. Owns the channel-sync
+/// pipeline that pulls from iMessage / Slack / WhatsApp / Teams / SMS /
+/// Telegram and merges results into a single ranked thread list. SwiftUI
+/// binds via `@Observable`; `@MainActor` because every mutation feeds the UI.
 @Observable
 @MainActor
 final class InboxViewModel {
