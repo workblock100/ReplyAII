@@ -243,4 +243,174 @@ final class SlackOAuthFlowTests: XCTestCase {
         }
         XCTAssertEqual(error, .timeout)
     }
+
+    // MARK: - Workspace name extraction
+
+    /// Slack's `oauth.v2.access` response embeds `team: {id, name}`.
+    /// The workspace name should be plumbed into SlackTokenStore so the inbox
+    /// can show "Connected: ACME". Without this test, a regression that drops
+    /// `team.name` would only surface in the UI.
+    func testSlackOAuthExtractsWorkspaceNameFromTeamObject() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": ["id": "T123", "name": "ACME Corp"]
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "ACME Corp")
+    }
+
+    /// Slack's response without `team.name` falls back to empty string — never crash,
+    /// never write garbage. Regression guard for a UI label that would otherwise
+    /// say "Connected: <whatever .description> Slack returns".
+    func testSlackOAuthMissingTeamNameDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            // Note: no `team` key at all.
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "")
+        XCTAssertEqual(stored?.token, "xoxb-w")
+    }
+
+    /// `team` present but no `name` key — same fallback as missing `team`.
+    func testSlackOAuthTeamObjectWithoutNameDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": ["id": "T123"] // name missing
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "")
+    }
+
+    // MARK: - Token-exchange edge cases
+
+    /// `{"ok":true}` response missing `access_token` must surface as
+    /// tokenExchangeFailed — never silently store an empty token.
+    func testSlackOAuthOKResponseWithoutAccessTokenFails() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true] // no access_token
+
+        let exp = expectation(description: "authorize completes")
+        var result: Result<Void, OAuthError>?
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") {
+            result = $0
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        guard case .failure(let error) = result, case .tokenExchangeFailed = error else {
+            XCTFail("Expected tokenExchangeFailed, got \(String(describing: result))")
+            return
+        }
+        // And keychain must NOT contain a token.
+        XCTAssertNil(SlackTokenStore(keychain: keychain).get())
+    }
+
+    /// Auth URL must include redirect_uri matching the listener port (4242).
+    /// Regression guard: changing the listener port without changing the URL
+    /// would break Slack's redirect.
+    func testAuthURLRedirectURIMatchesListenerPort() {
+        let opener = MockURLOpener()
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: opener,
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let items = URLComponents(url: opener.openedURL!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let redirect = items.first(where: { $0.name == "redirect_uri" })?.value
+        XCTAssertEqual(redirect, "http://localhost:4242/callback")
+    }
+
+    /// Token-exchange POST body uses x-www-form-urlencoded content type.
+    /// Slack's oauth.v2.access rejects JSON bodies — this guards against
+    /// someone "modernizing" the POST to JSON and breaking the exchange.
+    func testTokenExchangePOSTUsesFormURLEncodedContentType() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        XCTAssertEqual(
+            MockURLProtocol.capturedRequests.first?.value(forHTTPHeaderField: "Content-Type"),
+            "application/x-www-form-urlencoded"
+        )
+    }
+
+    /// Token-exchange body includes the redirect_uri so Slack can validate it
+    /// against the registered app's redirect (must match exactly).
+    func testTokenExchangeBodyIncludesRedirectURI() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let body = MockURLProtocol.capturedRequests.first?.httpBody
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        XCTAssertTrue(
+            body.contains("redirect_uri=http://localhost:4242/callback"),
+            "POST body must include redirect_uri exactly matching the listener URL, got: \(body)"
+        )
+    }
 }
