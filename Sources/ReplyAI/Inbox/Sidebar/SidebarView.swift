@@ -183,16 +183,23 @@ struct SidebarView: View {
         .help(active ? "Show all channels" : "Filter \(channel.label)")
     }
 
+    /// REP-047 — wrap the sync chip in a 10s `TimelineView` so the
+    /// "live · Ns ago" string auto-advances. Without this the relative
+    /// time renders once on thread-select and silently goes stale until
+    /// the next sync. 10s matches the design spec; CPU cost is negligible
+    /// because only the chip's body re-renders, not the sidebar.
     private var syncChip: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 6, height: 6)
-                .shadow(color: dotColor.opacity(0.6), radius: 3)
-            Text(syncLabel)
-                .font(Theme.Font.mono(10))
-                .foregroundStyle(Theme.Color.fgMute)
-            Spacer()
+        TimelineView(.periodic(from: Date(), by: 10)) { _ in
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: dotColor.opacity(0.6), radius: 3)
+                Text(syncLabel)
+                    .font(Theme.Font.mono(10))
+                    .foregroundStyle(Theme.Color.fgMute)
+                Spacer()
+            }
         }
     }
 
