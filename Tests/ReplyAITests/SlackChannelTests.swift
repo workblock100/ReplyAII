@@ -183,6 +183,75 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(recorder.lastGetParams?["channel"], "C100")
     }
 
+    // MARK: - conversations.list `types` + `exclude_archived` contract
+
+    /// The `types` parameter on `conversations.list` is what gates which Slack
+    /// surfaces ReplyAI sees. Drop `im` and DMs disappear from the inbox; drop
+    /// `mpim` and group DMs go silent; drop `private_channel` and the user
+    /// loses every privately-shared channel. Pin the exact value so a quiet
+    /// edit (e.g. trimming to "im,public_channel") fails loudly here instead
+    /// of silently shrinking inbox coverage.
+
+    func testRecentThreadsTypesParamIncludesAllFourSlackSurfaces() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: 50)
+
+        XCTAssertEqual(
+            recorder.lastGetParams?["types"],
+            "im,mpim,public_channel,private_channel",
+            "types must remain the four-surface coverage string — dropping any token silently hides that Slack surface from the inbox"
+        )
+    }
+
+    func testRecentThreadsExcludesArchivedConversations() async throws {
+        // Archived channels would balloon the sidebar with stale rooms the
+        // user explicitly retired. The default `exclude_archived` is false on
+        // Slack's side, so omitting the param surfaces every retired channel.
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: 50)
+
+        XCTAssertEqual(recorder.lastGetParams?["exclude_archived"], "true",
+                       "archived rooms must remain hidden from the inbox sidebar")
+    }
+
+    func testRecentThreadsHitsConversationsListEndpoint() async throws {
+        // Pin the endpoint name. The Slack Web API distinguishes
+        // `conversations.list` (channels) from `conversations.members`
+        // (membership) and `users.conversations` (per-user view). Drift here
+        // would silently change the response shape, breaking the parser.
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: 50)
+
+        XCTAssertEqual(recorder.lastGetEndpoint, "conversations.list")
+    }
+
+    func testMessagesHitsConversationsHistoryEndpoint() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "messages": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.messages(forThreadID: "C100", limit: 20)
+
+        XCTAssertEqual(recorder.lastGetEndpoint, "conversations.history")
+    }
+
     // MARK: - DM display name fallback
 
     func testRecentThreadsDMWithoutDisplayNameFallsBackToChannelID() async throws {
