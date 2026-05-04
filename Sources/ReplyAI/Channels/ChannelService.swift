@@ -38,6 +38,13 @@ extension ChannelService {
     }
 }
 
+/// Errors thrown by `ChannelService` implementations. The case set is
+/// channel-agnostic on purpose — every backend (chat.db, Slack, future
+/// Telegram/Teams adapters) maps its native failure modes onto these.
+/// `errorDescription` is the user-visible string surfaced by inbox
+/// banners and Settings → Channels rows; UI code should rely on the
+/// case for branching (e.g. authorizationDenied → render reconnect CTA)
+/// and on the description for display only.
 enum ChannelError: LocalizedError, Sendable {
     case permissionDenied(hint: String)
     /// Channel requires an OAuth token that is not present in Keychain.

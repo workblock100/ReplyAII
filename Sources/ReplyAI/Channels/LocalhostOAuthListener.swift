@@ -162,6 +162,11 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     }
 }
 
+/// Errors surfaced from the OAuth2 callback dance. Used by both the
+/// localhost listener (timeout / listener bind failure) and the token
+/// exchange POST (`tokenExchangeFailed`). Equatable because tests pattern-
+/// match against specific cases and `Settings → Channels` compares the
+/// last error with `==` to suppress duplicate banner re-renders.
 enum OAuthError: LocalizedError, Sendable, Equatable {
     case timeout
     case listenerFailed(String)
