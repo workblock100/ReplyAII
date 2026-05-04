@@ -1552,3 +1552,52 @@ final class InboxViewModelBulkFilterTests: XCTestCase {
         XCTAssertEqual(vm.filteredThreads.map(\.id), ["unread-sl"])
     }
 }
+
+// MARK: - REP-214: failed send preserves userEdits and surfaces error
+
+@MainActor
+final class InboxViewModelFailedSendTests: XCTestCase {
+
+    private func thread(id: String = "t1") -> MessageThread {
+        MessageThread(id: id, channel: .imessage, name: "Alice", avatar: "A",
+                      preview: "", time: "", chatGUID: "iMessage;-;\(id)")
+    }
+
+    // After a throwing send, the user's drafted text must still be in effectiveDraft
+    // so they can retry without retyping.
+    func testFailedSendPreservesUserEdits() async {
+        let vm = InboxViewModel(threads: [thread()], imessage: BlockingMockChannel(),
+                                contacts: fastContacts())
+        vm.selectThread("t1")
+        vm.setEdit(threadID: "t1", tone: .warm, text: "Retry me")
+
+        let saved = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in throw IMessageSender.SendError.messageTooLong(9999) }
+        defer { IMessageSender.executeHook = saved }
+
+        vm.requestSend(text: "Retry me")
+        await vm.confirmSend()
+
+        XCTAssertEqual(vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: ""),
+                       "Retry me",
+                       "userEdits must survive a failed send so the user can retry")
+    }
+
+    // After a throwing send, a toast must appear so the user is informed.
+    func testFailedSendSurfacesSendError() async {
+        let vm = InboxViewModel(threads: [thread()], imessage: BlockingMockChannel(),
+                                contacts: fastContacts())
+        vm.selectThread("t1")
+        vm.setEdit(threadID: "t1", tone: .warm, text: "Will fail")
+
+        let saved = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in throw IMessageSender.SendError.messageTooLong(9999) }
+        defer { IMessageSender.executeHook = saved }
+
+        vm.requestSend(text: "Will fail")
+        await vm.confirmSend()
+
+        XCTAssertNotNil(vm.sendToast,
+                        "sendToast must be set with an error description after a failed send")
+    }
+}

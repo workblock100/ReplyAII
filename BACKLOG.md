@@ -1330,8 +1330,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (InboxViewModelFailedSendTests in InboxViewModelTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: The 2026-04-22-1603 review noted "error surfaced + `userEdits` preserved on failure" as shipped behavior for `InboxViewModel.send()`. Pin this with a regression test: use a throwing mock sender (via injectable `IMessageSender` seam) that always throws `SenderError.messageTooLong`. Call `send(thread:)`. Assert: (1) `viewModel.userEdits` retains its pre-send value; (2) a non-nil `sendError` is surfaced on the ViewModel. Also test the success path: successful send clears userEdits (optimistic clear, REP-046 scope). The throwing path is the regression guard.
 - success_criteria:
