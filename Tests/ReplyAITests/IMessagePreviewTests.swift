@@ -112,4 +112,43 @@ final class IMessagePreviewTests: XCTestCase {
         // "www." prefix only stripped when host has > 4 chars after it
         XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://www./"), "www.")
     }
+
+    // MARK: - Sentinel constants — UX copy contract
+    //
+    // The fallback strings render directly in the inbox sidebar where
+    // they replace either a missing body (`[non-text message]`) or an
+    // attachment-only body (`📎 Attachment`). Both strings double as
+    // copy that ships to users — pin the literal values so a rename
+    // of either constant shows up as a code-review diff. The
+    // backlog still lists the glyph choice as a pending product
+    // decision; pinning the current value gives the human a single
+    // place to update both source + test when they pick.
+
+    func testAttachmentFallbackLiteralIsPinned() {
+        XCTAssertEqual(IMessagePreview.attachmentFallback, "📎 Attachment",
+            "attachmentFallback ships verbatim to the sidebar — bump test + source together when changing the glyph or noun")
+    }
+
+    func testNonTextFallbackLiteralIsPinned() {
+        XCTAssertEqual(IMessagePreview.nonTextFallback, "[non-text message]",
+            "nonTextFallback ships verbatim to the sidebar — bump test + source together when changing the copy")
+    }
+
+    func testObjectReplacementCharacterIsU_FFFC() {
+        // U+FFFC is the typedstream-emitted attachment marker; if the
+        // constant ever drifts the attachment-only detection breaks
+        // silently and every image/voice memo would render as the raw
+        // marker character.
+        XCTAssertEqual(IMessagePreview.objectReplacement, "\u{FFFC}",
+            "objectReplacement must remain U+FFFC — the typedstream-emitted attachment sentinel")
+    }
+
+    func testLinkPrefixGlyphIsPinned() {
+        // The link emoji "🔗 " prefixes any single-URL collapse —
+        // pinning so a designer-led tweak (e.g. "↗ example.com")
+        // surfaces here.
+        let preview = IMessagePreview.displayString(from: "https://example.com/a/b/c")
+        XCTAssertTrue(preview.hasPrefix("🔗 "),
+            "single-URL preview must keep the 🔗 prefix; got: \(preview)")
+    }
 }
