@@ -8,6 +8,10 @@ struct RulesExport: Codable {
     let rules: [SmartRule]
 }
 
+/// Errors thrown while importing or exporting `rules.json`. Kept narrow
+/// because the disk format is owned by us — most failures are I/O
+/// (already covered by `Foundation`) and the only domain-level error is
+/// a forward-compatibility break.
 enum RulesStoreError: Error {
     /// The export file declares a schema version the running build doesn't know how to read.
     case unsupportedExportVersion(Int)
