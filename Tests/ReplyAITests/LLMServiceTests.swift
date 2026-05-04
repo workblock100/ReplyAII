@@ -80,4 +80,40 @@ final class LLMServiceTests: XCTestCase {
             return
         }
     }
+
+    func testStreamConfidenceMatchesFixtureSeed() async throws {
+        // The confidence emitted on the first chunk must equal what the rest
+        // of the app derives from `Fixtures.seedConfidence(threadID:tone:)` —
+        // otherwise the confidence pill the composer shows during streaming
+        // would disagree with the value the UI uses elsewhere.
+        let svc = StubLLMService(tokenDelay: 0...0, initialDelay: 0)
+        let thread = Fixtures.threads[0]
+        let expected = Fixtures.seedConfidence(threadID: thread.id, tone: .warm)
+
+        var observed: Double?
+        for try await chunk in svc.draft(thread: thread, tone: .warm, history: []) {
+            if case .confidence(let v) = chunk.kind {
+                observed = v
+                break
+            }
+        }
+        XCTAssertEqual(observed, expected,
+                       "confidence emitted by stream must match the fixture seed")
+    }
+
+    func testStreamTextChunksConcatenateToSeedDraft() async throws {
+        // The composer appends text chunks directly as they arrive. The full
+        // concatenation must equal the fixture seed so what the user sees in
+        // the composer matches what `Fixtures.seedDraft` returned.
+        let svc = StubLLMService(tokenDelay: 0...0, initialDelay: 0)
+        let thread = Fixtures.threads[0]
+        let expected = Fixtures.seedDraft(threadID: thread.id, tone: .direct)
+
+        var assembled = ""
+        for try await chunk in svc.draft(thread: thread, tone: .direct, history: []) {
+            if case .text(let t) = chunk.kind { assembled.append(t) }
+        }
+        XCTAssertEqual(assembled, expected,
+                       "concatenated text chunks must equal the fixture seed exactly")
+    }
 }
