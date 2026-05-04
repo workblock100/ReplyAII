@@ -740,3 +740,51 @@ final class RulesMatchedCountTests: XCTestCase {
                        "zero matched rules must leave counter at 0")
     }
 }
+
+// MARK: - Stats.defaultFileURL() — production persistence path contract
+//
+// Stats.shared is initialised with `Stats(fileURL: defaultFileURL())`, so
+// changing the path silently abandons every shipped user's stats.json.
+// Pin the path components so a future refactor (renaming the parent
+// folder, dropping "Application Support", changing the file extension)
+// trips a test instead of an unnoticed data migration.
+
+final class StatsDefaultFileURLTests: XCTestCase {
+
+    func testDefaultFileURLEndsWithStatsJSON() {
+        let url = Stats.defaultFileURL()
+        XCTAssertEqual(url.lastPathComponent, "stats.json",
+                       "production path must end with stats.json — anything else orphans existing user data")
+    }
+
+    func testDefaultFileURLLivesUnderReplyAIDirectory() {
+        let url = Stats.defaultFileURL()
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        XCTAssertEqual(parent, "ReplyAI",
+                       "stats.json must live in the ReplyAI/ application-support folder so factory-reset can sweep the whole directory")
+    }
+
+    func testDefaultFileURLDirectoryExistsAfterCall() {
+        // The helper is documented to lazily create the parent directory
+        // (`try? FileManager.default.createDirectory(... withIntermediateDirectories: true)`).
+        // If that side-effect ever drops, the very first launch on a fresh
+        // install fails to write stats and Stats.shared silently degrades
+        // to in-memory only — pin it.
+        let url = Stats.defaultFileURL()
+        let dir = url.deletingLastPathComponent()
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDirectory),
+                      "defaultFileURL() must create the parent directory so the first write succeeds")
+        XCTAssertTrue(isDirectory.boolValue,
+                      "the ReplyAI/ entry must be a directory, not a stray file")
+    }
+
+    func testDefaultFileURLIsAbsoluteAndFileScheme() {
+        // A relative URL or a non-file scheme would silently break Data(contentsOf:)
+        // / Data.write(to:); pin the basic shape of the URL.
+        let url = Stats.defaultFileURL()
+        XCTAssertTrue(url.isFileURL, "stats path must be a file:// URL for FileManager + Data(contentsOf:)")
+        XCTAssertTrue(url.path.hasPrefix("/"),
+                      "stats path must be absolute so behavior doesn't depend on the cwd of the launching process")
+    }
+}

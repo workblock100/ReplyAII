@@ -2605,3 +2605,53 @@ final class RuleValidationErrorDescriptionTests: XCTestCase {
             "LocalizedError bridge must surface our copy — got: \(err.localizedDescription)")
     }
 }
+
+// MARK: - RulesStore.defaultFileURL() — persistence path contract
+//
+// Production init uses `RulesStore(fileURL: RulesStore.defaultFileURL())`
+// and the seeded rules.json travels with the user across reinstalls
+// (Application Support survives Trash-and-reinstall). A silent path
+// change orphans every shipped user's customised rules. Pin the path
+// components so a refactor that drops "ReplyAI/" or renames "rules.json"
+// trips a test instead of an unnoticed migration.
+
+final class RulesStoreDefaultFileURLTests: XCTestCase {
+
+    func testDefaultFileURLEndsWithRulesJSON() {
+        let url = RulesStore.defaultFileURL()
+        XCTAssertEqual(url.lastPathComponent, "rules.json",
+                       "production path must end with rules.json — anything else orphans every user's customised rules")
+    }
+
+    func testDefaultFileURLLivesUnderReplyAIDirectory() {
+        let url = RulesStore.defaultFileURL()
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        XCTAssertEqual(parent, "ReplyAI",
+                       "rules.json must live alongside stats.json in ReplyAI/; factory-reset relies on a single directory sweep")
+    }
+
+    func testDefaultFileURLDirectoryExistsAfterCall() {
+        // The helper is documented to lazily create the parent directory.
+        // Without that side-effect, RulesStore would have to handle an
+        // ENOENT on first write — and every test that uses defaultFileURL
+        // would race the directory into existence.
+        let url = RulesStore.defaultFileURL()
+        let dir = url.deletingLastPathComponent()
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDirectory),
+                      "defaultFileURL() must create the parent directory so the first write succeeds")
+        XCTAssertTrue(isDirectory.boolValue,
+                      "the ReplyAI/ entry must be a directory, not a stray file")
+    }
+
+    func testDefaultFileURLIsAbsoluteAndFileScheme() {
+        // A relative URL or a non-file scheme would silently break the
+        // atomic write path inside RulesStore.writeSync(_:to:); pin the
+        // shape so an accidental file:// → http:// drift trips the test.
+        let url = RulesStore.defaultFileURL()
+        XCTAssertTrue(url.isFileURL,
+                      "rules path must be a file:// URL for FileManager + atomic write")
+        XCTAssertTrue(url.path.hasPrefix("/"),
+                      "rules path must be absolute so behavior doesn't depend on the cwd of the launching process")
+    }
+}
