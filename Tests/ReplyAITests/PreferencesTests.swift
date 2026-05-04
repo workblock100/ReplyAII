@@ -120,6 +120,66 @@ final class PreferencesTests: XCTestCase {
             "demoModeActive must default true so REP-228 first-launch demo experience holds")
     }
 
+    func testUseMLXDefaultsToFalse() {
+        // P0 safety pin (REP-ALERT-260504-1650): flipping `useMLX` to true
+        // forces the MLX dependency-load path on app launch, which currently
+        // exits the process within ~1s of NSApplicationDidFinishLaunching.
+        // Until REP-501→REP-505 split MLX into a separate SPM target, this
+        // default MUST stay false or every fresh user gets a broken launch.
+        XCTAssertFalse(PreferenceDefaults.useMLX,
+            "useMLX must default false until the MLX-on-launch exit bug is fixed (REP-ALERT-260504-1650)")
+    }
+
+    func testCrashReportsDefaultsToTrue() {
+        // Privacy-screen toggle starts opt-in to true so we ship with
+        // crash telemetry on by default. Flipping the default would change
+        // the user-visible privacy posture without an onboarding prompt.
+        XCTAssertTrue(PreferenceDefaults.crashReports,
+            "crashReports default is the ship-time privacy posture; bump test + onboarding copy together")
+    }
+
+    func testLicenseUpdatesDefaultsToTrue() {
+        XCTAssertTrue(PreferenceDefaults.licenseUpdates,
+            "licenseUpdates default is the ship-time consent posture for license-renewal email")
+    }
+
+    func testICloudSyncDefaultsToFalse() {
+        // iCloud sync is off until a user explicitly enables it in Settings.
+        // Flipping this default would silently sync rules + voice examples
+        // off-device for every fresh installer.
+        XCTAssertFalse(PreferenceDefaults.iCloudSync,
+            "iCloudSync must default false — flipping silently exfiltrates rules + voice data for every fresh user")
+    }
+
+    func testAutoPrimeDefaultsToTrue() {
+        // autoPrime drives the "select-thread → draft appears" UX promise.
+        // Flipping the default to false silently breaks the keyboard-first
+        // flow that the product is built around.
+        XCTAssertTrue(PreferenceDefaults.autoPrime,
+            "autoPrime default true is the keyboard-first UX promise")
+    }
+
+    func testAutoApplyRulesOnSyncDefaultsToTrue() {
+        // Rules run automatically on every sync pass; flipping the default
+        // would silently break every user's archive/pin/silence setup until
+        // they re-toggle it in Settings.
+        XCTAssertTrue(PreferenceDefaults.autoApplyRulesOnSync,
+            "autoApplyRulesOnSync default true so user rules fire without an explicit run-rules action")
+    }
+
+    func testIMessageEnabledLiteralDefaultsToTrue() {
+        XCTAssertTrue(PreferenceDefaults.iMessageEnabled,
+            "iMessage is the primary channel — must be on by default for first-run inbox to populate")
+    }
+
+    func testSlackEnabledLiteralDefaultsToFalse() {
+        // Slack requires OAuth; the toggle flips to true only after a
+        // workspace is connected. A `true` default would surface a
+        // permanently-broken Slack channel on every fresh install.
+        XCTAssertFalse(PreferenceDefaults.slackEnabled,
+            "slackEnabled must default false — OAuth completion flips this on")
+    }
+
     func testInboxThreadLimitWipedAndRestored() {
         defaults.set(100, forKey: PreferenceKey.inboxThreadLimit)
         XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit), 100)
