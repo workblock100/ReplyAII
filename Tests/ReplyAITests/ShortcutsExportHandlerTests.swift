@@ -147,6 +147,78 @@ final class ShortcutsExportHandlerTests: XCTestCase {
         XCTAssertEqual(exports[0].thread.channel, .imessage)
     }
 
+    func testChannelRawValueIsLowercased() throws {
+        // The Shortcut author may type "iMessage" or "IMESSAGE"; the parser
+        // lowercases before mapping so casing differences don't cause every
+        // such payload to fall back to the default.
+        let json = #"[ { "id": "x", "displayName": "Maya", "channel": "IMESSAGE", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.channel, .imessage)
+    }
+
+    func testFromFieldIsCaseInsensitive() throws {
+        // Mirrors the channel-field tolerance: "ME" or "Me" should resolve to
+        // .me, not silently fall back to .them. Without this guard a
+        // sender-side message authored on the iPhone would render as if it
+        // came from the contact.
+        let json = """
+        [
+          {
+            "id": "x", "displayName": "Maya", "channel": "imessage",
+            "messages": [
+              { "from": "ME",   "text": "lowercase me" },
+              { "from": "Me",   "text": "title-case me" },
+              { "from": "them", "text": "lowercase them" }
+            ]
+          }
+        ]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].messages[0].from, .me)
+        XCTAssertEqual(exports[0].messages[1].from, .me)
+        XCTAssertEqual(exports[0].messages[2].from, .them)
+    }
+
+    func testThreadTimeFallsBackToLastMessageTime() throws {
+        // Shortcuts' `messages` array has a `time` per row; the parser uses the
+        // last row's time as the thread.time so the inbox row sorts correctly
+        // even when the top-level payload omits a thread-level time field.
+        let json = """
+        [
+          {
+            "id": "x", "displayName": "Maya", "channel": "imessage",
+            "messages": [
+              { "from": "them", "text": "earlier", "time": "1:01 PM" },
+              { "from": "me",   "text": "latest",  "time": "3:42 PM" }
+            ]
+          }
+        ]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.time, "3:42 PM")
+    }
+
+    func testAvatarUsesFirstCharOfDisplayName() throws {
+        // Avatar initial is the first grapheme — pinned so a refactor that
+        // accidentally drops the prefix(1) call (e.g. switching to the full
+        // display name as avatar) doesn't ship without a test catching it.
+        let json = #"[ { "id": "x", "displayName": "Maya Lee", "channel": "imessage", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.avatar, "M")
+    }
+
     func testPreviewFallsBackToLastMessageWhenMissing() throws {
         let json = """
         [
