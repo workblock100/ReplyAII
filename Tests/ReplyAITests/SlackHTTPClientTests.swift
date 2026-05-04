@@ -296,4 +296,58 @@ final class SlackHTTPClientTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - User-actionable copy (regression guards)
+
+    func test429MessageNamesRateLimitAndAdvisesRetry() async throws {
+        // The 429 path is the most-likely error a user will see in steady-state
+        // use. The copy must (a) name Slack's rate-limit so the user knows it's
+        // not their fault and (b) suggest waiting + retrying so the user has a
+        // clear next step. A refactor that swaps in a generic "request failed"
+        // would silently regress UX without this guard.
+        let session = MockHTTPSession(statusCode: 429)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "tok", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertTrue(msg.localizedCaseInsensitiveContains("rate-limit") || msg.localizedCaseInsensitiveContains("rate limit"),
+                          "429 copy should name rate-limiting, got: \(msg)")
+            XCTAssertTrue(msg.localizedCaseInsensitiveContains("try again") || msg.localizedCaseInsensitiveContains("retry"),
+                          "429 copy should advise retry, got: \(msg)")
+        }
+    }
+
+    func testNonHTTPResponseMessagePromptsConnectionCheck() async throws {
+        // The non-HTTPURLResponse path is rare but indicates a transport-level
+        // breakdown (no DNS, captive portal, etc). Copy should point the user at
+        // their connection rather than blaming Slack.
+        let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.get(endpoint: "auth.test", token: "tok", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertTrue(msg.localizedCaseInsensitiveContains("connection"),
+                          "non-HTTP response copy should mention checking the connection, got: \(msg)")
+        }
+    }
+
+    func test5xxMessageEncouragesRetry() async throws {
+        // 5xx means Slack is the problem, not the user. Copy should make that
+        // implicit (suggest retry) rather than implying the user did something
+        // wrong.
+        let session = MockHTTPSession(statusCode: 502)
+        let client = URLSessionSlackClient(session: session)
+
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "tok", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertTrue(msg.localizedCaseInsensitiveContains("try again"),
+                          "5xx copy should advise retry, got: \(msg)")
+        }
+    }
 }
