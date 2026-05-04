@@ -1519,8 +1519,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (SearchIndexClearStatsTests in SearchIndexTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: REP-165 ships `SearchIndex.clear()` which calls `Stats.resetIndexedCounters()`. Add an integration test: seed an iMessage indexed count of 5 into a shared `Stats` instance via mock increments; call `searchIndex.clear()` (with the same `Stats` instance injected); assert `stats.indexedMessageCount(for: .iMessage) == 0`. Also assert non-index counters (rules fired, drafts generated) are unchanged by clear(). Guards the Stats→SearchIndex contract.
 - success_criteria:

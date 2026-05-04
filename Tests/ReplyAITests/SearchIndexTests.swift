@@ -1273,3 +1273,43 @@ final class SearchIndexSnippetColumnTests: XCTestCase {
                       "snippet must wrap body-matched term with «» markers")
     }
 }
+
+// MARK: - REP-223: SearchIndex.clear() resets Stats indexed counters
+
+final class SearchIndexClearStatsTests: XCTestCase {
+
+    // After clear(), per-channel indexed counts must be zero.
+    func testClearResetsStatsIndexedCount() async {
+        let stats = Stats(fileURL: nil)
+        let index = SearchIndex(databaseURL: nil)
+
+        stats.incrementIndexed(channel: .imessage, count: 5)
+        XCTAssertEqual(stats.snapshot().messagesIndexedByChannel[Channel.imessage.rawValue], 5,
+                       "precondition: channel counter must be 5 before clear")
+
+        await index.clear(stats: stats)
+
+        XCTAssertNil(stats.snapshot().messagesIndexedByChannel[Channel.imessage.rawValue],
+                     "indexed channel counter must be zero (nil) after SearchIndex.clear()")
+        XCTAssertEqual(stats.snapshot().messagesIndexed, 0,
+                       "aggregate indexed counter must be 0 after clear()")
+    }
+
+    // clear() must not touch unrelated Stats counters (rules fired, drafts generated).
+    func testClearDoesNotAffectOtherStatsCounters() async {
+        let stats = Stats(fileURL: nil)
+        let index = SearchIndex(databaseURL: nil)
+
+        stats.recordRuleFired(action: "pin")
+        stats.recordDraftGenerated(tone: .warm)
+        let snap = stats.snapshot()
+
+        await index.clear(stats: stats)
+
+        let after = stats.snapshot()
+        XCTAssertEqual(after.rulesFiredByAction, snap.rulesFiredByAction,
+                       "rulesFiredByAction must be unchanged by clear()")
+        XCTAssertEqual(after.draftsGenerated, snap.draftsGenerated,
+                       "draftsGenerated must be unchanged by clear()")
+    }
+}
