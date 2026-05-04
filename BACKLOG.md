@@ -275,7 +275,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: human
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: Seven wip/ branches contain overlapping quality-pass test additions. Human should cherry-pick the cleanest, non-duplicating tests into main (or merge the best single branch per subsystem). Priority order: (1) wip/quality-2026-04-21-193800-senderknown-fix (REP-016, do first); (2) best of wip/quality-2026-04-21-212529 or wip/quality-2026-04-21-215030 for RuleContext.from + senderIs/senderUnknown/or coverage; (3) best of wip/quality-2026-04-21-211100 or wip/quality-2026-04-21-213914 for DraftEngine gap coverage. Drop wip/quality-2026-04-21-184250 (superseded by the bug fix branch) and wip/quality-2026-04-21-191222 (log-only commit). REP-048 covers wip/quality-2026-04-21-221100 separately. Close all branches after merge.
@@ -304,7 +305,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit b163ec1
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`, `Tests/ReplyAITests/RulesTests.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Worker-085959 implemented REP-135 (Stats.sessionStartedAt + sessionDuration), REP-177 (Stats.overallAcceptanceRate), REP-179 (RuleEvaluator equal-priority determinism), REP-183 (Preferences wipe-exempt regression guard), and REP-187 (Stats.snapshot() JSON validation) but was blocked by MLX full-project build time exceeding the 13-min worker budget. All 5 implementations are on branch `wip/2026-04-23-085959-stats-session-acceptance`. Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm new tests pass; (5) mark REP-135, REP-177, REP-179, REP-183, REP-187 as done in BACKLOG.
@@ -318,7 +320,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 8bcfaed
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Worker-2026-04-23-130000 implemented REP-129 (`threadNameMatchesRegex(pattern:)` predicate) but was blocked by MLX full-project build time exceeding the 13-min budget. Implementation is complete on branch `wip/2026-04-23-130000-thread-name-regex`. Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm new tests pass; (5) mark REP-129 as done in BACKLOG.
@@ -332,7 +335,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 51e8330
 - claimed_by: human
 - files_to_touch: `Tests/ReplyAITests/DraftStoreTests.swift`, `Tests/ReplyAITests/RulesTests.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/DraftEngineTests.swift`, `Tests/ReplyAITests/SearchIndexTests.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: Worker-2026-04-23-135355 implemented 6 tasks but was blocked by MLX full-project build time. All 6 implementations are on branch `wip/worker-2026-04-23-135355-bundle`: REP-163 (DraftStore.listStoredDraftIDs), REP-193 (IMessageSender 4096-char boundary), REP-194 (Preferences.threadLimit clamped [1,200]), REP-195 (DraftEngine dismiss-on-unprimed is no-op), REP-196 (SearchIndex repeated-search order stability), REP-198 (IMessageChannel empty-thread exclusion). Human should: (1) review the diff; (2) run `swift test` on main for baseline; (3) merge or cherry-pick the branch; (4) run `swift test` to confirm; (5) mark REP-163, REP-193, REP-194, REP-195, REP-196, REP-198 done in BACKLOG.
