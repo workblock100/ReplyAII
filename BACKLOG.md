@@ -1252,7 +1252,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: Pin the safety defaults for `autoPrimeEnabled` and `autoApplyOnSync`. A fresh `Preferences` instance on an isolated `UserDefaults` suite (no prior writes) must return `false` for both. These flags control auto-send behavior: if they accidentally default to `true`, the app would auto-send replies to every incoming message without user confirmation. Regression guard against a config change that treats absence-as-true.
@@ -1566,7 +1567,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add `case messageCount(atLeast: Int)` to `RulePredicate`. `RuleContext` gains `messageCount: Int` (from `MessageThread.messages.count`). `RuleEvaluator` evaluates: `context.messageCount >= atLeast`. Codable discriminator: `"messageCountAtLeast"`. `SfcRulesView.humanize` gets a new case string. Useful for rules like "if thread has ≥10 messages, use detailed tone". Tests: context.messageCount=5, predicate atLeast=3 → true; atLeast=5 → true; atLeast=6 → false; Codable round-trip preserves the threshold; atLeast=0 → vacuous-true (always matches).
@@ -1767,7 +1769,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.invalidate(threadID:)` (from REP-054 / watcher-refire path) should cancel any in-flight prime task for that thread and transition to `.idle`. Pin the contract: start priming thread X (slow `StubLLMService` with delay); immediately call `invalidate(threadID: X)`; assert state is `.idle` (not `.priming`). Also assert no subsequent `.ready` transition arrives (task was cancelled). Guards against a zombie prime that completes after invalidation and incorrectly flips state to `.ready`.
@@ -1781,7 +1784,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: Pin Codable correctness for deeply nested predicates: `and([senderIs("A"), or([textMatchesRegex("^hi"), not(senderUnknown)])])`. Export via `RulesStore.exportRules(to:)`; import via `importRules(from:)`; assert the re-imported rule's predicate tree equals the original (using `Equatable` or matching string descriptions). Also test: `or([])` round-trips as vacuous-false (or empty or); `and([not(hasUnread)])` round-trips correctly. Guards the `kind`-discriminator Codable path for every compound wrapper.
@@ -1796,7 +1800,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 BM25 ranking should promote threads where the query term appears more frequently. Test: index thread A with message body "hello hello hello" and thread B with "hello"; search "hello"; assert A ranks before B (first in result array). Also test: after adding a 3rd thread C ("hello hello hello hello hello"), C ranks above A. Guards against FTS5 config changes (e.g. `rank = 'bm25(0, 0, 1)'` parameter change) that break expected ranking semantics.
@@ -1861,7 +1866,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit efdb0db
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: InboxViewModel has no persistent record of when threads were last refreshed. Add `Preferences.inbox.lastSyncDate: Date?` (nil if never synced). `InboxViewModel.syncFromIMessage()` sets this to `Date()` on any successful sync returning ≥1 thread; `syncAllChannels()` (REP-244) will do the same. `wipe()` clears this key. Useful for a "Last synced N min ago" footer in SidebarView (UI wiring is separate). Tests: nil on fresh Preferences; set after successful sync returning threads; NOT updated when sync returns empty; cleared by wipe().
