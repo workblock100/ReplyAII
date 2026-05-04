@@ -166,6 +166,26 @@ final class IMessageChannelTests: XCTestCase {
         XCTAssertEqual(body, "[deleted]", "both-NULL row must use the [deleted] placeholder")
     }
 
+    func testMessagesQueryNullTextFallsBackToAttributedBodyDecoder() async throws {
+        // REP-221: messages(forThreadID:limit:) must decode attributedBody when text is NULL.
+        // recentThreads has its own test (testNullTextFallsBackToAttributedBody); this pins
+        // the same fallback in the per-thread message stream so a rich-only iMessage shows up
+        // in the conversation view, not as a "[deleted]" placeholder.
+        try buildSchema()
+        try insertChat(rowid: 1, identifier: "rich", display: "", service: "iMessage", guid: "iMessage;-;rich")
+        try insertMessageWithAttributedBody(
+            rowid: 30, chatRowID: 1,
+            attributedBody: Self.typedstreamBlob(text: "rich-only message body"),
+            fromMe: false, date: 700_000_000
+        )
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let messages = try await channel.messages(forThreadID: "rich", limit: 10)
+        XCTAssertEqual(messages.count, 1, "rich-only row must produce one message")
+        XCTAssertEqual(messages.first?.text, "rich-only message body",
+                       "NULL text must fall back to AttributedBodyDecoder, not the [deleted] placeholder")
+    }
+
     func testGroupChatGUIDProjection() async throws {
         try buildSchema()
         try insertChat(

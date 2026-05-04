@@ -1501,8 +1501,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main commit pending — autopilot-2026-05-03
+- claimed_by: autopilot-2026-05-03
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: The SQL query selects both `message.text` and `message.attributedBody`. When `text` is NULL, `AttributedBodyDecoder.extractText` is called on the raw blob. Add an in-memory SQLite fixture: one message row with `text = NULL` and a hand-crafted minimal typedstream `attributedBody` blob; call `messages(forThreadID:limit:)`; assert the returned message body matches the decoded string (not nil, not "[deleted]"). Verifies the fallback path is exercised, not just the SQL filter.
 - success_criteria:
