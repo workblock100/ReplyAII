@@ -634,4 +634,29 @@ final class IMessageSenderCombinedEscapeTests: XCTestCase {
         XCTAssertEqual(result, "column\there",
                        "tab is a legal AppleScript literal character and must not be escaped")
     }
+
+    // MARK: - maxMessageLength constant pin
+    //
+    // The 4096 cap is shipped as the user-visible "too long" boundary —
+    // existing tests use `IMessageSender.maxMessageLength` symbolically, so
+    // a future tweak from 4096 → 8192 (or down to 2048) would let every
+    // existing test re-pass while changing real-world behaviour: shorter
+    // messages would start failing, longer ones would either truncate or
+    // round-trip through Messages.app at risk. The 4096 number is also
+    // baked into the messageTooLong copy via interpolation, so users see
+    // it directly. Pin the literal value here.
+
+    func testMaxMessageLengthIsExactly4096() {
+        XCTAssertEqual(IMessageSender.maxMessageLength, 4096,
+                       "maxMessageLength is shipped UX — a silent change shifts the 'too long' boundary that every send call relies on")
+    }
+
+    func testMaxMessageLengthAppearsInMessageTooLongCopy() {
+        // The error string interpolates IMessageSender.maxMessageLength at
+        // its tail — pin that the literal numeric value reaches the user
+        // verbatim, not via a separate magic constant in the format string.
+        let copy = IMessageSender.SendError.messageTooLong(99).errorDescription ?? ""
+        XCTAssertTrue(copy.contains("4096"),
+                      "messageTooLong copy must reference 4096 directly so the user sees the actual boundary; got: \(copy)")
+    }
 }
