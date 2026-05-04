@@ -662,6 +662,81 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
                        "after unpin + relaunch, the thread must come back unpinned")
     }
 
+    // MARK: - Snooze (REP-111)
+
+    func testSnoozedThreadHiddenFromList() {
+        let d = makeIsolatedDefaults(suffix: ".sn1")
+        let t1 = MessageThread(id: "sn-a", channel: .imessage, name: "Alice", avatar: "A", preview: "hi", time: "now")
+        let t2 = MessageThread(id: "sn-b", channel: .imessage, name: "Bob",   avatar: "B", preview: "yo", time: "now")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        let future = Date().addingTimeInterval(3600)
+        vm.snooze(threadID: "sn-a", until: future)
+
+        XCTAssertEqual(vm.snoozedUntil["sn-a"], future,
+                       "snooze must record the wake date in snoozedUntil")
+        XCTAssertFalse(vm.filteredThreads.contains(where: { $0.id == "sn-a" }),
+                       "snoozed thread must not appear in filteredThreads")
+        XCTAssertTrue(vm.filteredThreads.contains(where: { $0.id == "sn-b" }),
+                      "non-snoozed thread must remain visible")
+    }
+
+    func testSnoozedThreadResurfacesAfterExpiry() async {
+        let d = makeIsolatedDefaults(suffix: ".sn2")
+        let t = MessageThread(id: "sn-c", channel: .imessage, name: "Carol", avatar: "C", preview: "sup", time: "now")
+        let vm = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+
+        // Wake date in the near past — the scheduled task fires on the next
+        // runloop tick and drops the entry.
+        let past = Date().addingTimeInterval(-1)
+        vm.snooze(threadID: "sn-c", until: past)
+        XCTAssertEqual(vm.snoozedUntil["sn-c"], past)
+
+        // Drain the cooperative queue so the wake task gets to run.
+        for _ in 0..<10 {
+            await Task.yield()
+            if vm.snoozedUntil["sn-c"] == nil { break }
+        }
+
+        XCTAssertNil(vm.snoozedUntil["sn-c"],
+                     "wake task must drop the snooze entry once the wake date passes")
+        XCTAssertTrue(vm.filteredThreads.contains(where: { $0.id == "sn-c" }),
+                      "thread must reappear in filteredThreads after wake")
+    }
+
+    func testSnoozeMapPersistedAcrossInit() {
+        let d = makeIsolatedDefaults(suffix: ".sn3")
+        let t = MessageThread(id: "sn-d", channel: .imessage, name: "Dave", avatar: "D", preview: "yo", time: "now")
+        let vm1 = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+        let future = Date().addingTimeInterval(3600)
+        vm1.snooze(threadID: "sn-d", until: future)
+
+        // Relaunch with the same defaults — snoozedUntil rehydrates with a
+        // ~ms-rounded copy (JSON Date encoding loses sub-ms precision); compare
+        // by timeIntervalSinceReferenceDate within 1ms.
+        let vm2 = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+        XCTAssertNotNil(vm2.snoozedUntil["sn-d"],
+                        "snoozedUntil map must survive relaunch via UserDefaults")
+        let restored = vm2.snoozedUntil["sn-d"]!
+        XCTAssertLessThan(abs(restored.timeIntervalSince(future)), 0.001,
+                          "rehydrated wake date must round-trip within ~1ms")
+        XCTAssertFalse(vm2.filteredThreads.contains(where: { $0.id == "sn-d" }),
+                       "rehydrated snooze must still hide the thread on next launch")
+    }
+
+    func testUnsnoozeDropsEntryImmediately() {
+        let d = makeIsolatedDefaults(suffix: ".sn4")
+        let t = MessageThread(id: "sn-e", channel: .imessage, name: "Eve", avatar: "E", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+        vm.snooze(threadID: "sn-e", until: Date().addingTimeInterval(7200))
+        XCTAssertFalse(vm.filteredThreads.contains(where: { $0.id == "sn-e" }))
+
+        vm.unsnooze("sn-e")
+        XCTAssertNil(vm.snoozedUntil["sn-e"])
+        XCTAssertTrue(vm.filteredThreads.contains(where: { $0.id == "sn-e" }),
+                      "unsnoozed thread must reappear in filteredThreads")
+    }
+
     func testApplyPinnedReStampsPinFlag() {
         // Direct test of the helper used by syncAllChannels: thread that comes
         // back from a channel as `pinned: false` gets re-stamped if its id is

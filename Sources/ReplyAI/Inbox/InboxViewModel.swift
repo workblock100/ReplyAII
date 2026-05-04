@@ -54,6 +54,12 @@ final class InboxViewModel {
 
     var filteredThreads: [MessageThread] {
         var visible = threads.filter { !archivedThreadIDs.contains($0.id) }
+        // Snoozed threads are hidden from the inbox until their wake date
+        // passes — the scheduled wake task removes the entry from
+        // `snoozedUntil`, at which point this filter lets them back in.
+        if !snoozedUntil.isEmpty {
+            visible = visible.filter { snoozedUntil[$0.id] == nil }
+        }
         if let channel = activeChannelFilter {
             visible = visible.filter { $0.channel == channel }
         }
@@ -102,6 +108,16 @@ final class InboxViewModel {
     /// the first sync.
     var pinnedThreadIDs: Set<String> = [] {
         didSet { InboxViewModel.savePinnedIDs(pinnedThreadIDs, to: defaults) }
+    }
+
+    /// Threads the user has snoozed via `snooze(_:until:)`. Each entry maps
+    /// the thread id to its wake date. Snoozed threads are filtered out of
+    /// `filteredThreads` until the wake date passes, at which point a
+    /// scheduled task drops the entry and the thread reappears. Persisted
+    /// across relaunch — the init schedules a wake task for every entry
+    /// whose wake date is still in the future.
+    var snoozedUntil: [String: Date] = [:] {
+        didSet { InboxViewModel.saveSnoozedUntil(snoozedUntil, to: defaults) }
     }
 
     /// Threads eligible for the menu-bar waiting list: unread and not
@@ -225,6 +241,8 @@ final class InboxViewModel {
         self.archivedThreadIDs = InboxViewModel.loadArchivedIDs(from: defaults)
         self.silentlyIgnoredThreadIDs = InboxViewModel.loadSilentlyIgnoredIDs(from: defaults)
         self.pinnedThreadIDs = loadedPinnedIDs
+        let rehydratedSnoozed = InboxViewModel.loadSnoozedUntil(from: defaults)
+        self.snoozedUntil = rehydratedSnoozed
         self.lastSeenRowID = InboxViewModel.loadLastSeenRowID(from: defaults)
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
@@ -250,6 +268,12 @@ final class InboxViewModel {
         }
         startObservingRules()
         startObservingNotificationReply()
+        // Re-arm any snooze whose wake date still lies in the future (or has
+        // already passed while the app was closed — those wake on the next
+        // runloop tick).
+        if !rehydratedSnoozed.isEmpty {
+            rescheduleSnoozeWakes()
+        }
         // Trigger the macOS notification permission dialog early so the user
         // sees it at launch rather than the first time a message arrives.
         if let coordinator = notificationCoordinator {
@@ -479,6 +503,61 @@ final class InboxViewModel {
         return threads.map { t in
             guard pinnedIDs.contains(t.id), !t.pinned else { return t }
             return copying(t, pinned: true)
+        }
+    }
+
+    // MARK: - Snooze (REP-111)
+
+    /// Hide the thread from the inbox until `wakeDate`. If `wakeDate` is in
+    /// the past, the wake task fires immediately on the next runloop tick.
+    /// Persisted to UserDefaults so the snooze survives relaunch (see
+    /// `rescheduleSnoozeWakes`).
+    func snooze(threadID: String, until wakeDate: Date) {
+        snoozedUntil[threadID] = wakeDate
+        scheduleSnoozeWake(for: threadID, at: wakeDate)
+    }
+
+    /// Drop the snooze and let the thread resurface immediately. No-op if
+    /// the thread isn't currently snoozed.
+    func unsnooze(_ threadID: String) {
+        snoozedUntil.removeValue(forKey: threadID)
+    }
+
+    /// Schedule a Task that drops the snooze entry once `wakeDate` is
+    /// reached. Production uses the cooperative clock for natural waking;
+    /// past dates fall through immediately so callers (and tests) can
+    /// snooze with `Date()` and observe the resurface on the next yield.
+    private func scheduleSnoozeWake(for threadID: String, at wakeDate: Date) {
+        let interval = wakeDate.timeIntervalSinceNow
+        Task { [weak self] in
+            if interval > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } else {
+                // Past wake date — yield once so the caller's didSet has time
+                // to flush before we drop the entry.
+                await Task.yield()
+            }
+            self?.wakeIfStillSnoozed(threadID: threadID, expectedWake: wakeDate)
+        }
+    }
+
+    /// Drop the snooze entry — but only if the wake date matches what we
+    /// scheduled for. Re-snoozing a thread before the original wake fires
+    /// rewrites `snoozedUntil[threadID]`; the stale Task firing afterwards
+    /// must not blow away the new entry.
+    @MainActor
+    private func wakeIfStillSnoozed(threadID: String, expectedWake: Date) {
+        guard let current = snoozedUntil[threadID], current == expectedWake else { return }
+        snoozedUntil.removeValue(forKey: threadID)
+    }
+
+    /// Re-arm wake tasks for any snooze entry that survived a relaunch.
+    /// Called from `init` after `snoozedUntil` is loaded — without this,
+    /// a snooze that should have woken while the app was closed would sit
+    /// inert until the user manually unsnoozed.
+    func rescheduleSnoozeWakes() {
+        for (threadID, wakeDate) in snoozedUntil {
+            scheduleSnoozeWake(for: threadID, at: wakeDate)
         }
     }
 
@@ -867,6 +946,23 @@ final class InboxViewModel {
     private static func savePinnedIDs(_ ids: Set<String>, to defaults: UserDefaults) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
         defaults.set(data, forKey: pinnedKey)
+    }
+
+    // MARK: - Snooze persistence (REP-111)
+
+    private static let snoozedUntilKey = "pref.inbox.snoozedUntil"
+
+    private static func loadSnoozedUntil(from defaults: UserDefaults) -> [String: Date] {
+        guard let data = defaults.data(forKey: snoozedUntilKey),
+              let decoded = try? JSONDecoder().decode([String: Date].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private static func saveSnoozedUntil(_ map: [String: Date], to defaults: UserDefaults) {
+        let data = (try? JSONEncoder().encode(map)) ?? Data()
+        defaults.set(data, forKey: snoozedUntilKey)
     }
 
     // MARK: - lastSeenRowID persistence
