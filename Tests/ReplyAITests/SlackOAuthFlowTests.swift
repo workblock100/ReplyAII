@@ -413,4 +413,45 @@ final class SlackOAuthFlowTests: XCTestCase {
             "POST body must include redirect_uri exactly matching the listener URL, got: \(body)"
         )
     }
+
+    // MARK: - listenerFactory(port, timeout) production defaults
+
+    /// `SlackOAuthFlow.authorize` constructs the listener via
+    /// `listenerFactory(4242, 120)`. Both values are part of the OAuth UX
+    /// contract: 4242 must match the redirect_uri registered in the Slack
+    /// app (already pinned via redirect_uri tests), and 120s is the wait
+    /// window the user has to complete the authorize-redirect dance before
+    /// the listener gives up. Capture the values via the factory closure so
+    /// a quiet edit to `listenerFactory(4242, 60)` (too short for users
+    /// reading carefully) or `listenerFactory(4242, 600)` (listener sits
+    /// open ten minutes if the user abandons) fails loudly here.
+    func testAuthorizePassesProductionPortAndTimeoutToListenerFactory() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+
+        // Capture-by-reference: the factory writes the args into these vars.
+        final class Capture: @unchecked Sendable {
+            var port: UInt16?
+            var timeout: TimeInterval?
+        }
+        let capture = Capture()
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { port, timeout in
+                capture.port = port
+                capture.timeout = timeout
+                return MockOAuthCallbackListener(code: "c")
+            }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        XCTAssertEqual(capture.port, 4242,
+                       "listener port must remain 4242 to match the redirect_uri registered in the Slack app")
+        XCTAssertEqual(capture.timeout, 120,
+                       "listener timeout must remain 120s — shorter starves users who read carefully, longer leaves the loopback open after abandonment")
+    }
 }
