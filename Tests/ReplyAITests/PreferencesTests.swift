@@ -597,6 +597,92 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
     }
 }
 
+// MARK: - PreferenceKey literal-string contracts
+//
+// Every PreferenceKey value is a UserDefaults key that ships in the app
+// and accumulates real user state. The existing PreferencesTests use
+// PreferenceKey.* symbolically, so a refactor that quietly renamed
+// `"pref.privacy.crashReports"` to `"pref.crashReports"` would let
+// every existing test keep passing while every shipped user's
+// preference state silently re-defaulted on next launch.
+//
+// Pin each literal string here so a rename trips compile-time-stable
+// expectations rather than at-runtime data loss.
+
+final class PreferenceKeyLiteralStringTests: XCTestCase {
+
+    func testEveryPreferenceKeyHasExactExpectedLiteral() {
+        // Map each PreferenceKey to its shipped string. Editing this map
+        // requires also writing a UserDefaults migration.
+        let pairs: [(actual: String, expected: String)] = [
+            (PreferenceKey.crashReports,         "pref.privacy.crashReports"),
+            (PreferenceKey.licenseUpdates,       "pref.privacy.licenseUpdates"),
+            (PreferenceKey.iCloudSync,           "pref.privacy.iCloudSync"),
+            (PreferenceKey.defaultTone,          "pref.composer.defaultTone"),
+            (PreferenceKey.useMLX,               "pref.model.useMLX"),
+            (PreferenceKey.inboxThreadLimit,     "pref.inbox.threadLimit"),
+            (PreferenceKey.autoPrime,            "pref.drafts.autoPrime"),
+            (PreferenceKey.autoApplyRulesOnSync, "pref.rules.autoApplyOnSync"),
+            (PreferenceKey.launchCount,          "pref.app.launchCount"),
+            (PreferenceKey.firstLaunchDate,      "pref.app.firstLaunchDate"),
+            (PreferenceKey.demoModeActive,       "pref.inbox.demoModeActive"),
+            (PreferenceKey.onboardingCompleted,  "pref.app.onboardingCompleted"),
+            (PreferenceKey.iMessageEnabled,      "pref.channels.iMessageEnabled"),
+            (PreferenceKey.slackEnabled,         "pref.channels.slackEnabled"),
+            (PreferenceKey.inboxLastSyncDate,    "pref.inbox.lastSyncDate"),
+            (PreferenceKey.voiceExampleMessages, "pref.voice.exampleMessages"),
+        ]
+        for (actual, expected) in pairs {
+            XCTAssertEqual(actual, expected,
+                "PreferenceKey constant must equal \"\(expected)\" — renaming silently abandons every shipped user's value at this key")
+        }
+    }
+
+    func testEveryPreferenceKeyStartsWithPrefPrefix() {
+        // wipeReplyAIDefaults() sweeps keys that begin with "pref." —
+        // any new PreferenceKey that drops this prefix would silently
+        // survive a factory-reset and break the privacy promise.
+        let allKeys: [String] = [
+            PreferenceKey.crashReports,
+            PreferenceKey.licenseUpdates,
+            PreferenceKey.iCloudSync,
+            PreferenceKey.defaultTone,
+            PreferenceKey.useMLX,
+            PreferenceKey.inboxThreadLimit,
+            PreferenceKey.autoPrime,
+            PreferenceKey.autoApplyRulesOnSync,
+            PreferenceKey.launchCount,
+            PreferenceKey.firstLaunchDate,
+            PreferenceKey.demoModeActive,
+            PreferenceKey.onboardingCompleted,
+            PreferenceKey.iMessageEnabled,
+            PreferenceKey.slackEnabled,
+            PreferenceKey.inboxLastSyncDate,
+            PreferenceKey.voiceExampleMessages,
+        ]
+        for key in allKeys {
+            XCTAssertTrue(key.hasPrefix("pref."),
+                "every PreferenceKey must start with \"pref.\" so wipeReplyAIDefaults() captures it on factory reset; got: \(key)")
+        }
+    }
+
+    func testWipeExemptionsContainsOnlyKnownKeys() {
+        // wipeExemptions is a Set; if a key gets renamed in PreferenceKey
+        // but the corresponding wipeExemptions entry isn't updated, the
+        // old key string lingers in the set and never matches the new
+        // value — silently making the key wipe-eligible. Pin the four
+        // exempted keys by literal value.
+        let expectedExemptions: Set<String> = [
+            "pref.app.launchCount",
+            "pref.app.firstLaunchDate",
+            "pref.inbox.demoModeActive",
+            "pref.app.onboardingCompleted",
+        ]
+        XCTAssertEqual(PreferenceKey.wipeExemptions, expectedExemptions,
+            "wipeExemptions set must contain exactly the four shipped keys — adding or removing an entry changes which preferences survive a factory reset")
+    }
+}
+
 // MARK: - Preferences.lastThreadsCacheURL — cold-launch cache path contract
 //
 // InboxViewModel writes the last-known thread list to this URL after every
