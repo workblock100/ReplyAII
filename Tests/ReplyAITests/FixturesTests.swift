@@ -54,4 +54,70 @@ final class FixturesTests: XCTestCase {
             XCTAssertGreaterThan(Fixtures.replyCount(for: ch), 0)
         }
     }
+
+    // MARK: - demoChatThreads (REP-228 — first-launch demo mode)
+    //
+    // demoChatThreads is the user's first impression when iMessage,
+    // Slack, and every other channel come up empty. The shape of this
+    // array drives what the inbox renders before any real data exists,
+    // so an accidental edit (empty list, only one channel, all unread = 0)
+    // would silently degrade the new-user experience.
+
+    func testDemoChatThreadsIsNonEmpty() {
+        // A zero-thread demo would render an empty inbox on first launch
+        // and look broken to users who haven't connected anything yet.
+        XCTAssertFalse(Fixtures.demoChatThreads.isEmpty,
+            "demoChatThreads must seed the empty inbox with something to render")
+    }
+
+    func testDemoChatThreadsHaveUniqueIDs() {
+        let ids = Fixtures.demoChatThreads.map(\.id)
+        XCTAssertEqual(Set(ids).count, ids.count,
+            "demo thread IDs must be unique — duplicates collide in InboxViewModel selection state")
+    }
+
+    func testDemoChatThreadsAllUseDemoIDPrefix() {
+        // The "demo-" prefix is the audit signal `InboxViewModel` uses to
+        // distinguish demo rows from real ones (e.g. for `send()` guards).
+        // Renaming the prefix is a migration; pin it here.
+        for thread in Fixtures.demoChatThreads {
+            XCTAssertTrue(thread.id.hasPrefix("demo-"),
+                "demo thread \(thread.id) must use 'demo-' id prefix so InboxViewModel can detect demo rows")
+        }
+    }
+
+    func testDemoChatThreadsCoverMultipleChannels() {
+        // Showing only iMessage rows in demo mode misses the multi-channel
+        // selling point. Pin coverage to ≥ 2 distinct channels.
+        let channels = Set(Fixtures.demoChatThreads.map(\.channel))
+        XCTAssertGreaterThanOrEqual(channels.count, 2,
+            "demo threads should cover ≥ 2 channels to demonstrate the unified inbox")
+    }
+
+    func testAtLeastOneDemoThreadHasUnread() {
+        // The unread badge is what pulls the user's eye to the inbox on
+        // first launch. An all-read demo set would feel inert.
+        let totalUnread = Fixtures.demoChatThreads.reduce(0) { $0 + $1.unread }
+        XCTAssertGreaterThan(totalUnread, 0,
+            "at least one demo thread must be unread — otherwise the inbox feels inert on first launch")
+    }
+
+    func testEveryDemoThreadHasNonEmptyPreview() {
+        // Empty preview text would render a blank thread row.
+        for thread in Fixtures.demoChatThreads {
+            XCTAssertFalse(thread.preview.isEmpty,
+                "demo thread \(thread.id) has empty preview — would render as a blank row")
+            XCTAssertFalse(thread.name.isEmpty,
+                "demo thread \(thread.id) has empty name — would render as a nameless row")
+        }
+    }
+
+    func testEveryDemoThreadHasNonEmptyTimeLabel() {
+        // The relative-time chip is part of the row's affordance hierarchy;
+        // an empty time would render a misaligned row.
+        for thread in Fixtures.demoChatThreads {
+            XCTAssertFalse(thread.time.isEmpty,
+                "demo thread \(thread.id) has empty time label — would render misaligned")
+        }
+    }
 }
