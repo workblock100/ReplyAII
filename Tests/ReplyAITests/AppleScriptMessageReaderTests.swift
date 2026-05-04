@@ -258,4 +258,26 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertTrue(err.localizedDescription.contains("permission denied"),
             "LocalizedError bridge must surface our copy — got: \(err.localizedDescription)")
     }
+
+    // MARK: - Exact-copy pins
+    //
+    // These two strings ship verbatim to the inbox banner when the
+    // AppleScript path fails. The keyword-contains tests above stay
+    // resilient to small wording tweaks; pin the full literals here so
+    // a designer-led rewrite surfaces in code review.
+
+    func testScriptCreationFailedCopyExactLiteral() {
+        XCTAssertEqual(
+            AppleScriptReaderError.scriptCreationFailed.errorDescription,
+            "Failed to compile AppleScript."
+        )
+    }
+
+    func testExecutionErrorCopyExactPrefix() {
+        let raw = "syntax error: unexpected end-of-file"
+        XCTAssertEqual(
+            AppleScriptReaderError.executionError(raw).errorDescription,
+            "AppleScript failed: \(raw)"
+        )
+    }
 }
