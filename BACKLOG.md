@@ -346,7 +346,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit a819f59
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Two competing ViewState implementations exist and one must be selected. `wip/worker-2026-04-24-113000-viewstate` contains REP-247 alone (527→531 tests, +4 tests). `wip/2026-04-24-120000-viewstate-slacktokenstore` contains REP-247 + REP-274 (SlackTokenStore) bundled (more tests). Human should: (1) diff both branches; (2) run `swift test` on each; (3) pick the cleaner implementation — prefer the bundled branch if both pass, since REP-274 is also needed; (4) close the other branch; (5) mark REP-247 and REP-274 done after merge; (6) close the orphaned `wip/2026-04-24-113000-slack-socket-token-store` branch (only a claim commit, no code).
@@ -361,7 +362,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 1fa8960
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new), `Tests/ReplyAITests/SearchIndexTests.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: Worker-2026-04-23-230824 implemented REP-256 (TelegramChannel stub), REP-205 (SearchIndex.delete regression test), and REP-206 (PromptBuilder drop-oldest test) but was blocked by MLX build time. Code is complete on `wip/2026-04-23-230824-telegram-channel-tests`. Human should: (1) review the diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-256, REP-205, REP-206 done.
@@ -375,7 +377,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit ac2200b
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Models/Channel.swift`, `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Sources/ReplyAI/Channels/SMSChannel.swift` (new), and corresponding test files
 - scope: Worker-2026-04-24-031929 implemented REP-243 (Channel enum `.telegram/.whatsapp/.teams/.sms` cases + `displayName/iconName`), REP-260 (WhatsAppChannel stub), REP-261 (TeamsChannel stub), and REP-264 (SMSChannel stub) bundled with 13 new tests (4 ChannelTests + 3 per channel stub). Code complete on `wip/2026-04-24-031929-channel-stubs`. Human should: (1) review diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-243, REP-260, REP-261, REP-264 done.
@@ -389,7 +392,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit cfe50f8
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Worker-2026-04-24-152005 implemented REP-278 (InboxViewModel: persist thread list to disk for cold-launch resilience) but was blocked by MLX fresh-clone build time exceeding the 13-min budget. Implementation is complete on branch `wip/2026-04-24-152005-thread-cache` (est. 531→536 tests, 5 new tests: successful sync writes cache; cold-init from cache populates threads; second sync updates cache; failed sync leaves threads unchanged; missing cache at init is safe). Human should: (1) review the wip branch diff; (2) run `swift test` on main for baseline; (3) cherry-pick or merge the branch; (4) run `swift test` to confirm; (5) mark REP-278 done in BACKLOG.
@@ -403,7 +407,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: null
 - blocker: **Superseded by `replyai-merger` agent (commit `7f9b305`).** The merger runs every 30 min on a schedule, drains `wip/*` branches automatically when `.build/` is warm, and is more reliable than a worker fire for this purpose. Workers should NOT claim REP-280 — the merger handles the drain. If the merger is not yet running on a warm machine, workers may fall back to this task's protocol as a one-shot manual drain.
 - files_to_touch: whichever `wip/*` branch is oldest and still referenced in BACKLOG as `status: blocked`
@@ -418,7 +423,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit e002836
 - claimed_by: human
 - files_to_touch: wip/2026-04-24-170301-sync-all-channels
 - scope: **Pivot P0.** Worker implemented REP-244 (`syncAllChannels()` multi-channel aggregation) on `wip/2026-04-24-170301-sync-all-channels`. This is the core multi-channel aggregation enabling the app to show threads from Slack, AppleScript fallback, and UNNotification capture without FDA. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-244 done.
@@ -448,7 +454,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Worker-2026-04-24-143143 implemented REP-231 (per-channel enable/disable Preference keys for iMessage and Slack), REP-208 (double-negation predicate correctness tests), and REP-220 (concurrent add+remove RulesStore correctness tests) on `wip/2026-04-24-143143-prefs-channels-negation-concurrent`. Bundled into one commit (+195 LOC, 8 tests). MLX fresh-clone build time exceeded budget. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-231, REP-208, REP-220 done.
@@ -462,7 +469,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 5e761c9
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new), `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: Worker-2026-04-24-161734 implemented REP-258 (AccessibilityAPIReader: alt message source via macOS Accessibility API, 6 tests) and REP-269 (IMessageSender.retryDelay injectable, removes hardcoded 0.5s sleep, 1 new test + 3 updated). Both complete on `wip/2026-04-24-161734-accessibility-retrydelay`. MLX cold build exceeds budget. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-258 and REP-269 done.
@@ -476,7 +484,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: human
 - files_to_touch: wip/2026-04-24-152614-unread-bulk-concurrent
 - scope: Worker-2026-04-24-152614 implemented REP-246 (totalUnreadCount), REP-248 (bulkArchiveRead), REP-209 (selectThread unread clear), REP-249 (concurrent ContactsResolver correctness) on `wip/2026-04-24-152614-unread-bulk-concurrent`. +14 new tests. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-246, REP-248, REP-209, REP-249 done.
@@ -490,7 +499,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: human
 - files_to_touch: wip/2026-04-24-133823-inbox-bulk-filter
 - scope: Worker implemented REP-224 (InboxViewModel bulk-archive), REP-245 (filter by channel), REP-246 (totalUnreadCount), REP-248 (bulkArchiveRead) on `wip/2026-04-24-133823-inbox-bulk-filter`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-224, REP-245, REP-246, REP-248 done.
@@ -504,7 +514,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 2836546
 - claimed_by: human
 - files_to_touch: wip/2026-04-24-163229-un-notification-parser
 - scope: Worker implemented REP-241 (UNNotificationParser: passive notification capture without FDA) on `wip/2026-04-24-163229-un-notification-parser`. Pivot-aligned: passive capture path works without Full Disk Access. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-241 done.
@@ -518,7 +529,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 7c62474
 - claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
 - scope: Worker-2026-04-24-114653 implemented REP-267 (SlackSocketClient: injectable WebSocket wrapper for Slack Socket Mode). Implementation complete on `wip/2026-04-24-114653-slack-socket-client`. Human should: (1) review the wip branch diff; (2) run `swift test` locally; (3) merge if green; (4) mark REP-267 done in BACKLOG.
