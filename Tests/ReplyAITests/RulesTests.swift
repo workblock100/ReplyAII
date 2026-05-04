@@ -894,6 +894,53 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(g, "Family")
     }
 
+    // MARK: - REP-016 senderKnown classification
+
+    private func makeThread(name: String) -> MessageThread {
+        MessageThread(
+            id: name, channel: .imessage, name: name,
+            avatar: "?", preview: "hi", time: "now", unread: 0
+        )
+    }
+
+    func testSenderKnownTrueForContactName() {
+        let ctx = RuleContext.from(thread: makeThread(name: "Maya Chen"))
+        XCTAssertTrue(ctx.senderKnown,
+                      "a real contact name (no @, no leading +, has letters) must classify as known")
+    }
+
+    func testSenderKnownFalseForPhoneWithPlusPrefix() {
+        let ctx = RuleContext.from(thread: makeThread(name: "+14155551234"))
+        XCTAssertFalse(ctx.senderKnown, "+E.164 phone must classify as unknown")
+    }
+
+    func testSenderKnownFalseForEmailHandle() {
+        // Pre-REP-016 fix: operator precedence parsed `(notPlus && notAt) || !isPhonelike`
+        // so emails fell into the `||` branch and were mis-classified as known.
+        let ctx = RuleContext.from(thread: makeThread(name: "user@example.com"))
+        XCTAssertFalse(ctx.senderKnown, "email-shaped handle must classify as unknown")
+    }
+
+    func testSenderKnownFalseForFormattedPhone() {
+        // "(415) 555-1234" — all chars are in the phone-charset ("+0123456789 ()-").
+        // Pre-REP-016 fix this was classified as known (the inline expression's `||`
+        // branch fired); now it correctly falls into the phonelike check.
+        let ctx = RuleContext.from(thread: makeThread(name: "(415) 555-1234"))
+        XCTAssertFalse(ctx.senderKnown, "US-formatted phone must classify as unknown")
+    }
+
+    func testSenderKnownFalseForDigitOnlyHandle() {
+        let ctx = RuleContext.from(thread: makeThread(name: "4155551234"))
+        XCTAssertFalse(ctx.senderKnown, "digit-only handle must classify as unknown")
+    }
+
+    func testSenderUnknownPredicateFiresOnEmail() {
+        // End-to-end: the .senderUnknown predicate must now match an email handle.
+        let ctx = RuleContext.from(thread: makeThread(name: "user@example.com"))
+        XCTAssertTrue(RuleEvaluator.matches(.senderUnknown, in: ctx),
+                      ".senderUnknown must fire on email handles after REP-016 fix")
+    }
+
     // MARK: - RulesStore: malformed-rule skipping (REP-024)
 
     private func tempRulesURL() -> URL {

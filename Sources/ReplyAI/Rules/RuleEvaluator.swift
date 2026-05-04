@@ -37,19 +37,26 @@ struct RuleContext: Sendable {
     /// handle — a reasonable proxy for "this is a contact you have" that
     /// doesn't require re-querying Contacts at evaluation time.
     static func from(thread: MessageThread) -> RuleContext {
-        RuleContext(
-            senderName: thread.name,
-            senderHandle: thread.name,
+        // REP-016: classify "known" as "neither email-shaped nor phone-shaped".
+        // The earlier inline expression mixed `&&` and `||` without parens;
+        // operator precedence parsed it as `(notPlus && notAt) || !isPhonelike`,
+        // so emails and digit-only handles fell into the `||` clause and were
+        // mis-classified as known contacts.
+        let name = thread.name
+        let isEmail = name.contains("@")
+        let isPhonelike = name.hasPrefix("+")
+            || (!name.isEmpty && name.allSatisfy { "+0123456789 ()-".contains($0) })
+        return RuleContext(
+            senderName: name,
+            senderHandle: name,
             channel: thread.channel,
             lastMessageText: thread.preview,
             isUnread: thread.unread > 0,
             unreadCount: thread.unread,
-            senderKnown: !thread.name.hasPrefix("+") && !thread.name.contains("@") || !thread.name.allSatisfy {
-                "+0123456789 ()-".contains($0)
-            },
+            senderKnown: !isEmail && !isPhonelike,
             chatIdentifier: thread.id,
             hasAttachment: thread.hasAttachment,
-            threadDisplayName: thread.name
+            threadDisplayName: name
         )
     }
 }
