@@ -38,4 +38,25 @@ final class TeamsChannelTests: XCTestCase {
         XCTAssertEqual(channel.channel, .teams)
         XCTAssertEqual(channel.displayName, "Teams")
     }
+
+    func testTeamsChannelMessagesThrowsWhenNoToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        let channel = TeamsChannel(keychain: keychain)
+
+        do {
+            _ = try await channel.messages(forThreadID: "any", limit: 10)
+            XCTFail("Expected authorizationDenied to be thrown")
+        } catch ChannelError.authorizationDenied {
+            // Expected — gate is symmetric with recentThreads, not silently bypassed.
+        }
+    }
+
+    func testTeamsChannelMessagesReturnsEmptyWithToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "test-graph-token", for: "teams-token")
+        let channel = TeamsChannel(keychain: keychain)
+
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty)
+    }
 }

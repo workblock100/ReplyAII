@@ -42,4 +42,27 @@ final class TelegramChannelTests: XCTestCase {
         XCTAssertEqual(channel.channel, .telegram)
         XCTAssertEqual(channel.displayName, "Telegram")
     }
+
+    // MARK: - messages() symmetry
+
+    func testTelegramChannelMessagesThrowsWhenNoToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        let channel = TelegramChannel(keychain: keychain)
+
+        do {
+            _ = try await channel.messages(forThreadID: "any", limit: 10)
+            XCTFail("Expected authorizationDenied to be thrown")
+        } catch ChannelError.authorizationDenied {
+            // Expected — gate is symmetric with recentThreads, not silently bypassed.
+        }
+    }
+
+    func testTelegramChannelMessagesReturnsEmptyWithToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "test-bot-token-12345", for: "telegram-bot-token")
+        let channel = TelegramChannel(keychain: keychain)
+
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty)
+    }
 }

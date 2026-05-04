@@ -38,4 +38,25 @@ final class SMSChannelTests: XCTestCase {
         XCTAssertEqual(channel.channel, .sms)
         XCTAssertEqual(channel.displayName, "SMS")
     }
+
+    func testSMSChannelMessagesThrowsWhenNoToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        let channel = SMSChannel(keychain: keychain)
+
+        do {
+            _ = try await channel.messages(forThreadID: "any", limit: 10)
+            XCTFail("Expected authorizationDenied to be thrown")
+        } catch ChannelError.authorizationDenied {
+            // Expected — gate is symmetric with recentThreads, not silently bypassed.
+        }
+    }
+
+    func testSMSChannelMessagesReturnsEmptyWithToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "test-relay-token", for: "sms-token")
+        let channel = SMSChannel(keychain: keychain)
+
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty)
+    }
 }

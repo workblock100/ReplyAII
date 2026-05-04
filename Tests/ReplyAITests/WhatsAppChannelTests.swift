@@ -38,4 +38,25 @@ final class WhatsAppChannelTests: XCTestCase {
         XCTAssertEqual(channel.channel, .whatsapp)
         XCTAssertEqual(channel.displayName, "WhatsApp")
     }
+
+    func testWhatsAppChannelMessagesThrowsWhenNoToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        let channel = WhatsAppChannel(keychain: keychain)
+
+        do {
+            _ = try await channel.messages(forThreadID: "any", limit: 10)
+            XCTFail("Expected authorizationDenied to be thrown")
+        } catch ChannelError.authorizationDenied {
+            // Expected — gate is symmetric with recentThreads, not silently bypassed.
+        }
+    }
+
+    func testWhatsAppChannelMessagesReturnsEmptyWithToken() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "test-session-token", for: "whatsapp-token")
+        let channel = WhatsAppChannel(keychain: keychain)
+
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty)
+    }
 }
