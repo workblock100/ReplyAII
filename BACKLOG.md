@@ -1458,7 +1458,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main (testFreshCacheHitSkipsStore in ContactsResolverTests.swift:255)
 - claimed_by: null
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: REP-074 added injectable `ttl`. Pin the positive cache-hit path: resolve a handle once (store query count = 1); call `name(for:)` again within the TTL window; assert store query count remains 1 (no second query). Complement to REP-185 which tests TTL expiry. Guards against a future change that accidentally bypasses the cache on every call.
@@ -1548,8 +1549,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (SearchIndexSnippetColumnTests in SearchIndexTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: Worker-111853 notes `snippet(messages_fts, 3, '«', '»', '…', 8)` uses column 3 (message body text). Pin with a test: index a thread where the thread name contains the search term "alpha" but the message body does not; search "alpha"; assert snippet does NOT contain "alpha" (because snippet comes from the message body column, not thread_name). Then index a thread where the message body contains "beta"; search "beta"; assert snippet contains `«beta»`. Guards against schema migration that shifts column indices.
 - success_criteria:

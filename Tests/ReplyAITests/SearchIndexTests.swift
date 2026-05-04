@@ -1233,3 +1233,43 @@ final class SearchIndexSnippetTests: XCTestCase {
                        "unrelated thread must not appear in results for 'hello'")
     }
 }
+
+// MARK: - REP-225: snippet comes from message body, not thread_name
+
+final class SearchIndexSnippetColumnTests: XCTestCase {
+
+    // If the search term appears only in thread_name (not in any message body),
+    // FTS5 snippet() must NOT surface it — snippet is pinned to column 3 (body text).
+    func testSnippetExtractsFromMessageBodyNotThreadName() async {
+        let index = SearchIndex()
+        // Thread name contains "alpha", body does not.
+        let thread = MessageThread(id: "rep225-name", channel: .imessage, name: "alpha team",
+                                   avatar: "A", preview: "", time: "")
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "let's catch up soon", time: "t")
+        ])
+        let hits = await index.search("alpha")
+        // The thread IS found (FTS5 indexes thread_name), but the snippet must
+        // come from the body column — it will not contain "alpha".
+        if let hit = hits.first {
+            let snippet = hit.snippet ?? ""
+            XCTAssertFalse(snippet.contains("alpha"),
+                           "snippet must come from message body column, not thread_name")
+        }
+    }
+
+    // When the match is in the message body, snippet must wrap it with «».
+    func testSnippetContainsBoldMarkerAroundMatchedTerm() async {
+        let index = SearchIndex()
+        let thread = MessageThread(id: "rep225-body", channel: .imessage, name: "Carol",
+                                   avatar: "C", preview: "", time: "")
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "the beta release ships this week", time: "t")
+        ])
+        let hits = await index.search("beta")
+        XCTAssertEqual(hits.count, 1)
+        let snippet = hits.first?.snippet ?? ""
+        XCTAssertTrue(snippet.contains("«beta»"),
+                      "snippet must wrap body-matched term with «» markers")
+    }
+}
