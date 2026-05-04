@@ -38,4 +38,46 @@ final class LLMServiceTests: XCTestCase {
         }
         XCTAssertFalse(sample.isEmpty, "fixture draft for first thread should not be empty")
     }
+
+    // MARK: - tokenizer edge cases
+
+    func testTokenizerHandlesLeadingWhitespace() {
+        // Leading whitespace must surface as its own token so the streamed
+        // draft preserves intentional indentation rather than swallowing it.
+        XCTAssertEqual(StubLLMService.tokenize(" abc"), [" ", "abc"])
+    }
+
+    func testTokenizerHandlesConsecutiveSpaces() {
+        // Each space terminates the current token; a run of N spaces between
+        // words yields N space-only tokens. Keeps `joined()` round-trip exact
+        // — important because the composer appends tokens directly to the
+        // draft string as they arrive from the stream.
+        XCTAssertEqual(StubLLMService.tokenize("a  b"), ["a ", " ", "b"])
+        XCTAssertEqual(StubLLMService.tokenize("a  b").joined(), "a  b",
+                       "consecutive spaces must round-trip exactly")
+    }
+
+    func testTokenizerHandlesTrailingNewline() {
+        // A trailing whitespace char closes the final token and leaves no
+        // dangling empty-string token in the output (the function explicitly
+        // skips appending empty `current` at the end).
+        XCTAssertEqual(StubLLMService.tokenize("a\n"), ["a\n"])
+        XCTAssertEqual(StubLLMService.tokenize("ab "), ["ab "])
+    }
+
+    func testStreamEndsWithDoneChunk() async throws {
+        // The composer relies on `.done` arriving before the stream finishes
+        // so it can flip from "drafting" to "ready"; without this the UI
+        // would stay in the loading state until the next user action.
+        let svc = StubLLMService(tokenDelay: 0...0, initialDelay: 0)
+        let thread = Fixtures.threads[0]
+        var lastKind: DraftChunk.Kind?
+        for try await chunk in svc.draft(thread: thread, tone: .direct, history: []) {
+            lastKind = chunk.kind
+        }
+        guard let lastKind, case .done = lastKind else {
+            XCTFail("expected final chunk to be .done; got \(lastKind.map(String.init(describing:)) ?? "nil")")
+            return
+        }
+    }
 }
