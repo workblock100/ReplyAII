@@ -9,6 +9,14 @@ import Foundation
 /// (the listener binds a port for the duration of the OAuth round-trip).
 typealias SlackOAuthFlowFactory = @Sendable () -> any SlackAuthorizing
 
+/// Slack adapter wired through the Slack Web API. `recentThreads` and
+/// `messages(forThreadID:limit:)` hit `conversations.list` /
+/// `conversations.history` respectively; `authorize(...)` runs the
+/// OAuth2 round-trip via `SlackOAuthFlow` and persists the resulting
+/// token to `SlackTokenStore`. The class is `@unchecked Sendable`
+/// because the injected `SlackHTTPClient` and `SlackTokenStore` are
+/// already thread-safe and the only mutable state SlackChannel holds
+/// is its constructor-set dependencies.
 final class SlackChannel: ChannelService, @unchecked Sendable {
     let channel: Channel = .slack
     let displayName: String = "Slack"

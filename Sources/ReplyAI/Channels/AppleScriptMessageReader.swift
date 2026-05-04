@@ -282,6 +282,11 @@ struct AppleScriptMessageReader: Sendable {
     }
 }
 
+/// Failures surfaced from the AppleScript-backed Messages.app reader.
+/// Splits creation (NSAppleScript(source:) returned nil — almost always
+/// indicates a bad script string we built ourselves) from execution
+/// (Messages.app refused, Automation permission missing, or the script
+/// raised a runtime error). The callers route both into the inbox banner.
 enum AppleScriptReaderError: LocalizedError, Sendable {
     case scriptCreationFailed
     case executionError(String)

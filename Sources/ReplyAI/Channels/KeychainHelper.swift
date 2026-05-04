@@ -87,6 +87,10 @@ struct KeychainHelper: Sendable {
     }
 }
 
+/// Wraps the raw `OSStatus` from `SecItem*` calls so callers and logs see
+/// something more actionable than a bare integer. The status is the only
+/// payload the Security framework gives us — keep it on the value so a
+/// support engineer can grep Apple's status tables for the code.
 enum KeychainError: LocalizedError, Sendable {
     case unhandledError(status: OSStatus)
 
