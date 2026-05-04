@@ -2933,4 +2933,49 @@ final class SmartRuleSeedNamesTests: XCTestCase {
         XCTAssertFalse(SmartRule.seedRules[3].active,
                        "Substack seed must default to inactive so it doesn't archive real newsletters")
     }
+
+    // MARK: - Seed-rule action pins
+    //
+    // Pinning the `.then` action for each seed rule guards against an
+    // accidental behavior swap. e.g. flipping the 2FA rule from `.archive`
+    // to `.silentlyIgnore` would still pass naming tests but materially
+    // change what a fresh install does on day one.
+
+    func testTwoFactorSeedRuleActionIsArchive() {
+        // 2FA codes auto-archive — the rule shouldn't *hide* the message
+        // (silentlyIgnore would suppress notifications too); it should
+        // archive so the user can still find it via search.
+        guard case .archive = SmartRule.seedRules[0].then else {
+            XCTFail("expected .archive for 2FA seed, got \(SmartRule.seedRules[0].then)"); return
+        }
+    }
+
+    func testSlackMayaSeedRuleActionIsSetDefaultToneDirect() {
+        // The Slack-from-Maya seed advertises the "smart tone" feature —
+        // flipping it to a different tone (warm, playful) silently changes
+        // the demo's first impression.
+        guard case .setDefaultTone(let tone) = SmartRule.seedRules[1].then else {
+            XCTFail("expected .setDefaultTone(...) for Slack/Maya seed, got \(SmartRule.seedRules[1].then)"); return
+        }
+        XCTAssertEqual(tone, .direct,
+                       "Slack/Maya seed pins to .direct — the tone the design copy demonstrates")
+    }
+
+    func testWhatsAppVoiceMemoSeedRuleActionIsPin() {
+        // Voice memos are surfaced via pin (top of inbox) rather than
+        // archive (out of sight) — drift here would undo the rule's whole
+        // point.
+        guard case .pin = SmartRule.seedRules[2].then else {
+            XCTFail("expected .pin for WhatsApp voice memo seed, got \(SmartRule.seedRules[2].then)"); return
+        }
+    }
+
+    func testSubstackSeedRuleActionIsSilentlyIgnore() {
+        // Newsletters opt for `.silentlyIgnore` (suppress notifications +
+        // hide from menu-bar count) rather than `.archive` so the user
+        // can still browse them in the inbox if they want to.
+        guard case .silentlyIgnore = SmartRule.seedRules[3].then else {
+            XCTFail("expected .silentlyIgnore for Substack seed, got \(SmartRule.seedRules[3].then)"); return
+        }
+    }
 }
