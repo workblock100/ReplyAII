@@ -306,4 +306,62 @@ final class FixturesTests: XCTestCase {
             XCTAssertEqual(Fixtures.seedConfidence(threadID: "unknown-xyz", tone: tone), 0.62, accuracy: 0.0001)
         }
     }
+
+    // MARK: - First-impression demo thread copy pins
+
+    /// `demo-1` is the very first row a brand-new user sees (when no real
+    /// channel has data yet). Its preview is the literal first impression
+    /// of ReplyAI's keyboard-first promise — drift would silently weaken
+    /// the most important onboarding moment.
+    func testDemoOneIsReplyAIWelcomeWithKeyboardHint() {
+        guard let row = Fixtures.demoChatThreads.first(where: { $0.id == "demo-1" }) else {
+            XCTFail("demo-1 must exist as the welcome row"); return
+        }
+        XCTAssertEqual(row.name, "ReplyAI",
+            "demo-1 row name is the brand greeting; pinned so a refactor doesn't accidentally rename it to a real contact")
+        XCTAssertEqual(
+            row.preview,
+            "Welcome — try ⌘K to open the palette, ⌘↵ to send, ⌘J to regenerate.",
+            "demo-1 preview is the literal first impression of ReplyAI's keyboard-first promise"
+        )
+        XCTAssertTrue(row.pinned,
+            "demo-1 must be pinned to the top — the welcome row only works as a welcome if it appears first")
+        XCTAssertGreaterThan(row.unread, 0,
+            "demo-1 must show as unread — the badge is what pulls the eye to the welcome on first launch")
+    }
+
+    // MARK: - Curated draft copy pins
+
+    /// `t1` is the gallery's flagship "design review" demo thread; the warm
+    /// draft is the App Store screenshot's most-quoted line. Verbatim pins
+    /// force product-copy review to acknowledge any rewrite.
+    func testFlagshipT1DraftCopyPinned() {
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t1", tone: .warm),
+            "Yes! Looking at it now — I'll leave inline comments on 4–9 before the meeting."
+        )
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t1", tone: .direct),
+            "On it. Comments incoming on 4–9 before 4."
+        )
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t1", tone: .playful),
+            "Already in the deck pretending to be helpful 🫡 — comments landing soon."
+        )
+    }
+
+    func testFlagshipT3DraftCopyPinned() {
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t3", tone: .warm),
+            "Huge — thanks for pushing this through. Loom when you get a sec 🙏"
+        )
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t3", tone: .direct),
+            "Nice. Send the Loom whenever it's ready."
+        )
+        XCTAssertEqual(
+            Fixtures.seedDraft(threadID: "t3", tone: .playful),
+            "Billing flow, finally unshackled. Will stare at the Loom lovingly."
+        )
+    }
 }
