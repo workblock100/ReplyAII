@@ -191,6 +191,51 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertEqual(stateAfter.text, textBefore, "cached thread draft must be unaffected by invalidating an uncached thread")
     }
 
+    // MARK: - REP-250: invalidate() during in-flight prime cancels the task
+
+    // Calling invalidate while the prime task is still in its initialDelay
+    // ("thinking") must immediately reset state to idle — not priming.
+    func testInvalidateMidPrimeTransitionsToIdle() async throws {
+        // Use a 5-second initial delay so the prime task is definitely still
+        // running when we call invalidate() right after prime().
+        let longDelay: UInt64 = 5_000_000_000  // 5s
+        let engine = DraftEngine(
+            service: StubLLMService(tokenDelay: 0...0, initialDelay: longDelay)
+        )
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        // Invalidate immediately — task is in initial-delay sleep.
+        engine.invalidate(threadID: thread.id)
+
+        let state = engine.state(threadID: thread.id, tone: .warm)
+        XCTAssertEqual(state.text, "", "invalidated mid-prime must have empty text")
+        XCTAssertFalse(state.isStreaming, "invalidated mid-prime must not show as streaming")
+        XCTAssertFalse(state.isDone, "invalidated mid-prime must not show as done")
+        XCTAssertNil(state.error, "invalidated mid-prime must not surface an error")
+    }
+
+    // After invalidate() cancels a mid-prime task, isDone must never flip to
+    // true — the cancelled task must not complete and overwrite the reset state.
+    func testInvalidateMidPrimeCancelsPrimingTask() async throws {
+        let longDelay: UInt64 = 5_000_000_000  // 5s
+        let engine = DraftEngine(
+            service: StubLLMService(tokenDelay: 0...0, initialDelay: longDelay)
+        )
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+        engine.invalidate(threadID: thread.id)
+
+        // Wait 200ms — well under the 5s initialDelay. If the task were not
+        // cancelled, it would NOT have finished yet. Either way isDone must be
+        // false because the state was reset to idle and the task was cancelled.
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).isDone,
+                       "cancelled prime task must not flip isDone to true after invalidation")
+    }
+
     // MARK: - Cache eviction (REP-034)
 
     func testEvictClearsSingleThread() async throws {

@@ -82,6 +82,8 @@ indirect enum RulePredicate: Hashable, Sendable {
     case timeOfDay(startHour: Int, endHour: Int)
     /// True when the thread's display name matches the given regex pattern.
     case threadNameMatchesRegex(pattern: String)
+    /// True when the thread contains at least `atLeast` messages (total message count).
+    case messageCount(atLeast: Int)
 }
 
 /// Consequence of a rule matching. Intentionally small for v1 — we add
@@ -112,9 +114,10 @@ extension RulePredicate: Codable {
         case hasUnread             = "has_unread"
         case timeOfDay             = "time_of_day"
         case threadNameMatchesRegex = "thread_name_matches_regex"
+        case messageCountAtLeast   = "message_count_at_least"
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour" }
+    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour", atLeast = "at_least" }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -139,6 +142,7 @@ extension RulePredicate: Codable {
                                        endHour:   try c.decode(Int.self, forKey: .endHour)
                                    )
         case .threadNameMatchesRegex: self = .threadNameMatchesRegex(pattern: try c.decode(String.self, forKey: .value))
+        case .messageCountAtLeast:    self = .messageCount(atLeast: try c.decode(Int.self, forKey: .atLeast))
         }
     }
 
@@ -161,6 +165,7 @@ extension RulePredicate: Codable {
         case .hasUnread:                        try c.encode(Kind.hasUnread, forKey: .kind)
         case .timeOfDay(let s, let e):          try c.encode(Kind.timeOfDay, forKey: .kind); try c.encode(s, forKey: .startHour); try c.encode(e, forKey: .endHour)
         case .threadNameMatchesRegex(let p):    try c.encode(Kind.threadNameMatchesRegex, forKey: .kind); try c.encode(p, forKey: .value)
+        case .messageCount(let n):              try c.encode(Kind.messageCountAtLeast, forKey: .kind); try c.encode(n, forKey: .atLeast)
         }
     }
 }

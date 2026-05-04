@@ -2289,3 +2289,143 @@ final class RuleEvaluatorDeterministicOrderTests: XCTestCase {
             "repeated calls with identical inputs must produce identical order")
     }
 }
+
+// MARK: - REP-251: compound predicate export + import round-trip
+
+final class RulesStoreCompoundPredicateTests: XCTestCase {
+
+    private func tmpURL(_ tag: String) -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("RulesCompound-\(tag)-\(UUID().uuidString).json")
+    }
+
+    // Deeply nested and/or/not tree must survive a full export→import round-trip
+    // without losing structure or corrupting the `kind` discriminator.
+    @MainActor
+    func testCompoundPredicateRoundTrip() throws {
+        let storeURL = tmpURL("compound-store")
+        let exportURL = tmpURL("compound-export")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let predicate: RulePredicate = .and([
+            .senderIs("A"),
+            .or([
+                .textMatchesRegex("^hi"),
+                .not(.senderUnknown)
+            ])
+        ])
+        let rule = SmartRule(name: "compound", when: predicate, then: .pin)
+        try store.add(rule)
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: tmpURL("compound-reimport"))
+        try importStore.import(from: exportURL)
+
+        let imported = importStore.rules.first(where: { $0.id == rule.id })
+        XCTAssertNotNil(imported, "compound-predicate rule must survive export+import")
+        XCTAssertEqual(imported?.when, predicate,
+                       "predicate tree must be identical after round-trip")
+    }
+
+    // or([]) encodes and decodes without crash; it's a valid (vacuous-false) predicate.
+    @MainActor
+    func testOrEmptyPredicateRoundTrip() throws {
+        let storeURL = tmpURL("or-empty-store")
+        let exportURL = tmpURL("or-empty-export")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let rule = SmartRule(name: "or-empty", when: .or([]), then: .archive)
+        try store.add(rule)
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: tmpURL("or-empty-reimport"))
+        try importStore.import(from: exportURL)
+
+        let imported = importStore.rules.first(where: { $0.id == rule.id })
+        XCTAssertNotNil(imported, "or([]) rule must survive export+import")
+        XCTAssertEqual(imported?.when, .or([]),
+                       "or([]) must decode back to or([])")
+    }
+
+    // and([not(hasUnread)]) — single-element and wrapping a not — must round-trip.
+    @MainActor
+    func testAndNotPredicateRoundTrip() throws {
+        let storeURL = tmpURL("and-not-store")
+        let exportURL = tmpURL("and-not-export")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        let store = RulesStore(fileURL: storeURL)
+        let predicate: RulePredicate = .and([.not(.hasUnread)])
+        let rule = SmartRule(name: "and-not", when: predicate, then: .pin)
+        try store.add(rule)
+        try store.export(to: exportURL)
+
+        let importStore = RulesStore(fileURL: tmpURL("and-not-reimport"))
+        try importStore.import(from: exportURL)
+
+        let imported = importStore.rules.first(where: { $0.id == rule.id })
+        XCTAssertNotNil(imported, "and([not(hasUnread)]) rule must survive export+import")
+        XCTAssertEqual(imported?.when, predicate,
+                       "and([not(hasUnread)]) must decode back to the original tree")
+    }
+}
+
+// MARK: - REP-226: messageCount(atLeast:) predicate
+
+final class RuleMessageCountPredicateTests: XCTestCase {
+
+    private func ctx(messageCount: Int) -> RuleContext {
+        RuleContext(
+            senderName: "Alice",
+            senderHandle: "alice",
+            channel: .imessage,
+            lastMessageText: "",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "t1",
+            messageCount: messageCount
+        )
+    }
+
+    func testMessageCountAtLeastMatchesWhenAboveThreshold() {
+        let pred = RulePredicate.messageCount(atLeast: 3)
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx(messageCount: 5)),
+                      "5 messages ≥ 3: predicate must match")
+    }
+
+    func testMessageCountAtLeastMatchesAtExactThreshold() {
+        let pred = RulePredicate.messageCount(atLeast: 5)
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx(messageCount: 5)),
+                      "5 messages == 5: predicate must match (inclusive)")
+    }
+
+    func testMessageCountAtLeastMissesWhenBelowThreshold() {
+        let pred = RulePredicate.messageCount(atLeast: 6)
+        XCTAssertFalse(RuleEvaluator.matches(pred, in: ctx(messageCount: 5)),
+                       "5 messages < 6: predicate must not match")
+    }
+
+    func testMessageCountAtLeastZeroIsVacuousTrue() {
+        let pred = RulePredicate.messageCount(atLeast: 0)
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx(messageCount: 0)),
+                      "atLeast=0 must match even a thread with 0 messages")
+        XCTAssertTrue(RuleEvaluator.matches(pred, in: ctx(messageCount: 100)),
+                      "atLeast=0 must match any thread")
+    }
+
+    func testMessageCountAtLeastCodableRoundTrip() throws {
+        let predicate = RulePredicate.messageCount(atLeast: 7)
+        let data = try JSONEncoder().encode(predicate)
+        let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+        XCTAssertEqual(decoded, predicate,
+                       "messageCount(atLeast:) must survive encode→decode round-trip")
+    }
+}

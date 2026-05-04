@@ -36,6 +36,10 @@ enum PreferenceKey {
     static let iMessageEnabled = "pref.channels.iMessageEnabled"
     static let slackEnabled    = "pref.channels.slackEnabled"
 
+    /// Timestamp of the last successful inbox sync returning ≥1 thread.
+    /// Nil if no successful sync has occurred (fresh install or post-wipe).
+    static let inboxLastSyncDate = "pref.inbox.lastSyncDate"
+
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
     static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive, onboardingCompleted]
 }

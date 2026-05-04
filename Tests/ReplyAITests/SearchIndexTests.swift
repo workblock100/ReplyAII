@@ -1313,3 +1313,67 @@ final class SearchIndexClearStatsTests: XCTestCase {
                        "draftsGenerated must be unchanged by clear()")
     }
 }
+
+// MARK: - REP-252: BM25 ranking — higher term frequency ranks first
+
+final class SearchIndexBM25Tests: XCTestCase {
+
+    // FTS5 ORDER BY rank uses BM25: thread with more occurrences of the query
+    // term in its message body should appear before threads with fewer.
+    func testBM25RanksHigherFrequencyFirst() async {
+        let index = SearchIndex()
+        let threadA = MessageThread(id: "rep252-a", channel: .imessage, name: "Alice",
+                                    avatar: "A", preview: "", time: "")
+        let threadB = MessageThread(id: "rep252-b", channel: .imessage, name: "Bob",
+                                    avatar: "B", preview: "", time: "")
+        // Thread A: "hello" appears 3 times in one message body.
+        await index.upsert(thread: threadA, messages: [
+            Message(from: .them, text: "hello hello hello", time: "t")
+        ])
+        // Thread B: "hello" appears once.
+        await index.upsert(thread: threadB, messages: [
+            Message(from: .them, text: "hello", time: "t")
+        ])
+
+        let hits = await index.search("hello")
+        let ids = hits.map(\.threadID)
+        XCTAssertTrue(ids.contains("rep252-a"), "thread A must appear in results")
+        XCTAssertTrue(ids.contains("rep252-b"), "thread B must appear in results")
+        let idxA = ids.firstIndex(of: "rep252-a")!
+        let idxB = ids.firstIndex(of: "rep252-b")!
+        XCTAssertLessThan(idxA, idxB,
+            "thread with 3× 'hello' must rank before thread with 1× 'hello'")
+    }
+
+    // Three-way monotonic check: 5 occurrences > 3 > 1, all ranked in frequency order.
+    func testBM25RankingIsMonotonic() async {
+        let index = SearchIndex()
+        let t1 = MessageThread(id: "rep252-m1", channel: .imessage, name: "One",
+                               avatar: "1", preview: "", time: "")
+        let t3 = MessageThread(id: "rep252-m3", channel: .imessage, name: "Three",
+                               avatar: "3", preview: "", time: "")
+        let t5 = MessageThread(id: "rep252-m5", channel: .imessage, name: "Five",
+                               avatar: "5", preview: "", time: "")
+
+        await index.upsert(thread: t1, messages: [
+            Message(from: .them, text: "apple", time: "t")
+        ])
+        await index.upsert(thread: t3, messages: [
+            Message(from: .them, text: "apple apple apple", time: "t")
+        ])
+        await index.upsert(thread: t5, messages: [
+            Message(from: .them, text: "apple apple apple apple apple", time: "t")
+        ])
+
+        let hits = await index.search("apple")
+        let ids = hits.map(\.threadID)
+        XCTAssertTrue(ids.contains("rep252-m1"), "1× thread must appear")
+        XCTAssertTrue(ids.contains("rep252-m3"), "3× thread must appear")
+        XCTAssertTrue(ids.contains("rep252-m5"), "5× thread must appear")
+        let idx1 = ids.firstIndex(of: "rep252-m1")!
+        let idx3 = ids.firstIndex(of: "rep252-m3")!
+        let idx5 = ids.firstIndex(of: "rep252-m5")!
+        XCTAssertLessThan(idx5, idx3, "5× must rank above 3×")
+        XCTAssertLessThan(idx3, idx1, "3× must rank above 1×")
+    }
+}

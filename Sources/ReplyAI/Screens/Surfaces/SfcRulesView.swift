@@ -144,6 +144,8 @@ struct SfcRulesView: View {
             return "time of day \(s):00–\(e):00"
         case .threadNameMatchesRegex(let r):
             return "thread name matches /\(r)/"
+        case .messageCount(let n):
+            return "has at least \(n) message\(n == 1 ? "" : "s")"
         }
     }
 

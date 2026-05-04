@@ -576,6 +576,7 @@ final class InboxViewModel {
 
             syncStatus = .live(at: Date())
             saveThreadCache(threads)
+            defaults.set(Date(), forKey: PreferenceKey.inboxLastSyncDate)
             viewState = .populated
 
             // Preload messages for the focused thread so the detail pane

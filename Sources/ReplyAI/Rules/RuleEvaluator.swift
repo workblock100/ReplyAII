@@ -23,6 +23,9 @@ struct RuleContext: Sendable {
     /// Display name of the thread (contact name or group name). Used by
     /// `threadNameMatchesRegex` predicate.
     var threadDisplayName: String = ""
+    /// Total number of messages loaded for the thread. Defaults to 0 when
+    /// the context is built without loading full message history.
+    var messageCount: Int = 0
 
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
@@ -116,6 +119,9 @@ enum RuleEvaluator {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
             let range = NSRange(ctx.threadDisplayName.startIndex..., in: ctx.threadDisplayName)
             return regex.firstMatch(in: ctx.threadDisplayName, range: range) != nil
+
+        case .messageCount(let n):
+            return ctx.messageCount >= n
         }
     }
 

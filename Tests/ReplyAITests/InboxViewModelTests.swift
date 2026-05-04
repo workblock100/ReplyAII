@@ -1643,3 +1643,65 @@ final class InboxViewModelFailedSendTests: XCTestCase {
                         "sendToast must be set with an error description after a failed send")
     }
 }
+
+// MARK: - REP-268: Preferences.inbox.lastSyncDate sync path
+
+@MainActor
+final class InboxViewModelLastSyncDateTests: XCTestCase {
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suite = "test.ReplyAI.lastSyncDate.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        UserDefaults.registerReplyAIDefaults(in: d)
+        return (d, suite)
+    }
+
+    private func makeThread(_ id: String = "t1") -> MessageThread {
+        MessageThread(id: id, channel: .imessage, name: "Alice",
+                      avatar: "A", preview: "hey", time: "now", unread: 1)
+    }
+
+    // After syncFromIMessage returns ≥1 thread, lastSyncDate must be set.
+    func testLastSyncDateUpdatedAfterSuccessfulSync() async {
+        let (d, suite) = makeDefaults()
+        defer { d.removePersistentDomain(forName: suite) }
+
+        let t = makeThread()
+        let vm = InboxViewModel(
+            threads: [t],
+            imessage: StaticMockChannel(threads: [t]),
+            contacts: fastContacts(),
+            defaults: d
+        )
+
+        XCTAssertNil(d.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date,
+                     "precondition: lastSyncDate must be nil before any sync")
+
+        await vm.syncFromIMessage()
+
+        XCTAssertNotNil(d.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date,
+                        "lastSyncDate must be set after a successful sync returning threads")
+    }
+
+    // When sync returns zero threads, lastSyncDate must NOT be updated.
+    func testLastSyncDateNotUpdatedOnEmptySync() async {
+        let (d, suite) = makeDefaults()
+        defer { d.removePersistentDomain(forName: suite) }
+
+        // Demo mode must be off so syncFromIMessage doesn't populate from fixtures
+        // and incorrectly mark the sync as successful.
+        d.set(false, forKey: PreferenceKey.demoModeActive)
+
+        let vm = InboxViewModel(
+            threads: [],
+            imessage: StaticMockChannel(threads: []),
+            contacts: fastContacts(),
+            defaults: d
+        )
+
+        await vm.syncFromIMessage()
+
+        XCTAssertNil(d.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date,
+                     "lastSyncDate must remain nil when sync returns empty thread list")
+    }
+}

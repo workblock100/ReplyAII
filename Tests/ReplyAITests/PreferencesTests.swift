@@ -374,3 +374,81 @@ extension PreferencesTests {
             "non-exempt key must be removed from persistent domain by wipe")
     }
 }
+
+// MARK: - REP-207: autoPrime and autoApplyOnSync not pre-set in the persistent domain
+
+final class PreferencesAutoActionSafetyDefaultTests: XCTestCase {
+
+    // Neither autoPrime nor autoApplyRulesOnSync must have a value written to the
+    // persistent domain on a fresh suite (before any set/register call). If either
+    // key had a persisted `true` value, the app would auto-send replies without user
+    // confirmation even after a factory wipe that cleared and re-init'd the store.
+    // Guard: verify the persistent domain contains no pre-existing value for these keys.
+    func testAutoPrimeNotPreSetInPersistentDomain() {
+        let suite = "test.ReplyAI.safetyDefault.autoPrime.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        defer { d.removePersistentDomain(forName: suite) }
+
+        // persistent domain must not contain the key before anyone writes it
+        let persisted = d.persistentDomain(forName: suite)?[PreferenceKey.autoPrime]
+        XCTAssertNil(persisted,
+            "autoPrime must not be pre-written in the persistent domain on a fresh suite")
+    }
+
+    func testAutoApplyOnSyncNotPreSetInPersistentDomain() {
+        let suite = "test.ReplyAI.safetyDefault.autoApply.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        defer { d.removePersistentDomain(forName: suite) }
+
+        let persisted = d.persistentDomain(forName: suite)?[PreferenceKey.autoApplyRulesOnSync]
+        XCTAssertNil(persisted,
+            "autoApplyRulesOnSync must not be pre-written in the persistent domain on a fresh suite")
+    }
+}
+
+// MARK: - REP-268: Preferences.inbox.lastSyncDate
+
+final class PreferencesLastSyncDateTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUpWithError() throws {
+        suiteName = "test.ReplyAI.lastSyncDate.\(UUID().uuidString)"
+        guard let d = UserDefaults(suiteName: suiteName) else {
+            XCTFail("couldn't create isolated UserDefaults suite")
+            return
+        }
+        defaults = d
+    }
+
+    override func tearDownWithError() throws {
+        defaults?.removePersistentDomain(forName: suiteName)
+    }
+
+    // Fresh UserDefaults suite has no lastSyncDate — key is absent, not defaulted.
+    func testLastSyncDateNilOnFreshSuite() {
+        let stored = defaults.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date
+        XCTAssertNil(stored, "lastSyncDate must be nil on a fresh UserDefaults suite")
+    }
+
+    // Setting the key stores and retrieves the correct Date value.
+    func testLastSyncDateStoresAndRetrievesDate() {
+        let now = Date()
+        defaults.set(now, forKey: PreferenceKey.inboxLastSyncDate)
+        let stored = defaults.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date
+        XCTAssertNotNil(stored, "lastSyncDate must be non-nil after being set")
+        XCTAssertEqual(stored?.timeIntervalSinceReferenceDate ?? 0,
+                       now.timeIntervalSinceReferenceDate,
+                       accuracy: 1.0,
+                       "stored date must match the date that was written")
+    }
+
+    // wipeReplyAIDefaults removes lastSyncDate because it is not in wipeExemptions.
+    func testLastSyncDateClearedByWipe() {
+        defaults.set(Date(), forKey: PreferenceKey.inboxLastSyncDate)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        let stored = defaults.object(forKey: PreferenceKey.inboxLastSyncDate) as? Date
+        XCTAssertNil(stored,
+            "lastSyncDate must be removed from persistent domain by wipeReplyAIDefaults")
+    }
+}
