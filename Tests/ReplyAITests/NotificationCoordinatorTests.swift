@@ -429,4 +429,24 @@ final class NotificationCoordinatorTests: XCTestCase {
             "onIncomingMessage callback must fire regardless of inbox liveness")
         XCTAssertNil(coordinator.inbox, "inbox must remain nil — no side-effect bound it")
     }
+
+    // MARK: - Wire-format constant pin (REPLYAI_THREAD / REPLY)
+    //
+    // categoryID and replyActionID are the identifiers macOS uses to
+    // route inline-reply actions back to the app, and they appear in
+    // any notifications that are scheduled but not yet fired. Renaming
+    // them is a soft-migration: in-flight notifications that already
+    // carry the old category/action identifier won't route correctly
+    // to the new handler. Pin the literal strings so a careless rename
+    // surfaces as a test failure that prompts a migration plan.
+
+    func testCategoryIDIsStableWireFormat() {
+        XCTAssertEqual(NotificationCoordinator.categoryID, "REPLYAI_THREAD",
+            "categoryID is persisted in scheduled notifications — renaming requires a migration")
+    }
+
+    func testReplyActionIDIsStableWireFormat() {
+        XCTAssertEqual(NotificationCoordinator.replyActionID, "REPLY",
+            "replyActionID is persisted in scheduled notifications — renaming requires a migration")
+    }
 }
