@@ -2888,3 +2888,49 @@ final class RulesStoreDefaultFileURLTests: XCTestCase {
                       "rules path must be absolute so behavior doesn't depend on the cwd of the launching process")
     }
 }
+
+/// Pins the human-readable seed rule names. Seeds are the first thing a
+/// brand-new user sees in `set-rules`; renames silently change that
+/// first impression, and product copy review (REP-062) can't catch drift
+/// that lands in the same commit. UUIDs are intentionally not asserted —
+/// they are randomly generated per-rule and can change freely.
+final class SmartRuleSeedNamesTests: XCTestCase {
+
+    func testSeedRulesCountPinned() {
+        // The bundle of seeds defines the empty-state look of the rules
+        // screen; adding/removing one is a deliberate product call.
+        XCTAssertEqual(SmartRule.seedRules.count, 4,
+                       "seed rules count must remain stable; add → reflect new shape in this pin")
+    }
+
+    func testSeedRulesNamesInOrder() {
+        // Order is the display order in set-rules; flipping order shifts
+        // which rule a brand-new user reads first.
+        let names = SmartRule.seedRules.map(\.name)
+        XCTAssertEqual(names, [
+            "Any message contains a 2FA code",
+            #"Slack DM from @maya-chen with "deck""#,
+            "WhatsApp voice memo > 30s",
+            "Newsletter from any @*substack.com",
+        ])
+    }
+
+    func testFirstThreeSeedRulesActiveByDefault() {
+        // 2FA, Slack DM, WhatsApp voice memo all fire on install so the
+        // user sees the rules engine doing something on day one.
+        XCTAssertTrue(SmartRule.seedRules[0].active,
+                      "2FA seed must be active so first-impression demos light up")
+        XCTAssertTrue(SmartRule.seedRules[1].active,
+                      "Slack DM seed must be active by default")
+        XCTAssertTrue(SmartRule.seedRules[2].active,
+                      "WhatsApp voice memo seed must be active by default")
+    }
+
+    func testSubstackSeedDisabledByDefault() {
+        // The substack seed is shown as a deliberately *off* example so
+        // the user can see what an inactive rule looks like without it
+        // accidentally archiving real newsletters.
+        XCTAssertFalse(SmartRule.seedRules[3].active,
+                       "Substack seed must default to inactive so it doesn't archive real newsletters")
+    }
+}
