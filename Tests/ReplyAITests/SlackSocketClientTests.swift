@@ -255,4 +255,142 @@ final class SlackSocketClientTests: XCTestCase {
 
         client.stop()
     }
+
+    // MARK: - dispatch edge cases
+
+    /// Unknown `type:` values (Slack adds new event envelope kinds over time)
+    /// must be silently dropped, never forwarded to onEventReceived.
+    /// Otherwise a future Slack-side change could deliver garbage to consumers.
+    func testSlackSocketClientDropsUnknownEnvelopeTypes() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        var callbackCount = 0
+        client.onEventReceived = { _ in callbackCount += 1 }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        let task = factory.task(at: 0)
+        task.deliver(message: .string(#"{"type":"goodbye"}"#))
+        task.deliver(message: .string(#"{"type":"disconnect","reason":"warning"}"#))
+
+        // Sync via a real events_callback to know the dropped frames have processed.
+        let sync = expectation(description: "events_callback sync")
+        client.onEventReceived = { _ in sync.fulfill() }
+        task.deliver(message: .string(#"{"type":"events_callback"}"#))
+        await fulfillment(of: [sync], timeout: 2)
+
+        XCTAssertEqual(callbackCount, 0, "unknown envelope types must not be forwarded")
+
+        client.stop()
+    }
+
+    /// Malformed JSON / no `type:` field must be dropped without crashing.
+    /// Slack's wire format isn't formally guaranteed; we should never throw
+    /// past the receive loop into the consumer.
+    func testSlackSocketClientDropsMalformedAndMissingTypeFrames() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        var callbackCount = 0
+        client.onEventReceived = { _ in callbackCount += 1 }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        let task = factory.task(at: 0)
+        // Not JSON
+        task.deliver(message: .string("not-json-at-all"))
+        // JSON but no type field
+        task.deliver(message: .string(#"{"payload":{}}"#))
+        // Empty object
+        task.deliver(message: .string("{}"))
+
+        let sync = expectation(description: "events_callback sync")
+        client.onEventReceived = { _ in sync.fulfill() }
+        task.deliver(message: .string(#"{"type":"events_callback"}"#))
+        await fulfillment(of: [sync], timeout: 2)
+
+        XCTAssertEqual(callbackCount, 0, "malformed frames must be silently dropped")
+
+        client.stop()
+    }
+
+    /// `.data(...)` variant of WebSocket message is supported as well as `.string(...)`.
+    /// Slack's Socket Mode normally sends text frames, but the dispatch path
+    /// switches on both — this test guards that branch from regression.
+    func testSlackSocketClientHandlesDataFrameVariant() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        let exp = expectation(description: "data variant forwarded")
+        client.onEventReceived = { _ in exp.fulfill() }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        let payload = Data(#"{"type":"events_callback"}"#.utf8)
+        factory.task(at: 0).deliver(message: .data(payload))
+
+        await fulfillment(of: [exp], timeout: 2)
+
+        client.stop()
+    }
+
+    // MARK: - lifecycle idempotency
+
+    /// Calling stop() before start() must not crash and must leave the client
+    /// in a state where subsequent start() calls are no-ops.
+    func testStopBeforeStartIsSafeAndDisablesFutureStart() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        client.stop()  // before start
+        client.start() // must be no-op since isStopped
+
+        // Give the receive loop time to spin up if it were going to.
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(factory.createdTaskCount, 0,
+            "start() after stop() must not create a websocket task")
+    }
+
+    /// Calling stop() twice must not crash or double-cancel.
+    func testStopIsIdempotent() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        client.stop()
+        client.stop()  // second stop must be safe
+
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        // First stop cancels the task; second stop has nothing to cancel.
+        XCTAssertEqual(factory.task(at: 0).cancelCallCount, 1,
+            "second stop() must not double-cancel the underlying task")
+    }
+
+    /// onEventReceived = nil must not crash when an events_callback frame arrives.
+    /// Production code sets the handler before start(), but defensive nil-check
+    /// prevents a future refactor from regressing into a NPE.
+    func testEventDeliveredWithNilHandlerDoesNotCrash() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+        client.onEventReceived = nil
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        factory.task(at: 0).deliver(message: .string(#"{"type":"events_callback"}"#))
+
+        // No crash within 50 ms = pass.
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        client.stop()
+    }
 }

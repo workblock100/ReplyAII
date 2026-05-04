@@ -113,7 +113,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                848 tests
+Tests/ReplyAITests/                854 tests
 ```
 
 ## Architecture patterns
