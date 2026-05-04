@@ -765,6 +765,47 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertFalse(directState.text.isEmpty, ".direct draft must have content")
     }
 
+    // MARK: - REP-216: regenerate for same tone must not no-op
+
+    // After priming completes, regenerate with the identical tone must enter
+    // a non-done (priming) state immediately — guards against a shortcut that
+    // skips work when the tone hasn't changed.
+    func testRegenerateSameToneTransitionsThroughPriming() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .playful, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .playful).isDone
+        }
+
+        engine.regenerate(thread: thread, tone: .playful, history: [])
+
+        // Immediately after regenerate the entry must be non-done (streaming started).
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .playful).isDone,
+                       "engine must enter priming (not done) immediately after regenerate")
+    }
+
+    // After priming with the same tone, regenerate must reach .ready again.
+    func testRegenerateSameToneReachesReady() async throws {
+        let engine = DraftEngine(service: StubLLMService(tokenDelay: 0...0, initialDelay: 0))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .playful, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .playful).isDone
+        }
+
+        engine.regenerate(thread: thread, tone: .playful, history: [])
+        try await waitUntil(timeout: 2.0) {
+            engine.state(threadID: thread.id, tone: .playful).isDone
+        }
+
+        let state = engine.state(threadID: thread.id, tone: .playful)
+        XCTAssertTrue(state.isDone, "engine must reach ready after same-tone regenerate")
+        XCTAssertFalse(state.text.isEmpty, "regenerated draft must have content")
+    }
+
 }
 
 // MARK: - Test-only mock LLM services (REP-038)

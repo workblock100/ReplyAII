@@ -1362,8 +1362,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (testRegenerateSameTone* in DraftEngineTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: REP-203 tests tone-change eviction on `regenerate`. This is the same-tone complement: prime thread X with `.casual` → wait for `.ready`. Call `regenerate(threadID: X, tone: .casual)`. Assert engine transitions back through `.priming` then reaches `.ready` again (new draft, same tone). A `StubLLMService` with a configurable second chunk set can verify the draft content differs from the first prime. Guards against a shortcut where `regenerate` no-ops when the tone hasn't changed.
 - success_criteria:
