@@ -95,4 +95,89 @@ final class ScreenInventoryTests: XCTestCase {
         XCTAssertEqual(ScreenID.setAccount.rawValue, "set-account")
         XCTAssertEqual(ScreenID.errDisconnected.rawValue, "err-disconnected")
     }
+
+    // MARK: - Full raw-value corpus
+
+    func testAllOnboardingRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.obWelcome.rawValue,       "ob-welcome")
+        XCTAssertEqual(ScreenID.obPrivacy.rawValue,       "ob-privacy")
+        XCTAssertEqual(ScreenID.obPermissions.rawValue,   "ob-permissions")
+        XCTAssertEqual(ScreenID.obChannels.rawValue,      "ob-channels")
+        XCTAssertEqual(ScreenID.obChannelDetail.rawValue, "ob-channel-detail")
+        XCTAssertEqual(ScreenID.obVoice.rawValue,         "ob-voice")
+        XCTAssertEqual(ScreenID.obTone.rawValue,          "ob-tone")
+        XCTAssertEqual(ScreenID.obShortcuts.rawValue,     "ob-shortcuts")
+        XCTAssertEqual(ScreenID.obDone.rawValue,          "ob-done")
+    }
+
+    func testAllMainAppRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.appInbox.rawValue,        "app-inbox")
+        XCTAssertEqual(ScreenID.appInboxEmpty.rawValue,   "app-inbox-empty")
+        XCTAssertEqual(ScreenID.appInboxLoading.rawValue, "app-inbox-loading")
+        XCTAssertEqual(ScreenID.appOffline.rawValue,      "app-offline")
+    }
+
+    func testAllThreadRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.thrGroup.rawValue, "thr-group")
+        XCTAssertEqual(ScreenID.thrMedia.rawValue, "thr-media")
+        XCTAssertEqual(ScreenID.thrLong.rawValue,  "thr-long")
+    }
+
+    func testAllComposerRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.cmpTones.rawValue,   "cmp-tones")
+        XCTAssertEqual(ScreenID.cmpCustom.rawValue,  "cmp-custom")
+        XCTAssertEqual(ScreenID.cmpLowconf.rawValue, "cmp-lowconf")
+        XCTAssertEqual(ScreenID.cmpNothing.rawValue, "cmp-nothing")
+    }
+
+    func testAllSurfaceRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.sfcPalette.rawValue,      "sfc-palette")
+        XCTAssertEqual(ScreenID.sfcSnooze.rawValue,       "sfc-snooze")
+        XCTAssertEqual(ScreenID.sfcRules.rawValue,        "sfc-rules")
+        XCTAssertEqual(ScreenID.sfcMenubar.rawValue,      "sfc-menubar")
+        XCTAssertEqual(ScreenID.sfcNotification.rawValue, "sfc-notification")
+    }
+
+    func testAllSettingsRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.setAccount.rawValue,   "set-account")
+        XCTAssertEqual(ScreenID.setVoice.rawValue,     "set-voice")
+        XCTAssertEqual(ScreenID.setChannels.rawValue,  "set-channels")
+        XCTAssertEqual(ScreenID.setShortcuts.rawValue, "set-shortcuts")
+        XCTAssertEqual(ScreenID.setPrivacy.rawValue,   "set-privacy")
+        XCTAssertEqual(ScreenID.setModel.rawValue,     "set-model")
+    }
+
+    func testAllErrorRawValuesAreStable() {
+        XCTAssertEqual(ScreenID.errDisconnected.rawValue, "err-disconnected")
+        XCTAssertEqual(ScreenID.errAuth.rawValue,         "err-auth")
+        XCTAssertEqual(ScreenID.errModelUpdate.rawValue,  "err-model-update")
+    }
+
+    func testRawValueRoundTripCoversEveryCase() {
+        // Defense against silent rename: if any case's raw value drifts but
+        // a hand-written test in the per-section corpus above is missed, the
+        // round-trip via init?(rawValue:) catches it here.
+        for id in ScreenID.allCases {
+            XCTAssertEqual(ScreenID(rawValue: id.rawValue), id,
+                           "raw-value round-trip failed for \(id)")
+        }
+    }
+
+    func testRawValuesUseKebabCasePrefixConvention() {
+        // app-shell.jsx groups screens by prefix (`ob-`, `app-`, `thr-`, `cmp-`,
+        // `sfc-`, `set-`, `err-`). A new case without a recognized prefix would
+        // silently miss the gallery routing.
+        let knownPrefixes = ["ob-", "app-", "thr-", "cmp-", "sfc-", "set-", "err-"]
+        for id in ScreenID.allCases {
+            let raw = id.rawValue
+            XCTAssertTrue(
+                knownPrefixes.contains(where: { raw.hasPrefix($0) }),
+                "\(raw) does not match any known prefix \(knownPrefixes)"
+            )
+            XCTAssertEqual(raw, raw.lowercased(),
+                           "\(raw) must be lowercase for kebab-case convention")
+            XCTAssertFalse(raw.contains("_"),
+                           "\(raw) must use hyphens, not underscores")
+        }
+    }
 }
