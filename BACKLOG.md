@@ -726,9 +726,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: c975e51
 - claimed_by: worker-2026-05-02-113834
-- blocker: code complete on `wip/2026-05-02-113834-rep272-rep257-slack-authorize` — added `SlackAuthorizing` protocol (SlackOAuthFlow now conforms), `typealias SlackOAuthFlowFactory`, `SlackChannel.authorize(clientID:clientSecret:completion:)` delegating to the factory, plus 3 new tests (correct credentials, success completion, failure completion). Bundled with REP-257 tests. Could not run `swift test` — another SwiftPM session held `.build` lock for the full worker budget. Human should run tests on the wip branch and merge if green.
+- blocker: cleared — merged to main as commit `c975e51` (autopilot fire 2026-05-03-1451). The `SlackAuthorizing` seam, `SlackOAuthFlowFactory` typealias, and `SlackChannel.authorize(clientID:clientSecret:completion:)` are present on main with the three contract tests; the swift-test lock contention that blocked the original worker no longer applies.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class — prereq: REP-266 merged).** `SlackChannel` currently throws `authorizationDenied` for all calls when no token present. Add `authorize(clientID: String, clientSecret: String, completion: @escaping (Result<Void, OAuthError>) -> Void)` that delegates to a `SlackOAuthFlow` instance. Injectable `SlackOAuthFlowFactory: (String, String) -> SlackOAuthFlow` for test isolation. On success: token now in Keychain, completion called with `.success(())`; subsequent `recentThreads()` calls return real data. On failure: completion called with `.failure(error)`. Idempotent: a second `authorize` call while one is in-flight invokes the completion via the existing flow (no double-listener bind). Tests: factory called with correct `clientID` + `clientSecret`; success completion called when flow returns success; failure completion called when flow returns failure.
 - success_criteria:
@@ -1064,9 +1065,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-085959
-- blocker: MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- blocker: cleared —  MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
+- reconcile_note: Tests/ReplyAITests/StatsTests.swift carries the REP-177 MARK section with `overallAcceptanceRate()` aggregate tests.
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.acceptanceRate(for tone:)` gives per-tone rates. A UI surface (e.g. set-privacy screen) may want an aggregate across all tones. Add `Stats.overallAcceptanceRate() -> Double?` that returns `nil` if no drafts generated across any tone, or `Double(totalSent) / Double(totalGenerated)` aggregating across all tone counters. Tests: fresh instance → nil; 3 generated across 2 tones, 1 sent → 0.333...; all generated but none sent → 0.0.
 - success_criteria:
@@ -1091,9 +1093,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-085959
-- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- reconcile_note: Tests/ReplyAITests/RulesTests.swift carries the REP-179 MARK section verifying RuleEvaluator equal-priority deterministic ordering.
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RuleEvaluator.matching(rules:context:)` sorts by priority descending. When two rules have the same priority, the output order should be deterministic (insertion order preserved, not arbitrary). Test: two rules at priority 0, inserted A then B; matching returns `[A, B]` (insertion order). Also test with priority 5 and 5: same result. This guards against a future `sort` → `stableSort` rollback. No production code changes expected if insertion order is already preserved.
 - success_criteria:
@@ -1107,9 +1110,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-085959
-- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- reconcile_note: Tests/ReplyAITests/PreferencesTests.swift carries the REP-183 MARK section guarding wipeReplyAIDefaults exemptions.
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: REP-130 and REP-115 added `firstLaunchDate` and `launchCount` as wipe-exempt keys. Verify the exemption is enforced: call `wipe()` after setting both values; assert both survive. This pins the `wipeExemptions` set as a regression guard — if the exemption list is accidentally cleared, this test fails. Also test: non-exempt keys ARE wiped (e.g. `autoPrimeEnabled` returns default after wipe). No production code changes expected.
 - success_criteria:
@@ -1124,9 +1128,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-085959
-- blocker: MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
+- reconcile_note: Tests/ReplyAITests/StatsTests.swift carries the REP-187 MARK section verifying snapshot() JSON-serializable contract.
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.snapshot()` returns `[String: Any]`. This dictionary is passed to `JSONSerialization.data(withJSONObject:)` by `writeWeeklyLog()`. If any value type is not JSON-serializable (e.g. a `Date` object, a struct), `writeWeeklyLog` will silently fail or crash at the `try?` call site. Pin the contract: `JSONSerialization.isValidJSONObject(snapshot())` returns `true` for a freshly-initialized Stats instance; also for one with non-zero counters. No production code changes expected if the snapshot already uses only numbers/strings.
 - success_criteria:
@@ -1157,8 +1162,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-135355
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- reconcile_note: Tests/ReplyAITests/IMessageSenderTests.swift carries the REP-193 MARK section verifying the 4096-char boundary with multi-byte Unicode.
 - files_to_touch: `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added a 4096-char message length guard in `IMessageSender.send()`. Pin the boundary: a 4096-char ASCII message sends (no throw); a 4097-char message throws `SenderError.messageTooLong`. Also: a 4096-char message composed of multi-byte Unicode chars (emoji) uses Swift `String.count` (char count), not byte count — verify a 10-emoji string that is >4096 bytes but <4096 chars passes. Uses the injectable `executeHook` seam — no real AppleScript.
 - success_criteria:
@@ -1172,8 +1178,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-135355
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- reconcile_note: Tests/ReplyAITests/PreferencesTests.swift carries the REP-194 MARK section verifying threadLimit clamping.
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: `pref.inbox.threadLimit` is used as a SQL LIMIT clause. If stored as 0, negative, or an unreasonably large value, the query produces no results or hangs on very large result sets. Add a computed getter that clamps the raw stored value to `max(1, min(200, rawValue))`. The setter writes the raw value as-is (clamping happens at read time). Tests: raw value -1 → getter returns 1; raw value 0 → getter returns 1; raw value 201 → getter returns 200; raw value 50 → getter returns 50; raw value 200 → getter returns 200.
 - success_criteria:
@@ -1189,8 +1196,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-135355
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- reconcile_note: Tests/ReplyAITests/DraftEngineTests.swift carries the REP-195 MARK section verifying dismiss on an unprimed thread is a silent no-op.
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
 - scope: `DraftEngine.dismiss(threadID:tone:)` transitions a `.ready` draft to `.idle` and clears the `DraftStore` entry. If called on a `threadID` that was never primed (no cache entry at all), the call should silently return — no crash, no state change, no `DraftStore` delete attempted on a non-existent file. Tests: fresh engine, call `dismiss("never-primed-id", tone: .casual)`; assert no crash; assert state for that thread is `.idle`. Also test dismiss after prime → ready succeeds as usual.
 - success_criteria:
@@ -1203,8 +1211,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-135355
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- reconcile_note: Tests/ReplyAITests/SearchIndexTests.swift carries the REP-196 MARK section verifying repeated-search ordering stability.
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: FTS5 BM25 ranking is deterministic for a fixed index state. Pin the contract: index 3 threads with different relevance levels for the query "hello"; search once → get order [A, B, C]; search again without any writes → get identical [A, B, C]. A third search after a no-op `upsert` of an unrelated thread also returns [A, B, C]. Unstable ordering would cause visible jump in ⌘K palette results.
 - success_criteria:
@@ -1218,8 +1227,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-23-135355
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- reconcile_note: Tests/ReplyAITests/IMessageChannelTests.swift carries the REP-198 MARK section verifying threads with no messages are excluded from recentThreads.
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: `recentThreads(limit:)` joins `chat` and `message` tables. A chat with zero associated messages (draft group, invite pending) should not appear in the result. Test with in-memory SQLite fixture: one thread with 3 messages, one thread with 0 messages. Assert: only the thread with messages appears in the returned list. Also assert: the returned thread's `messageCount` equals 3 (not 0).
 - success_criteria:
@@ -1407,9 +1417,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: cf3d379
 - claimed_by: null
-- blocker: Implementation complete on wip/2026-04-23-191507-appleScript-fallback (REP-236, +228 LOC, 4 tests). Worker must NOT re-implement — check if REP-236's wip branch merged first; if so, mark this done. If not merged, this task is waiting on human swift test + merge (REP-254).
+- blocker: cleared — `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (with injectable executor + nameFor) is on main; `IMessageChannel` calls `appleScriptReader.recentChats()` on `authorizationDenied`; `Tests/ReplyAITests/IMessageChannelTests.swift` carries `testAppleScriptFallbackCalledWhenFDADenied`, `testAppleScriptFallbackExecutorIsInjectable`, and `testAppleScriptFallbackErrorPropagates`.
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift` (or new `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift`), `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned (alt message-source).** Add `AppleScriptMessageReader.recentChats() -> [MessageThread]` that executes `tell application "Messages" to get every chat` via `NSAppleScript`. Returns a `[MessageThread]` with display name, chat GUID, and a placeholder `previewText` (AppleScript can retrieve `every text chat` with `name` and `id` but not full message history — that's OK for the thread list). No FDA required — uses Automation permission. `IMessageChannel.recentThreads()` uses this as a fallback when `openReadOnly()` fails with `authorizationDenied`. Tests use injectable AppleScript executor (same seam as `IMessageSender`).
 - success_criteria:
@@ -1488,9 +1499,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-24-143143
-- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
+- status: done
+- done_on: autopilot-2026-05-03-2211 (reconcile)
+- blocker: cleared —  code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
+- reconcile_note: Tests/ReplyAITests/RulesTests.swift carries the REP-220 MARK section verifying RulesStore concurrent add+remove safety.
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore` uses `Locked<T>` for thread-safety. Pin correctness under concurrent writes: `DispatchQueue.concurrentPerform(iterations: 50)` alternately calls `add(_:)` and `remove(ruleID:)` on the same store. After completion, assert: no crash, `rules.count ≥ 0`, no duplicate IDs. Guards against a race where a `Locked<T>` scope is held across an add while a concurrent remove modifies a different index.
 - success_criteria:
