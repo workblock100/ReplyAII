@@ -160,9 +160,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: blocked
-- claimed_by: worker-2026-04-24-205912
-- blocker: implementation pushed on `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`, "REP-500 fire 1: split Sources/ReplyAI into ReplyAICore + ReplyAIMLX + ReplyAIApp"); pending validation + REP-502 follow-on (cross-module imports). Worker should NOT re-claim — next worker pulls REP-502 against this wip branch as base.
+- status: open
+- claimed_by: null
+- blocker: previous wip branch `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`) was deleted/lost — no MLX-extraction branches currently on origin (verified 2026-05-04 by autopilot). The whole REP-501→REP-505 chain needs to be re-attempted from scratch on a fresh wip branch. This is L-effort and risky for autopilot fires; recommend a human-paired session or a dedicated multi-fire worker assignment that can complete REP-501→REP-504 before validation in REP-505.
 - depends_on: []
 - files_to_touch:
   - `Package.swift` (rewrite: 4 targets — ReplyAICore library, ReplyAIMLX library, ReplyAI executable, ReplyAITests testTarget)
