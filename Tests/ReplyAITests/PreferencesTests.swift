@@ -553,4 +553,46 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
         XCTAssertEqual(stored[0].count, 500,
                        "individual voice example must be truncated to 500 chars at setter")
     }
+
+    // MARK: - boundary cases
+
+    func testVoiceExampleMessagesGetterReturnsEmptyWhenUnset() {
+        // The getter must paper over UserDefaults' nil-on-missing convention
+        // so callers can treat the result as a non-optional [String]. A nil
+        // here would force every caller to ?? [], and one missed callsite
+        // would crash the prompt builder.
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored, [],
+                       "unset key must surface as empty array, not nil")
+    }
+
+    func testVoiceExamplesAtCapPassUnchanged() {
+        // Boundary: exactly 20 entries must round-trip unchanged. Off-by-one
+        // in the prefix(20) clamp would either lose entry #20 or admit #21.
+        let twenty = (1...20).map { "example \($0)" }
+        defaults.setVoiceExampleMessages(twenty)
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored, twenty,
+                       "exactly 20 entries must survive the cap unchanged")
+    }
+
+    func testVoiceExampleAtFiveHundredCharsPassesUnchanged() {
+        // Boundary: an entry of exactly 500 chars must NOT be truncated to
+        // 499 — the threshold is `> 500`, not `>= 500`.
+        let exactly500 = String(repeating: "b", count: 500)
+        defaults.setVoiceExampleMessages([exactly500])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored.first, exactly500,
+                       "a 500-char entry sits exactly on the threshold and must not be truncated")
+    }
+
+    func testVoiceExamplesEmptyArrayRoundTrips() {
+        // Set then get [] to guard against the UserDefaults edge case where
+        // setting an empty array might be treated as removeObject.
+        defaults.setVoiceExampleMessages(["one"])
+        defaults.setVoiceExampleMessages([])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored, [],
+                       "writing an empty array must clear the list rather than retain prior values")
+    }
 }
