@@ -228,4 +228,34 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertTrue(capturedScript.contains("- 1 + 1"),
                       "AppleScript startIdx expression must reflect the clamped limit of 1")
     }
+
+    // MARK: - AppleScriptReaderError.errorDescription
+
+    func testScriptCreationFailedHasNonEmptyCopy() {
+        // Surfaced when NSAppleScript(source:) returns nil. Must be
+        // non-empty so the inbox banner doesn't render blank.
+        let copy = AppleScriptReaderError.scriptCreationFailed.errorDescription ?? ""
+        XCTAssertFalse(copy.isEmpty,
+            "scriptCreationFailed must have user-visible copy")
+        XCTAssertTrue(copy.contains("AppleScript"),
+            "copy should reference AppleScript so the user knows which permission is implicated — got: \(copy)")
+    }
+
+    func testExecutionErrorInterpolatesUnderlyingMessage() {
+        // The OSAErrorMessage from NSAppleScript carries the actual
+        // failure cause; surfacing it verbatim is the only useful signal
+        // for triage.
+        let raw = "syntax error: Expected end of line but found identifier."
+        let copy = AppleScriptReaderError.executionError(raw).errorDescription ?? ""
+        XCTAssertTrue(copy.contains(raw),
+            "executionError must include the underlying AppleScript message — got: \(copy)")
+    }
+
+    func testLocalizedErrorBridgeSurfacesOurCopy() {
+        // SwiftUI `error.localizedDescription` should hit our text, not
+        // the generic CFString fallback.
+        let err: Error = AppleScriptReaderError.executionError("permission denied")
+        XCTAssertTrue(err.localizedDescription.contains("permission denied"),
+            "LocalizedError bridge must surface our copy — got: \(err.localizedDescription)")
+    }
 }
