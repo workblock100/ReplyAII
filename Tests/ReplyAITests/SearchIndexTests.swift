@@ -1377,3 +1377,47 @@ final class SearchIndexBM25Tests: XCTestCase {
         XCTAssertLessThan(idx3, idx1, "3× must rank above 1×")
     }
 }
+
+// MARK: - SearchIndex.productionDatabaseURL() — search.db path contract
+//
+// Production callers construct `SearchIndex(databaseURL: SearchIndex.productionDatabaseURL())`
+// and the FTS5 index lives there across launches. A silent path change
+// orphans every shipped user's index — the app would re-index from
+// chat.db on next launch (slow, and only works if FDA still holds).
+// Pin the path components.
+
+final class SearchIndexProductionDatabaseURLTests: XCTestCase {
+
+    func testProductionDatabaseURLEndsWithSearchDB() {
+        let url = SearchIndex.productionDatabaseURL()
+        XCTAssertEqual(url.lastPathComponent, "search.db",
+                       "production index filename must remain search.db — anything else orphans the FTS5 index and forces a re-index from chat.db")
+    }
+
+    func testProductionDatabaseURLLivesUnderReplyAIDirectory() {
+        let url = SearchIndex.productionDatabaseURL()
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        XCTAssertEqual(parent, "ReplyAI",
+                       "search.db must sit in ReplyAI/ so factory-reset can wipe the index along with stats and rules in a single directory sweep")
+    }
+
+    func testProductionDatabaseURLDirectoryExistsAfterCall() {
+        // Documented to lazily create the parent directory; without it,
+        // sqlite3_open_v2 with SQLITE_OPEN_CREATE fails on first launch.
+        let url = SearchIndex.productionDatabaseURL()
+        let dir = url.deletingLastPathComponent()
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDirectory),
+                      "productionDatabaseURL() must create the parent directory so sqlite3_open_v2 can create the file on first launch")
+        XCTAssertTrue(isDirectory.boolValue,
+                      "the ReplyAI/ entry must be a directory, not a stray file")
+    }
+
+    func testProductionDatabaseURLIsAbsoluteAndFileScheme() {
+        let url = SearchIndex.productionDatabaseURL()
+        XCTAssertTrue(url.isFileURL,
+                      "search.db path must be a file:// URL for sqlite3_open_v2(url.path, ...)")
+        XCTAssertTrue(url.path.hasPrefix("/"),
+                      "search.db path must be absolute so behavior doesn't depend on the launching process's cwd")
+    }
+}

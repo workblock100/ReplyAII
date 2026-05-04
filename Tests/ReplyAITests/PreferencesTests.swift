@@ -596,3 +596,35 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
                        "writing an empty array must clear the list rather than retain prior values")
     }
 }
+
+// MARK: - Preferences.lastThreadsCacheURL — cold-launch cache path contract
+//
+// InboxViewModel writes the last-known thread list to this URL after every
+// successful sync (REP-278) so a cold launch with all channels offline can
+// still render recognizable rows. Renaming the path orphans every shipped
+// user's cached threads — they'd see "Loading..." instead of their last
+// inbox state. Pin the path components so the contract holds.
+
+final class PreferencesLastThreadsCacheURLTests: XCTestCase {
+
+    func testLastThreadsCacheURLEndsWithExpectedFilename() {
+        let url = Preferences.lastThreadsCacheURL
+        XCTAssertEqual(url.lastPathComponent, "last-threads-cache.json",
+                       "cold-launch cache filename must remain stable — renaming orphans every shipped user's cached threads")
+    }
+
+    func testLastThreadsCacheURLLivesUnderReplyAIDirectory() {
+        let url = Preferences.lastThreadsCacheURL
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        XCTAssertEqual(parent, "ReplyAI",
+                       "thread cache must sit in ReplyAI/ alongside stats.json and rules.json so factory-reset wipes it as part of the directory sweep")
+    }
+
+    func testLastThreadsCacheURLIsAbsoluteAndFileScheme() {
+        let url = Preferences.lastThreadsCacheURL
+        XCTAssertTrue(url.isFileURL,
+                      "cache path must be a file:// URL for FileManager + Data(contentsOf:) on cold launch")
+        XCTAssertTrue(url.path.hasPrefix("/"),
+                      "cache path must be absolute so behavior doesn't depend on the launching process's cwd")
+    }
+}
