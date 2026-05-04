@@ -1444,8 +1444,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main (InboxViewModelArchiveSearchTests in InboxViewModelTests.swift)
+- claimed_by: autopilot-2026-05-03-1939
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-063 shipped `SearchIndex.delete(threadID:)` and wired it in `InboxViewModel.archive(_:)`. Add an integration test verifying the full pipeline: seed a thread into an injectable `SearchIndex` and the ViewModel; call `archive(thread)`; assert `searchIndex.search("query matching thread")` returns empty. Also assert thread absent from `viewModel.threads` after archive. Guards against future refactors that break the archive→index-purge path.
 - success_criteria:

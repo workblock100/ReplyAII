@@ -1553,6 +1553,48 @@ final class InboxViewModelBulkFilterTests: XCTestCase {
     }
 }
 
+// MARK: - REP-218: archive removes thread from SearchIndex
+
+@MainActor
+final class InboxViewModelArchiveSearchTests: XCTestCase {
+
+    private func thread(id: String, body: String) -> MessageThread {
+        MessageThread(id: id, channel: .imessage, name: "Test", avatar: "T", preview: "", time: "")
+    }
+
+    // After archiving a thread, searching for a unique term from its messages must return no hits.
+    func testArchiveThreadRemovesFromSearchIndex() async {
+        let index = SearchIndex(databaseURL: nil)
+        let t = thread(id: "archsrch", body: "")
+        await index.upsert(thread: t, messages: [
+            Message(from: .them, text: "xuniquearchword in this message", time: "t")
+        ])
+        let before = await index.search("xuniquearchword")
+        XCTAssertEqual(before.count, 1, "precondition: thread must be in index before archive")
+
+        let vm = InboxViewModel(threads: [t], imessage: BlockingMockChannel(),
+                                contacts: fastContacts(), searchIndex: index)
+        vm.archive("archsrch")
+
+        // Give the async Task in archive() time to call searchIndex.delete.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let after = await index.search("xuniquearchword")
+        XCTAssertEqual(after.count, 0, "archived thread must be removed from search index")
+    }
+
+    // After archiving a thread, it must not appear in filteredThreads.
+    func testArchiveThreadRemovedFromViewModelThreads() {
+        let t = thread(id: "arch-vm", body: "")
+        let vm = InboxViewModel(threads: [t], imessage: BlockingMockChannel(),
+                                contacts: fastContacts(),
+                                searchIndex: SearchIndex(databaseURL: nil))
+        vm.archive("arch-vm")
+        XCTAssertFalse(vm.filteredThreads.map(\.id).contains("arch-vm"),
+                       "archived thread must not appear in filteredThreads")
+    }
+}
+
 // MARK: - REP-214: failed send preserves userEdits and surfaces error
 
 @MainActor
