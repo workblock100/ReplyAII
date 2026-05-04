@@ -100,6 +100,48 @@ final class KeychainHelperTests: XCTestCase {
         // Must not throw or crash when no items exist for this service.
         keychain.deleteAll(prefix: "ReplyAI-")
     }
+
+    // MARK: - additional edge cases
+
+    /// `KeychainError.errorDescription` must surface the OSStatus so logs +
+    /// error UIs include something actionable (the raw status code lets a
+    /// developer or a support engineer search Apple's error tables).
+    func testKeychainErrorDescriptionIncludesStatus() {
+        let err: Error = KeychainError.unhandledError(status: -34018)
+        let desc = (err as? LocalizedError)?.errorDescription ?? ""
+        XCTAssertTrue(desc.contains("-34018"),
+            "errorDescription must include the OSStatus code for diagnostics, got: \(desc)")
+    }
+
+    /// Empty-string value must round-trip cleanly. Some upstream channel
+    /// flows store "" to mark a token as explicitly cleared (vs deleted),
+    /// which is semantically different — get() must distinguish empty-string
+    /// from nil.
+    func testEmptyStringValueRoundTripsAsEmpty() throws {
+        try keychain.set(value: "", for: "token")
+        let v = keychain.get(key: "token")
+        XCTAssertEqual(v, "", "empty string round-trips as \"\", not nil")
+        XCTAssertNotNil(v, "set+get of \"\" must return non-nil empty string, not nil")
+    }
+
+    /// Set after delete exercises the add-not-update path (SecItemUpdate
+    /// returns errSecItemNotFound, then SecItemAdd succeeds). Without this
+    /// the value couldn't be re-bound after a token rotation that deletes
+    /// before re-setting.
+    func testSetAfterDeleteSucceeds() throws {
+        try keychain.set(value: "v1", for: "token")
+        keychain.delete(key: "token")
+        try keychain.set(value: "v2", for: "token")
+        XCTAssertEqual(keychain.get(key: "token"), "v2")
+    }
+
+    /// Unicode value must round-trip byte-for-byte (UTF-8). Channel display
+    /// names contain emoji / non-ASCII names.
+    func testUnicodeValueRoundTrip() throws {
+        let v = "Workspace 🚀 — Café \"quotes\" — 漢字"
+        try keychain.set(value: v, for: "token")
+        XCTAssertEqual(keychain.get(key: "token"), v)
+    }
 }
 
 // MARK: - SlackTokenStore (REP-274)
