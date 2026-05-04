@@ -2,6 +2,21 @@ import XCTest
 @testable import ReplyAI
 
 final class RulesTests: XCTestCase {
+
+    /// testSelectThreadAppliesPinRule instantiates an InboxViewModel that
+    /// reads pinnedThreadIDs from UserDefaults.standard (REP-178). Clear
+    /// the key before each test so "t3 starts unpinned" stays true after
+    /// other test runs have written the key.
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+    }
+
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        super.tearDown()
+    }
+
     // MARK: - Codable round-trips
 
     func testPredicateJSONRoundtrip_simple() throws {

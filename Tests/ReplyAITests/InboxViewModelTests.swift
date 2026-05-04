@@ -134,6 +134,20 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
             .appendingPathComponent("InboxVMTests-\(UUID())/rules.json")
     }
 
+    /// REP-178 persists pinnedThreadIDs to UserDefaults.standard. Tests
+    /// instantiate InboxViewModel without an isolated `defaults:` argument,
+    /// so a prior fixture's "t1"/"t2" IDs can leak across runs and break
+    /// the "thread starts unpinned" precondition. Clear before each test.
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+    }
+
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        super.tearDown()
+    }
+
     /// Adding a pin rule while threads are loaded must immediately pin the
     /// matching thread — no re-select or watcher refire required.
     func testRuleAdditionTriggersReEvaluation() async throws {
