@@ -1910,3 +1910,78 @@ final class InboxViewModelLastSyncDateTests: XCTestCase {
                      "lastSyncDate must remain nil when sync returns empty thread list")
     }
 }
+
+// MARK: - Inbox persistence-key contract pins
+//
+// InboxViewModel persists archive / silently-ignored / pinned / snoozed
+// state under four private static keys. They are shipped UserDefaults
+// keys: every existing user has data under these exact strings. Renaming
+// a key silently abandons every user's saved state on next launch.
+//
+// Existing tearDown helpers in InboxViewModelTests / RulesTests already
+// reference these literals when wiping standard UserDefaults — so a
+// rename would silently leak state across tests AND ship a broken
+// migration. These tests pre-populate the literal key with a known
+// payload, construct an InboxViewModel against the same suite, and
+// assert the loaded model state matches. A rename trips the test.
+
+final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
+
+    private func isolatedDefaults() -> UserDefaults {
+        let suite = "test.ReplyAI.inbox-persistence-keys.\(UUID().uuidString)"
+        return UserDefaults(suiteName: suite)!
+    }
+
+    private func makeContacts() -> ContactsResolver {
+        ContactsResolver(store: DeniedContactStore())
+    }
+
+    @MainActor
+    func testArchivedThreadIDsLoadFromLiteralKey() throws {
+        let d = isolatedDefaults()
+        let payload = try JSONEncoder().encode(["t-archived-1", "t-archived-2"].sorted())
+        d.set(payload, forKey: "pref.inbox.archivedThreadIDs")
+
+        let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
+
+        XCTAssertEqual(vm.archivedThreadIDs, Set(["t-archived-1", "t-archived-2"]),
+                       "archive load path must read 'pref.inbox.archivedThreadIDs' literally — renaming abandons every shipped user's archive set")
+    }
+
+    @MainActor
+    func testSilentlyIgnoredThreadIDsLoadFromLiteralKey() throws {
+        let d = isolatedDefaults()
+        let payload = try JSONEncoder().encode(["t-silenced-1"])
+        d.set(payload, forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+
+        let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
+
+        XCTAssertEqual(vm.silentlyIgnoredThreadIDs, Set(["t-silenced-1"]),
+                       "silentlyIgnored load path must read 'pref.inbox.silentlyIgnoredThreadIDs' literally — renaming silently re-surfaces threads the user already silenced")
+    }
+
+    @MainActor
+    func testPinnedThreadIDsLoadFromLiteralKey() throws {
+        let d = isolatedDefaults()
+        let payload = try JSONEncoder().encode(["t-pinned-1", "t-pinned-2"])
+        d.set(payload, forKey: "pref.inbox.pinnedThreadIDs")
+
+        let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
+
+        XCTAssertEqual(vm.pinnedThreadIDs, Set(["t-pinned-1", "t-pinned-2"]),
+                       "pinned load path must read 'pref.inbox.pinnedThreadIDs' literally — renaming silently un-pins every shipped user's threads")
+    }
+
+    @MainActor
+    func testSnoozedUntilLoadsFromLiteralKey() throws {
+        let d = isolatedDefaults()
+        let wake = Date(timeIntervalSince1970: 1_900_000_000)
+        let payload = try JSONEncoder().encode(["t-snoozed": wake])
+        d.set(payload, forKey: "pref.inbox.snoozedUntil")
+
+        let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
+
+        XCTAssertEqual(vm.snoozedUntil["t-snoozed"], wake,
+                       "snooze load path must read 'pref.inbox.snoozedUntil' literally — renaming silently un-snoozes every shipped user's deferred threads")
+    }
+}
