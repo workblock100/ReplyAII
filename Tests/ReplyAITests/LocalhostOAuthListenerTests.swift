@@ -237,4 +237,36 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertTrue(err.localizedDescription.contains("Slack"),
             "Settings would show the unhelpful CFString fallback — got: \(err.localizedDescription)")
     }
+
+    // MARK: - Exact-copy pins
+    //
+    // The keyword-contains tests above keep tests resilient to small
+    // wording tweaks. The literals here ship verbatim to Settings →
+    // Channels and the inline OAuth error label, so a designer-led
+    // rephrasing should land as a code-review diff. Pin the full copy
+    // and update both source + test in the same commit when the words
+    // intentionally change.
+
+    func testTimeoutCopyExactLiteral() {
+        XCTAssertEqual(
+            OAuthError.timeout.errorDescription,
+            "Slack didn't respond. Open the Slack app and try again, or check your internet connection."
+        )
+    }
+
+    func testListenerFailedCopyExactPrefix() {
+        let raw = "Address already in use (port 4242)"
+        XCTAssertEqual(
+            OAuthError.listenerFailed(raw).errorDescription,
+            "Couldn't open the local callback server: \(raw)"
+        )
+    }
+
+    func testTokenExchangeFailedCopyExactPrefix() {
+        let raw = "invalid_client_id"
+        XCTAssertEqual(
+            OAuthError.tokenExchangeFailed(raw).errorDescription,
+            "Slack rejected the connection: \(raw)"
+        )
+    }
 }
