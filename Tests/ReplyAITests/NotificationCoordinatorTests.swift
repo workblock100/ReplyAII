@@ -11,22 +11,33 @@ private final class MockNotificationCenter: NotificationCenterProtocol, @uncheck
 
     private(set) var registeredCategories: Set<UNNotificationCategory> = []
     private(set) var authorizationRequestCount: Int = 0
+    private(set) var setCategoriesCallCount: Int = 0
     var stubbedStatus: UNAuthorizationStatus = .notDetermined
     var authorizationGranted: Bool = true
+    /// When set, requestAuthorization throws this error instead of returning.
+    /// Lets tests verify NotificationCoordinator's `try?` swallowing.
+    var authorizationError: Error?
 
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>) {
-        lock.lock(); registeredCategories = categories; lock.unlock()
+        lock.lock(); registeredCategories = categories; setCategoriesCallCount += 1; lock.unlock()
     }
 
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
-        lock.lock(); authorizationRequestCount += 1; lock.unlock()
-        return authorizationGranted
+        lock.lock()
+        authorizationRequestCount += 1
+        let err = authorizationError
+        let granted = authorizationGranted
+        lock.unlock()
+        if let err { throw err }
+        return granted
     }
 
     func authorizationStatus() async -> UNAuthorizationStatus {
         lock.lock(); let s = stubbedStatus; lock.unlock(); return s
     }
 }
+
+private struct StubError: Error {}
 
 // MARK: - Tests
 
@@ -347,5 +358,75 @@ final class NotificationCoordinatorTests: XCTestCase {
             center.authorizationRequestCount, 0,
             "requestAuthorization must not be called when status is .denied"
         )
+    }
+
+    // MARK: - error swallowing + idempotency
+
+    /// requestAuthorization throwing must be swallowed by `try?` — setUp() must
+    /// complete normally even when the user disallows the permission dialog
+    /// (which UN propagates back as an error).
+    func testSetUpSwallowsAuthorizationError() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .notDetermined
+        center.authorizationError = StubError()
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.setUp() // must not throw, must not crash
+
+        XCTAssertEqual(center.authorizationRequestCount, 1,
+            "request must still have been attempted exactly once")
+        XCTAssertEqual(center.setCategoriesCallCount, 1,
+            "categories must still be registered even when auth request fails")
+    }
+
+    /// Same swallow guarantee for requestPermissionIfNeeded — InboxViewModel.init
+    /// calls this without await error handling.
+    func testRequestPermissionIfNeededSwallowsError() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .notDetermined
+        center.authorizationError = StubError()
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.requestPermissionIfNeeded() // must not throw
+
+        XCTAssertEqual(center.authorizationRequestCount, 1)
+    }
+
+    /// Calling setUp() twice when status is already .authorized after the first
+    /// call must NOT issue a second authorization request. The status guard is
+    /// the idempotency mechanism — categories may re-register, auth must not.
+    func testSetUpIsIdempotentWhenAlreadyAuthorized() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .authorized
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.setUp()
+        await coordinator.setUp()
+
+        XCTAssertEqual(center.authorizationRequestCount, 0,
+            "two setUp() calls when authorized must not issue any auth requests")
+        // Categories may re-register on each setUp — that's fine, no user-visible cost.
+        XCTAssertGreaterThanOrEqual(center.setCategoriesCallCount, 1)
+    }
+
+    /// onIncomingMessage callback fires even when inbox is nil. The callback is
+    /// the public hook for code that needs to react to incoming pushes (e.g.
+    /// menu bar badge); it must not depend on inbox liveness.
+    func testIncomingNotificationFiresCallbackEvenWithoutInbox() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        // Intentionally leave inbox nil.
+        var fired = false
+        coordinator.onIncomingMessage = { _, _ in fired = true }
+
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "+15551112222",
+            preview: "Yo"
+        )
+
+        XCTAssertTrue(fired,
+            "onIncomingMessage callback must fire regardless of inbox liveness")
+        XCTAssertNil(coordinator.inbox, "inbox must remain nil — no side-effect bound it")
     }
 }
