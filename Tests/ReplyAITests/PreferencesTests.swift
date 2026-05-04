@@ -99,6 +99,18 @@ final class PreferencesTests: XCTestCase {
                        "sentinel: shipping default is 50 threads")
     }
 
+    func testThreadLimitRangeBoundsPinned() {
+        // Lower bound 1: a 0 limit would silently produce empty result sets
+        // from any LIMIT-clamped channel call. Upper bound 200: protects
+        // against unbounded queries on very large databases that otherwise
+        // hang the inbox sync. Drift here would silently change the inbox
+        // sync envelope.
+        XCTAssertEqual(PreferenceRange.threadLimit.lowerBound, 1,
+            "lower bound 1 prevents zero-limit empty queries")
+        XCTAssertEqual(PreferenceRange.threadLimit.upperBound, 200,
+            "upper bound 200 caps query cost to avoid unbounded scans on large chat.db files")
+    }
+
     func testInboxThreadLimitWipedAndRestored() {
         defaults.set(100, forKey: PreferenceKey.inboxThreadLimit)
         XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit), 100)
