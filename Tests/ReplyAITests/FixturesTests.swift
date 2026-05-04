@@ -240,4 +240,70 @@ final class FixturesTests: XCTestCase {
         XCTAssertTrue(playful.contains("🙃"),
                       "playful tone keeps the upside-down-smile signature emoji")
     }
+
+    // MARK: - Fixtures.replyCount per-channel pins
+
+    /// Per-channel "Learned from N of your replies" counts surface in the
+    /// onboarding voice screen and the privacy receipts. Pinning them keeps
+    /// screenshots and copy reviews stable across iterations — a silent
+    /// number drift would invalidate every comparison shot.
+    func testReplyCountIMessagePinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .imessage), 3_411)
+    }
+
+    func testReplyCountSlackPinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .slack), 1_204)
+    }
+
+    func testReplyCountWhatsAppPinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .whatsapp), 612)
+    }
+
+    func testReplyCountSMSPinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .sms), 221)
+    }
+
+    func testReplyCountTeamsPinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .teams), 184)
+    }
+
+    func testReplyCountTelegramPinned() {
+        XCTAssertEqual(Fixtures.replyCount(for: .telegram), 54)
+    }
+
+    // MARK: - Fixtures.seedConfidence per-thread pins
+
+    /// Confidence values gate the cmp-lowconf surface ( <0.4 ⇒ "refuse to
+    /// guess" UI ). The exact thread-by-thread pins document the mapping
+    /// the design depends on so a fixture refactor can't silently remove a
+    /// design state from the gallery.
+    func testSeedConfidenceT1PinnedHigh() {
+        for tone in Tone.allCases {
+            XCTAssertEqual(Fixtures.seedConfidence(threadID: "t1", tone: tone), 0.86, accuracy: 0.0001)
+        }
+    }
+
+    func testSeedConfidenceT3PinnedHigh() {
+        for tone in Tone.allCases {
+            XCTAssertEqual(Fixtures.seedConfidence(threadID: "t3", tone: tone), 0.86, accuracy: 0.0001)
+        }
+    }
+
+    func testSeedConfidenceT4PinnedLow() {
+        // SMS verification-code thread — must stay below the 0.4 cmp-lowconf
+        // threshold so the "refuse to guess" surface keeps a fixture trigger.
+        for tone in Tone.allCases {
+            let c = Fixtures.seedConfidence(threadID: "t4", tone: tone)
+            XCTAssertEqual(c, 0.32, accuracy: 0.0001)
+            XCTAssertLessThan(c, 0.4)
+        }
+    }
+
+    func testSeedConfidenceUnknownThreadPinnedMid() {
+        // Default fallback — between t4's "refuse" threshold and t1/t3's
+        // "high context" threshold so the UI defaults to a normal draft.
+        for tone in Tone.allCases {
+            XCTAssertEqual(Fixtures.seedConfidence(threadID: "unknown-xyz", tone: tone), 0.62, accuracy: 0.0001)
+        }
+    }
 }
