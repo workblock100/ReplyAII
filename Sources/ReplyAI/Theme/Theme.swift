@@ -4,6 +4,12 @@
 
 import SwiftUI
 
+/// All design tokens — Color, Font, Radius, Space, Motion — namespaced as
+/// nested enums so callsites read `Theme.Color.bg1`, `Theme.Font.sans(13)`,
+/// etc. The token names mirror the design handoff's `tokens.css` so a
+/// designer's `--bg-1` lookup and an engineer's `Theme.Color.bg1` resolve
+/// to the same value. Don't add SwiftUI-specific helpers here; this file
+/// stays a pure token catalog so it can be regenerated from CSS.
 enum Theme {
     enum Color {
         // Surfaces

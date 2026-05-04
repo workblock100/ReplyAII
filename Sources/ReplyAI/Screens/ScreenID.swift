@@ -58,11 +58,20 @@ struct ScreenGroup: Hashable {
     let title: String
     let items: [ScreenItem]
 }
+/// One row in the prototype gallery's left nav. `id` keys back to the
+/// 34-case `ScreenID` enum; `label` is the human-readable title shown in
+/// the sidebar (e.g. "01 Welcome"). Pinned via `ScreenInventoryTests` so
+/// label drift fails CI loudly.
 struct ScreenItem: Hashable, Identifiable {
     let id: ScreenID
     let label: String
 }
 
+/// Static registry of every screen ReplyAI ships, grouped for the
+/// prototype gallery's sidebar. Mirrors `SCREEN_GROUPS` in
+/// `design_handoff_replyai/components/app-shell.jsx` — engineering and
+/// design read the same source of truth. Helpers expose `next`/`previous`
+/// for arrow-key navigation and `index(of:)` for deterministic ordering.
 enum ScreenInventory {
     static let groups: [ScreenGroup] = [
         .init(title: "Onboarding", items: [
