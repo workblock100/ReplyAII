@@ -423,6 +423,60 @@ final class SlackChannelTests: XCTestCase {
             XCTFail("Expected networkError, got \(error)")
         }
     }
+
+    // MARK: - Fallback error copy — exact-literal pins
+    //
+    // Slack normally returns `{"ok": false, "error": "<reason>"}`, in which
+    // case the user sees the Slack-supplied reason. When Slack misbehaves
+    // and returns `{"ok": false}` with no error field, the parser falls
+    // back to a hand-written copy. Those fallback strings ship to the
+    // inbox banner verbatim — pin them so a designer-led rephrase
+    // surfaces in code review, not as a silent UX drift.
+
+    func testRecentThreadsFallbackCopyExactLiteral() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        let body = #"{"ok": false, "channels": []}"#.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        do {
+            _ = try await channel.recentThreads(limit: 10)
+            XCTFail("Expected networkError to be thrown")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack conversations.list failed",
+                "recentThreads fallback copy is part of the inbox-banner UX contract")
+        }
+    }
+
+    func testMessagesFallbackCopyExactLiteral() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        let body = #"{"ok": false, "messages": []}"#.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        do {
+            _ = try await channel.messages(forThreadID: "C100", limit: 10)
+            XCTFail("Expected networkError to be thrown")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack conversations.history failed",
+                "messages fallback copy is part of the inbox-banner UX contract")
+        }
+    }
+
+    func testSendFallbackCopyExactLiteral() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        let body = #"{"ok": false}"#.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        do {
+            try await channel.send(text: "hi", toThreadID: "C200")
+            XCTFail("Expected networkError to be thrown")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack chat.postMessage failed",
+                "send fallback copy is what users see when Slack acks failure without a reason")
+        }
+    }
 }
 
 // MARK: - Test doubles
