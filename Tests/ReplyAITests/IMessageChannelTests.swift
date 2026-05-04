@@ -481,6 +481,66 @@ final class IMessageChannelTests: XCTestCase {
     )
 }
 
+// MARK: - IMessageChannel.avatarInitial pin
+//
+// Pure helper used by ThreadRow + Sidebar to render the circular avatar
+// chip. The phone-shape detection (☎ for handles starting with + or `(`)
+// is a small UX touch that prevents "+1631..." threads from rendering as
+// a literal "+" letter — easy for a refactor to break inadvertently.
+
+final class IMessageChannelAvatarInitialTests: XCTestCase {
+
+    func testRegularNameUppercasesFirstChar() {
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "maya chen"), "M")
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "Sarah Klein"), "S")
+    }
+
+    func testEmptyStringReturnsQuestionMark() {
+        // Anonymous handle should still render something visible — not a
+        // blank circle.
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: ""), "?")
+    }
+
+    func testWhitespaceOnlyReturnsQuestionMark() {
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "   "), "?")
+        // Tab + space — both are in `.whitespaces`. Newline is NOT in
+        // `.whitespaces` (it is in `.whitespacesAndNewlines`); the helper
+        // intentionally uses the narrower set so a name like " \nfoo"
+        // still picks up "f", not collapses to "?".
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "\t \t"), "?")
+    }
+
+    func testE164PhoneReturnsPhoneGlyph() {
+        // "+16318486282" must NOT render as a literal "+" — that looks
+        // like a malformed avatar. Phone glyph signals "this is a number,
+        // not a contact."
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "+16318486282"), "☎")
+    }
+
+    func testParensFormatPhoneReturnsPhoneGlyph() {
+        // "(631) 848-6282" same treatment.
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "(631) 848-6282"), "☎")
+    }
+
+    func testLeadingWhitespaceTrimmedBeforeFirstChar() {
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "  maya"), "M",
+            "leading whitespace must not produce a blank initial")
+    }
+
+    func testNumericFirstCharPassesThrough() {
+        // "5G WhatsApp group" or similar — numeric first char isn't a
+        // phone signal (no + or paren) so it renders as the digit.
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "5G chat"), "5")
+    }
+
+    func testEmojiFirstCharPassesThrough() {
+        // Group chats sometimes named with an emoji. Render the emoji
+        // verbatim rather than uppercasing (which is a no-op anyway).
+        let result = IMessageChannel.avatarInitial(for: "🎉 birthday plans")
+        XCTAssertEqual(result, "🎉")
+    }
+}
+
 // MARK: - ChannelError result-code preservation (REP-051)
 
 final class ChannelErrorResultCodeTests: XCTestCase {
