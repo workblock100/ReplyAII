@@ -106,4 +106,102 @@ final class LocalhostOAuthListenerTests: XCTestCase {
 
         XCTAssertEqual(completionCount, 1, "second start() must not fire an extra completion")
     }
+
+    // MARK: - testCallbackURLWithoutCodeIsIgnored
+
+    /// Browser GET with no `code` query param must not fire the completion.
+    /// Slack's redirect can be probed by random clients (curl, monitors); we
+    /// must wait for the genuine OAuth callback and let the timeout handle a
+    /// no-show rather than completing with garbage.
+    func testCallbackURLWithoutCodeIsIgnored() async throws {
+        // Short timeout so the test fails fast if the listener wrongly completes
+        // on the no-code GET — the genuine no-code path should hit timeout.
+        let listener = LocalhostOAuthListener(port: 0, timeout: 0.4)
+
+        let exp = expectation(description: "completion fired (expected: timeout)")
+        let readyExp = expectation(description: "listener ready")
+        var receivedResult: Result<String, OAuthError>?
+
+        listener.start(
+            completion: { result in
+                receivedResult = result
+                exp.fulfill()
+            },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        guard let port = listener.actualPort else {
+            XCTFail("actualPort not set after ready")
+            return
+        }
+
+        // Send a GET with no `code` query parameter — should be silently dropped.
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        conn.start(queue: .global())
+        let request = "GET /?state=xyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        conn.send(content: Data(request.utf8), completion: .idempotent)
+
+        await fulfillment(of: [exp], timeout: 5)
+        conn.cancel()
+
+        // Result must be the timeout, not a spurious .success
+        guard case .failure(let err) = receivedResult else {
+            XCTFail("Expected timeout failure, got \(String(describing: receivedResult))")
+            return
+        }
+        XCTAssertEqual(err, .timeout, "no-code GET must not satisfy the listener — must time out")
+    }
+
+    // MARK: - testStopBeforeStartIsSafeNoop
+
+    /// stop() called when nothing is running must be safe and not crash.
+    func testStopBeforeStartIsSafeNoop() {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 5)
+        listener.stop()
+        listener.stop()
+        // No assertion needed — passing means no crash on idle stop.
+    }
+
+    // MARK: - testStopDuringRunDoesNotCallCompletion
+
+    /// Stopping a running listener must drop the pending completion silently —
+    /// the caller has explicitly opted out and shouldn't get a spurious result.
+    func testStopDuringRunDoesNotCallCompletion() async throws {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 5)
+
+        let readyExp = expectation(description: "listener ready")
+        var completionFired = false
+        listener.start(
+            completion: { _ in completionFired = true },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        listener.stop()
+
+        // Wait long enough that any spurious completion (timeout, etc.) would have fired.
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertFalse(completionFired,
+            "stop() must drop the pending completion — caller opted out")
+    }
+
+    // MARK: - OAuthError equatable
+
+    /// `OAuthError` is Equatable; same case + same payload compare equal.
+    /// Production code uses `XCTAssertEqual(error, .timeout)` and pattern
+    /// matches in switch statements — both rely on the synthesized conformance.
+    func testOAuthErrorEquatable() {
+        XCTAssertEqual(OAuthError.timeout, OAuthError.timeout)
+        XCTAssertEqual(OAuthError.listenerFailed("x"), OAuthError.listenerFailed("x"))
+        XCTAssertNotEqual(OAuthError.listenerFailed("x"), OAuthError.listenerFailed("y"))
+        XCTAssertNotEqual(OAuthError.timeout, OAuthError.tokenExchangeFailed("oops"))
+        XCTAssertEqual(OAuthError.tokenExchangeFailed("a"), OAuthError.tokenExchangeFailed("a"))
+        XCTAssertNotEqual(OAuthError.tokenExchangeFailed("a"), OAuthError.tokenExchangeFailed("b"))
+    }
 }
