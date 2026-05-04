@@ -67,6 +67,91 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(rule, decoded)
     }
 
+    // MARK: - kind discriminator strings — persistence contract
+    //
+    // Every shipped rules.json is keyed by these exact strings. Round-trip
+    // tests above confirm encode→decode is symmetric, but they don't catch
+    // a refactor that *renames* a kind value (e.g. "is_unread" → "unread"
+    // or "silently_ignore" → "silentlyIgnore"): the symmetric pair would
+    // still pass while every existing user's rules.json silently became
+    // un-decodable. Pin the literal `kind` string per case here.
+
+    /// Encode a predicate, parse the JSON, and return the value of the
+    /// top-level "kind" key. Forces an inspection of the wire format
+    /// rather than a round-trip-symmetric value comparison.
+    private func encodedKind<T: Encodable>(_ value: T) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                "encoded predicate/action must be a JSON object")
+        return try XCTUnwrap(obj["kind"] as? String,
+                             "encoded predicate/action must include a top-level kind discriminator")
+    }
+
+    func testPredicateKindDiscriminatorsAreStable() throws {
+        // Each pair is (predicate variant, expected kind string in rules.json).
+        // Order matches SmartRule.RulePredicate.Kind to make additions easy
+        // to spot.
+        let cases: [(RulePredicate, String)] = [
+            (.senderIs("x"),                   "sender_is"),
+            (.senderContains("x"),             "sender_contains"),
+            (.channelIs(.slack),               "channel_is"),
+            (.textContains("x"),               "text_contains"),
+            (.textMatchesRegex("x"),           "text_matches_regex"),
+            (.isUnread,                        "is_unread"),
+            (.senderUnknown,                   "sender_unknown"),
+            (.isGroupChat,                     "is_group_chat"),
+            (.hasAttachment,                   "has_attachment"),
+            (.and([.isUnread]),                "and"),
+            (.or([.isUnread]),                 "or"),
+            (.not(.isUnread),                  "not"),
+            (.messageAgeOlderThan(hours: 1),   "message_age_older_than"),
+            (.hasUnread,                       "has_unread"),
+            (.timeOfDay(startHour: 9, endHour: 17), "time_of_day"),
+            (.threadNameMatchesRegex(pattern: "x"), "thread_name_matches_regex"),
+            (.messageCount(atLeast: 2),             "message_count_at_least"),
+            (.contactGroupMatchesName(groupName: "x"), "contact_group_matches_name"),
+        ]
+        for (predicate, expected) in cases {
+            let kind = try encodedKind(predicate)
+            XCTAssertEqual(kind, expected,
+                "RulePredicate \(predicate) must encode kind=\"\(expected)\" — renaming orphans every rules.json with this clause")
+        }
+    }
+
+    func testActionKindDiscriminatorsAreStable() throws {
+        let cases: [(RuleAction, String)] = [
+            (.archive,                  "archive"),
+            (.pin,                      "pin"),
+            (.silentlyIgnore,           "silently_ignore"),
+            (.markDone,                 "mark_done"),
+            (.setDefaultTone(.direct),  "set_default_tone"),
+        ]
+        for (action, expected) in cases {
+            let kind = try encodedKind(action)
+            XCTAssertEqual(kind, expected,
+                "RuleAction \(action) must encode kind=\"\(expected)\" — renaming orphans every rules.json with this action")
+        }
+    }
+
+    func testPredicateKindDecodesFromCanonicalJSON() throws {
+        // Decode-side check for every standalone kind. If a future refactor
+        // renames the rawValue, this test fails at the decode call rather
+        // than silently treating a previously-valid rules.json as malformed.
+        let canonicals: [(String, RulePredicate)] = [
+            (#"{"kind":"is_unread"}"#,         .isUnread),
+            (#"{"kind":"sender_unknown"}"#,    .senderUnknown),
+            (#"{"kind":"is_group_chat"}"#,     .isGroupChat),
+            (#"{"kind":"has_attachment"}"#,    .hasAttachment),
+            (#"{"kind":"has_unread"}"#,        .hasUnread),
+        ]
+        for (json, expected) in canonicals {
+            let data = json.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
+            XCTAssertEqual(decoded, expected,
+                "canonical JSON \(json) must decode to \(expected) — kind renames break shipped rules.json")
+        }
+    }
+
     // MARK: - senderIs case-insensitive (REP-065)
 
     func testSenderIsCaseInsensitiveMatch() {
