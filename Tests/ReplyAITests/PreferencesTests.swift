@@ -180,6 +180,99 @@ final class PreferencesTests: XCTestCase {
             "slackEnabled must default false — OAuth completion flips this on")
     }
 
+    // MARK: - PreferenceKey string literal contract
+    //
+    // Every value here is the exact UserDefaults key persisted to disk.
+    // Renaming any of these strings silently abandons every existing
+    // user's stored preference (they fall back to ship-time defaults
+    // on next launch with no migration). These pins make a rename
+    // require a deliberate test-bump + migration plan rather than a
+    // silent break.
+
+    func testPreferenceKeyCrashReportsLiteral() {
+        XCTAssertEqual(PreferenceKey.crashReports, "pref.privacy.crashReports",
+            "renaming this key abandons every user's privacy posture on next launch")
+    }
+
+    func testPreferenceKeyLicenseUpdatesLiteral() {
+        XCTAssertEqual(PreferenceKey.licenseUpdates, "pref.privacy.licenseUpdates")
+    }
+
+    func testPreferenceKeyICloudSyncLiteral() {
+        XCTAssertEqual(PreferenceKey.iCloudSync, "pref.privacy.iCloudSync")
+    }
+
+    func testPreferenceKeyDefaultToneLiteral() {
+        XCTAssertEqual(PreferenceKey.defaultTone, "pref.composer.defaultTone",
+            "renaming this drops every user's default-tone preference")
+    }
+
+    func testPreferenceKeyUseMLXLiteral() {
+        XCTAssertEqual(PreferenceKey.useMLX, "pref.model.useMLX")
+    }
+
+    func testPreferenceKeyInboxThreadLimitLiteral() {
+        XCTAssertEqual(PreferenceKey.inboxThreadLimit, "pref.inbox.threadLimit")
+    }
+
+    func testPreferenceKeyAutoPrimeLiteral() {
+        XCTAssertEqual(PreferenceKey.autoPrime, "pref.drafts.autoPrime")
+    }
+
+    func testPreferenceKeyAutoApplyRulesOnSyncLiteral() {
+        XCTAssertEqual(PreferenceKey.autoApplyRulesOnSync, "pref.rules.autoApplyOnSync")
+    }
+
+    func testPreferenceKeyLaunchCountLiteral() {
+        XCTAssertEqual(PreferenceKey.launchCount, "pref.app.launchCount",
+            "wipe-exempt — renaming silently restarts the lifetime launch counter for every user")
+    }
+
+    func testPreferenceKeyFirstLaunchDateLiteral() {
+        XCTAssertEqual(PreferenceKey.firstLaunchDate, "pref.app.firstLaunchDate",
+            "wipe-exempt — renaming wipes the 'using ReplyAI since…' upgrade signal for every user")
+    }
+
+    func testPreferenceKeyDemoModeActiveLiteral() {
+        XCTAssertEqual(PreferenceKey.demoModeActive, "pref.inbox.demoModeActive",
+            "wipe-exempt — renaming would silently put returning users back into demo mode")
+    }
+
+    func testPreferenceKeyOnboardingCompletedLiteral() {
+        XCTAssertEqual(PreferenceKey.onboardingCompleted, "pref.app.onboardingCompleted",
+            "wipe-exempt — renaming would silently re-trigger onboarding for every returning user")
+    }
+
+    func testPreferenceKeyIMessageEnabledLiteral() {
+        XCTAssertEqual(PreferenceKey.iMessageEnabled, "pref.channels.iMessageEnabled")
+    }
+
+    func testPreferenceKeySlackEnabledLiteral() {
+        XCTAssertEqual(PreferenceKey.slackEnabled, "pref.channels.slackEnabled")
+    }
+
+    func testPreferenceKeyInboxLastSyncDateLiteral() {
+        XCTAssertEqual(PreferenceKey.inboxLastSyncDate, "pref.inbox.lastSyncDate")
+    }
+
+    func testPreferenceKeyVoiceExampleMessagesLiteral() {
+        XCTAssertEqual(PreferenceKey.voiceExampleMessages, "pref.voice.exampleMessages",
+            "renaming drops every user's stored voice samples — PromptBuilder loses the personalization signal")
+    }
+
+    func testPreferenceKeyWipeExemptionsContents() {
+        // The wipe-exempt set must contain exactly these four keys.
+        // Adding or dropping a member silently changes whether a
+        // preference survives factory reset — a user-visible posture
+        // change that should require a deliberate test bump.
+        XCTAssertEqual(PreferenceKey.wipeExemptions, Set([
+            PreferenceKey.launchCount,
+            PreferenceKey.firstLaunchDate,
+            PreferenceKey.demoModeActive,
+            PreferenceKey.onboardingCompleted,
+        ]), "wipeExemptions membership is the factory-reset contract")
+    }
+
     func testInboxThreadLimitWipedAndRestored() {
         defaults.set(100, forKey: PreferenceKey.inboxThreadLimit)
         XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit), 100)
