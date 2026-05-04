@@ -204,4 +204,37 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertEqual(OAuthError.tokenExchangeFailed("a"), OAuthError.tokenExchangeFailed("a"))
         XCTAssertNotEqual(OAuthError.tokenExchangeFailed("a"), OAuthError.tokenExchangeFailed("b"))
     }
+
+    // MARK: - LocalizedError conformance (rendered in Settings → Channels)
+
+    func testTimeoutHasUserActionableCopy() {
+        let copy = OAuthError.timeout.errorDescription ?? ""
+        XCTAssertFalse(copy.isEmpty)
+        XCTAssertTrue(copy.contains("Slack"),
+            "timeout copy should reference Slack so the user knows which connection failed — got: \(copy)")
+    }
+
+    func testListenerFailedInterpolatesUnderlyingMessage() {
+        let raw = "Address already in use (port 4242)"
+        let copy = OAuthError.listenerFailed(raw).errorDescription ?? ""
+        XCTAssertTrue(copy.contains(raw),
+            "listenerFailed must include the underlying cause — got: \(copy)")
+    }
+
+    func testTokenExchangeFailedInterpolatesUnderlyingMessage() {
+        let raw = "invalid_client_id"
+        let copy = OAuthError.tokenExchangeFailed(raw).errorDescription ?? ""
+        XCTAssertTrue(copy.contains(raw),
+            "tokenExchangeFailed must include Slack's reason — got: \(copy)")
+    }
+
+    func testLocalizedErrorBridgeSurfacesOurCopy() {
+        // Settings → Channels uses `err.localizedDescription` to populate
+        // the connect-error label. Without LocalizedError, that returns
+        // "The operation couldn't be completed (...OAuthError error 0)" —
+        // unparseable to users. Confirm the bridge surfaces our copy.
+        let err: Error = OAuthError.timeout
+        XCTAssertTrue(err.localizedDescription.contains("Slack"),
+            "Settings would show the unhelpful CFString fallback — got: \(err.localizedDescription)")
+    }
 }

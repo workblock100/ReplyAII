@@ -162,9 +162,23 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     }
 }
 
-enum OAuthError: Error, Sendable, Equatable {
+enum OAuthError: LocalizedError, Sendable, Equatable {
     case timeout
     case listenerFailed(String)
     /// Token exchange POST returned `{"ok":false}` or a network error.
     case tokenExchangeFailed(String)
+
+    /// Without LocalizedError conformance, Settings → Channels would show
+    /// the generic "The operation couldn't be completed" CFString fallback
+    /// when Slack connect fails — useless for users trying to triage.
+    var errorDescription: String? {
+        switch self {
+        case .timeout:
+            "Slack didn't respond. Open the Slack app and try again, or check your internet connection."
+        case .listenerFailed(let msg):
+            "Couldn't open the local callback server: \(msg)"
+        case .tokenExchangeFailed(let msg):
+            "Slack rejected the connection: \(msg)"
+        }
+    }
 }
