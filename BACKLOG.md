@@ -1617,7 +1617,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit 7ad1295
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (first real Slack data fetch).** Implement real `recentThreads(limit:)` in `SlackChannel` using `SlackHTTPClient` (REP-237 prereq). Call `GET api/conversations.list?types=im&exclude_archived=true&limit=<limit>`. Parse the JSON response (`channels[]` array, each with `id`, `name`, `is_im: true`, `latest.text`) into `[MessageThread]`. Set `channel: .slack` on each. Returns `ChannelError.authorizationDenied` if no token; `ChannelError.networkError` on HTTP failure. Injectable `SlackHTTPClient`. Tests: mock client returning sample IM list JSON → threads created with correct fields; empty channels array → empty result; missing `latest` → previewText is empty string; HTTP error → `ChannelError.networkError`; no token → `authorizationDenied` (existing test from REP-234, unchanged).
@@ -1675,7 +1676,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: main commit a65fc20
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `filterByChannel(_ channel: Channel?)` to `InboxViewModel`. When non-nil, sets `activeChannelFilter: Channel?` which causes `threads` computed property to return only threads matching that channel. When nil, returns all threads. Filter is view-level — underlying `_threads` array is unchanged. Tests: filter for `.iMessage` returns only iMessage threads; filter for `.slack` returns only Slack threads; nil filter returns all; setting filter does not mutate `_threads`; empty result when no threads match filter.
