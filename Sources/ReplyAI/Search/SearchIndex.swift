@@ -6,6 +6,12 @@ import SQLite3
 /// modes. File-backed mode survives app restarts so the first post-launch
 /// search does not block on a full inbox rebuild.
 actor SearchIndex {
+    /// One row returned by the FTS5 search. `threadID` is what the UI
+    /// uses to navigate when the user picks a result; `threadName` and
+    /// `senderName` populate the row's two-line header; `text` is the
+    /// raw matched body so the palette can render something when
+    /// `snippet` is nil (which happens for empty-query browses where no
+    /// terms were matched).
     struct Result: Hashable, Sendable {
         let threadID: String
         let threadName: String
