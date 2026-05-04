@@ -21,6 +21,12 @@ protocol AXElementFactory {
 
 // MARK: - Production wrapper around real AXUIElement
 
+/// Production conformance to `AXElement` that wraps a real `AXUIElement`
+/// from the Accessibility framework. The protocol layer exists so tests
+/// can drop in a `MockAXElement` tree (see AccessibilityAPIReaderTests)
+/// without spinning up Messages.app — keep this struct's logic limited
+/// to bridging into AX so the tested code path stays in the protocol
+/// boundary rather than here.
 struct RealAXElement: AXElement {
     let element: AXUIElement
 
