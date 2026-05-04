@@ -111,6 +111,23 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertEqual(result.last?.text, last.text, "most recent message must always be retained")
     }
 
+    func testTruncateEmptyHistoryReturnsEmpty() {
+        // Defense in depth — confirm no nil-deref or off-by-one when called
+        // with no messages (e.g. fresh thread before first incoming).
+        let result = PromptBuilder.truncate([], budget: 10_000)
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testTruncateZeroBudgetDropsEverything() {
+        // Pin the strict-greater-than check in the implementation —
+        // budget=0 means "no room for any chars" so every message hits
+        // the break condition. Catches a refactor that flips > to >=.
+        let messages = (1...3).map { makeMessage("msg \($0)") }
+        let result = PromptBuilder.truncate(messages, budget: 0)
+        XCTAssertTrue(result.isEmpty,
+            "budget=0 must drop every message — first-iteration break condition")
+    }
+
     // MARK: - Tone system instruction tests (REP-112)
 
     func testEachToneProducesNonEmptySystemInstruction() {
