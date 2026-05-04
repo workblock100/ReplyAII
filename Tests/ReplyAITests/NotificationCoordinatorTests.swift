@@ -68,6 +68,48 @@ final class NotificationCoordinatorTests: XCTestCase {
         )
     }
 
+    // MARK: - Constant literals — notification-shade contract
+    //
+    // categoryID and replyActionID are persisted into every scheduled
+    // UNNotificationRequest. A rename orphans every in-flight or
+    // background-scheduled notification — they carry the old category,
+    // tap-to-reply doesn't match, and the user's reply silently fails
+    // to register. Pin the literal values so a rename surfaces in code
+    // review and the human can ship a migration alongside it.
+
+    func testCategoryIDLiteralIsPinned() {
+        XCTAssertEqual(NotificationCoordinator.categoryID, "REPLYAI_THREAD",
+            "renaming categoryID orphans every previously-scheduled notification's tap-to-reply action")
+    }
+
+    func testReplyActionIDLiteralIsPinned() {
+        XCTAssertEqual(NotificationCoordinator.replyActionID, "REPLY",
+            "renaming replyActionID makes the inline-reply button on every previously-scheduled notification a no-op")
+    }
+
+    func testInlineReplyButtonCopyIsPinned() async {
+        // The action title ("Reply") and text-input button title ("Send")
+        // and placeholder ("Your reply…") all render directly in the
+        // notification shade. Designer-led tweaks should land as a
+        // code-review diff.
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        await coordinator.setUp()
+
+        let action = center.registeredCategories
+            .flatMap { $0.actions }
+            .first(where: { $0.identifier == NotificationCoordinator.replyActionID })
+        let textInput = action as? UNTextInputNotificationAction
+        XCTAssertNotNil(textInput, "the reply action must be a UNTextInputNotificationAction so the user can type inline")
+
+        XCTAssertEqual(action?.title, "Reply",
+            "Reply action title ships verbatim to the notification shade — pin so a rephrase shows up in code review")
+        XCTAssertEqual(textInput?.textInputButtonTitle, "Send",
+            "Send button title ships verbatim — pin so a rephrase shows up in code review")
+        XCTAssertEqual(textInput?.textInputPlaceholder, "Your reply…",
+            "Placeholder ships verbatim — pin so a rephrase shows up in code review")
+    }
+
     // MARK: - REP-028: testDelegateExtractsReplyText
 
     func testDelegateExtractsReplyText() async {
