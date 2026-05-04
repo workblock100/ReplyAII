@@ -118,4 +118,73 @@ final class UNNotificationContentParserTests: XCTestCase {
         XCTAssertNil(result?.chatGUID,
             "chatGUID should be nil when neither CKChatIdentifier nor CKChatGUID is present")
     }
+
+    // MARK: - empty-string fallback semantics
+
+    func testEmptyCKSenderIDFallsBackToSenderKey() {
+        // CFNotificationCenter sometimes delivers CKSenderID as an empty
+        // string rather than omitting it. The parser checks `!isEmpty`, so
+        // the next-tier `sender` key must surface — not an empty handle.
+        let content = makeContent(
+            title: "Title",
+            body: "body",
+            userInfo: [
+                "CKSenderID": "",
+                "sender": "real-sender@example.com"
+            ]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertEqual(result?.senderHandle, "real-sender@example.com",
+                       "empty CKSenderID must fall through to sender, not yield an empty handle")
+    }
+
+    func testEmptySenderFallsBackToTitle() {
+        // Same isEmpty rule on the second tier — empty `sender` falls
+        // through to `content.title`. Otherwise we'd publish an empty
+        // sender handle to the inbox UI.
+        let content = makeContent(
+            title: "Real Title",
+            body: "body",
+            userInfo: ["sender": ""]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertEqual(result?.senderHandle, "Real Title")
+    }
+
+    func testEmptyCKChatIdentifierIsNotFalledBack() {
+        // Behavior pin: the chatGUID resolution uses `??`, which only
+        // triggers fallback on nil — not on empty string. So an empty-
+        // string CKChatIdentifier currently produces an empty chatGUID
+        // instead of falling through to CKChatGUID. If a future change
+        // wants to treat empty as missing, this test will fail and force
+        // a deliberate decision.
+        let content = makeContent(
+            title: "",
+            body: "Test",
+            userInfo: [
+                "CKSenderID": "+15550000000",
+                "CKChatIdentifier": "",
+                "CKChatGUID": "iMessage;-;+15550000000"
+            ]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertEqual(result?.chatGUID, "",
+                       "empty CKChatIdentifier currently wins over CKChatGUID — `??` falls back on nil only")
+    }
+
+    func testPreviewMatchesContentBodyVerbatim() {
+        // Body is propagated as-is. No trimming, no normalisation —
+        // important because the rule engine does substring matches on
+        // the preview and any whitespace mutation here would silently
+        // change rule semantics.
+        let body = "  Hello  world  \n"
+        let content = makeContent(
+            title: "Sender",
+            body: body,
+            userInfo: [:]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertEqual(result?.preview, body,
+                       "preview must equal content.body byte-for-byte — no trimming")
+    }
 }
