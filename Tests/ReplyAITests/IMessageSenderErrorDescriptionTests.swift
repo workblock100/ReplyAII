@@ -83,4 +83,54 @@ final class IMessageSenderErrorDescriptionTests: XCTestCase {
         XCTAssertTrue(err.localizedDescription.contains("System Settings"),
             "LocalizedError bridge must surface our copy — got: \(err.localizedDescription)")
     }
+
+    // MARK: - Exact-copy pins
+    //
+    // The keyword-contains tests above keep tests resilient to small
+    // wording tweaks. Pin the full literals so a designer-led rewrite
+    // surfaces as a code-review diff. Update both source + test
+    // together when the words intentionally change.
+
+    func testNotAuthorizedCopyExactLiteral() {
+        XCTAssertEqual(
+            IMessageSender.SendError.notAuthorized.errorDescription,
+            "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation."
+        )
+    }
+
+    func testUnsupportedCopyExactLiteral() {
+        XCTAssertEqual(
+            IMessageSender.SendError.unsupported.errorDescription,
+            "This thread can't be sent to (unsupported channel)."
+        )
+    }
+
+    func testTimedOutCopyExactLiteral() {
+        XCTAssertEqual(
+            IMessageSender.SendError.timedOut.errorDescription,
+            "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
+        )
+    }
+
+    func testMessageTooLongCopyExactLiteral() {
+        XCTAssertEqual(
+            IMessageSender.SendError.messageTooLong(5000).errorDescription,
+            "Message too long (5000 chars, max \(IMessageSender.maxMessageLength))."
+        )
+    }
+
+    func testInvalidChatGUIDCopyExactLiteral() {
+        XCTAssertEqual(
+            IMessageSender.SendError.invalidChatGUID("not-a-guid").errorDescription,
+            "Invalid chat GUID 'not-a-guid': must match iMessage;[+-];<identifier>."
+        )
+    }
+
+    func testMaxMessageLengthLiteralIsPinned() {
+        // The 4096-char cap is the iMessage AppleScript send limit. A
+        // tweak here changes both the validation gate and the user-
+        // visible "max N" copy; pin so a refactor surfaces.
+        XCTAssertEqual(IMessageSender.maxMessageLength, 4096,
+            "iMessage AppleScript send cap must remain 4096 chars — bumping requires testing real send-path behavior")
+    }
 }
