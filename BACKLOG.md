@@ -22,6 +22,19 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 ## P0 — ship-blocking or bug-fix
 
+### REP-ALERT-260504-1650 — app exits on launch after MLX model weights download
+- priority: P0
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- scope: Manual smoke-launch on 2026-05-04 16:50 EDT from `~/.cache/replyai-autopilot/build/ReplyAI.app` (commit `47b8f43`) showed: app launched (PID 46880), downloaded 1.8 GB from HuggingFace Hub via CFNetwork (response_bytes=1,807,497,192, transaction_duration_ms=30663, status 200 — almost certainly MLX model weights), then ~0.4s after the download finished, the app entered its CoreAnalytics exit handler and terminated. No `.ips` crash report was generated, confirming a clean exit (not a segfault). System log evidence: `/usr/bin/log show --last 5m --predicate 'process == "ReplyAI"'` shows the timeline. Likely culprits in priority order: (1) `Sources/ReplyAI/Services/LLMService.swift` model-download flow has an `exit()`/`return-from-main`/early-completion path that wasn't intended, (2) macOS auto-termination / `NSSupportsAutomaticTermination` triggering on a window-less main loop after download, (3) memory pressure / OOM kill from loading 1.8 GB of weights into a 16 GB Mac mini already running concurrent xctest. The competing `claude_goal_runner.sh` launchd job has been disabled (2026-05-04 16:54) so factor (3) is reduced. Reproduction: `cd ~/.cache/replyai-autopilot && ./scripts/build.sh debug open && sleep 35 && pgrep -f "build/ReplyAI.app/Contents/MacOS/ReplyAI"` — if pgrep returns empty, bug is reproducing.
+- success_criteria:
+  - Smoke-launch (open + sleep 30 + pgrep) shows the process alive after 30 seconds
+  - Either the model download is moved off the launch-blocking path, OR the post-download flow correctly hands off to the inbox/welcome-gate scene without exiting
+  - System log shows the app reaches `NSApplicationDidFinishLaunching` AND no `CoreAnalytics: Entering exit handler` for the first 60 seconds of normal use
+- test_plan: Add an integration test that launches the bundled .app via `Process()`, polls for liveness, and asserts the process is still alive after 35 seconds. Plus a unit test on the `LLMService` model-download completion handler asserting it doesn't call `exit()` or `terminate()` directly.
+
 ### REP-ALERT-260425-2010 — pipeline health: full automation outage ~25h (6 of 7 agents silent)
 - priority: P0
 - effort: S
