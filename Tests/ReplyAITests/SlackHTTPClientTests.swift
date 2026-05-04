@@ -350,4 +350,76 @@ final class SlackHTTPClientTests: XCTestCase {
                           "5xx copy should advise retry, got: \(msg)")
         }
     }
+
+    // MARK: - Exact-copy pins
+    //
+    // The `contains` checks above keep tests resilient to small wording
+    // tweaks, but the copy here is the entire user-visible banner — a
+    // designer-led rephrasing should land as a code-review diff, not
+    // slip in unnoticed. Pin the full literals so any rewording surfaces
+    // here. When the copy intentionally changes, update both the source
+    // string and this test in the same commit.
+
+    func test429CopyExactLiteral() async throws {
+        let session = MockHTTPSession(statusCode: 429)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "t", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack is rate-limiting us right now. Wait a moment, then try again.")
+        }
+    }
+
+    func test5xxCopyExactLiteralIncludesStatusCode() async throws {
+        let session = MockHTTPSession(statusCode: 503)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "t", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack returned an unexpected error (status 503). Try again shortly.")
+        }
+    }
+
+    func testNonHTTPResponseCopyExactLiteral() async throws {
+        let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "auth.test", token: "t", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack didn't return a usable response. Check your connection and try again.")
+        }
+    }
+
+    func testGet401MapsToAuthorizationDeniedNotNetworkError() async throws {
+        // 401 is special: it routes to .authorizationDenied so the inbox
+        // can render the "open Settings to reconnect" banner instead of
+        // a transient network error. A future refactor that lumps it in
+        // with .networkError("…") would silently break that surface.
+        let session = MockHTTPSession(statusCode: 401)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "t", params: [:])
+            XCTFail("Expected authorizationDenied")
+        } catch ChannelError.authorizationDenied {
+            // expected
+        } catch {
+            XCTFail("Expected .authorizationDenied, got \(error)")
+        }
+    }
+
+    func testPost401MapsToAuthorizationDenied() async throws {
+        let session = MockHTTPSession(statusCode: 401)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.post(endpoint: "chat.postMessage", token: "t", json: ["channel": "C123"])
+            XCTFail("Expected authorizationDenied")
+        } catch ChannelError.authorizationDenied {
+            // expected
+        } catch {
+            XCTFail("Expected .authorizationDenied, got \(error)")
+        }
+    }
 }
