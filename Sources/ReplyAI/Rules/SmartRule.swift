@@ -84,6 +84,10 @@ indirect enum RulePredicate: Hashable, Sendable {
     case threadNameMatchesRegex(pattern: String)
     /// True when the thread contains at least `atLeast` messages (total message count).
     case messageCount(atLeast: Int)
+    /// True when the sender belongs to a Contacts group whose name contains
+    /// `groupName` (case-insensitive). Useful for "from anyone in my Family
+    /// group → set tone to direct" workflows.
+    case contactGroupMatchesName(groupName: String)
 }
 
 /// Consequence of a rule matching. Intentionally small for v1 — we add
@@ -115,9 +119,10 @@ extension RulePredicate: Codable {
         case timeOfDay             = "time_of_day"
         case threadNameMatchesRegex = "thread_name_matches_regex"
         case messageCountAtLeast   = "message_count_at_least"
+        case contactGroupMatchesName = "contact_group_matches_name"
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour", atLeast = "at_least" }
+    private enum CodingKeys: String, CodingKey { case kind, value, clauses, clause, hours, startHour = "start_hour", endHour = "end_hour", atLeast = "at_least", groupName = "group_name" }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -143,6 +148,7 @@ extension RulePredicate: Codable {
                                    )
         case .threadNameMatchesRegex: self = .threadNameMatchesRegex(pattern: try c.decode(String.self, forKey: .value))
         case .messageCountAtLeast:    self = .messageCount(atLeast: try c.decode(Int.self, forKey: .atLeast))
+        case .contactGroupMatchesName: self = .contactGroupMatchesName(groupName: try c.decode(String.self, forKey: .groupName))
         }
     }
 
@@ -166,6 +172,7 @@ extension RulePredicate: Codable {
         case .timeOfDay(let s, let e):          try c.encode(Kind.timeOfDay, forKey: .kind); try c.encode(s, forKey: .startHour); try c.encode(e, forKey: .endHour)
         case .threadNameMatchesRegex(let p):    try c.encode(Kind.threadNameMatchesRegex, forKey: .kind); try c.encode(p, forKey: .value)
         case .messageCount(let n):              try c.encode(Kind.messageCountAtLeast, forKey: .kind); try c.encode(n, forKey: .atLeast)
+        case .contactGroupMatchesName(let g):   try c.encode(Kind.contactGroupMatchesName, forKey: .kind); try c.encode(g, forKey: .groupName)
         }
     }
 }

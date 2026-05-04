@@ -1036,8 +1036,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main commit pending — autopilot-2026-05-03
+- claimed_by: autopilot-2026-05-03
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add `case contactGroupMatchesName(groupName: String)` to `RulePredicate`. `RuleContext` gains `contactGroupNames: [String]` (contact group names for the sender's handle, resolved via `CNContactStore.groups(matching:)` in `ContactsResolver`). `RuleEvaluator` evaluates using `context.contactGroupNames.contains { $0.localizedCaseInsensitiveContains(groupName) }`. Codable discriminator: `"contactGroupMatchesName"`. `SfcRulesView.humanize` gets a new case string. Tests: matching group name matches; non-matching group name doesn't; case-insensitive match; Codable round-trip preserves groupName; empty contactGroupNames returns false.
 - success_criteria:

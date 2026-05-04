@@ -837,6 +837,63 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(decoded[1].when, .hasAttachment)
     }
 
+    // MARK: - REP-170 contactGroupMatchesName
+
+    private func contactGroupCtx(groups: [String]) -> RuleContext {
+        RuleContext(
+            senderName: "Maya Chen",
+            senderHandle: "+14155551234",
+            channel: .imessage,
+            lastMessageText: "hi",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "+14155551234",
+            contactGroupNames: groups
+        )
+    }
+
+    func testContactGroupMatchesWhenGroupPresent() {
+        let ctx = contactGroupCtx(groups: ["Family", "Coworkers"])
+        XCTAssertTrue(RuleEvaluator.matches(.contactGroupMatchesName(groupName: "Family"), in: ctx))
+    }
+
+    func testContactGroupNoMatchWhenGroupAbsent() {
+        let ctx = contactGroupCtx(groups: ["Coworkers"])
+        XCTAssertFalse(RuleEvaluator.matches(.contactGroupMatchesName(groupName: "Family"), in: ctx))
+    }
+
+    func testContactGroupCaseInsensitive() {
+        let ctx = contactGroupCtx(groups: ["family"])
+        XCTAssertTrue(RuleEvaluator.matches(.contactGroupMatchesName(groupName: "FAMILY"), in: ctx),
+                      "match must be case-insensitive so users don't have to mirror their Contacts capitalization")
+    }
+
+    func testContactGroupMatchesPartialName() {
+        // localizedCaseInsensitiveContains — querying "Fam" should hit "Family Group".
+        let ctx = contactGroupCtx(groups: ["Family Group"])
+        XCTAssertTrue(RuleEvaluator.matches(.contactGroupMatchesName(groupName: "Fam"), in: ctx))
+    }
+
+    func testContactGroupEmptyGroupsReturnsFalse() {
+        let ctx = contactGroupCtx(groups: [])
+        XCTAssertFalse(RuleEvaluator.matches(.contactGroupMatchesName(groupName: "Family"), in: ctx),
+                       "no groups resolved → predicate must short-circuit to false (no Contacts permission case)")
+    }
+
+    func testContactGroupMatchesCodableRoundTrip() throws {
+        let rule = SmartRule(
+            name: "Family default tone",
+            when: .contactGroupMatchesName(groupName: "Family"),
+            then: .setDefaultTone(.warm)
+        )
+        let data = try JSONEncoder().encode(rule)
+        let decoded = try JSONDecoder().decode(SmartRule.self, from: data)
+        guard case .contactGroupMatchesName(let g) = decoded.when else {
+            XCTFail("expected contactGroupMatchesName, got \(decoded.when)"); return
+        }
+        XCTAssertEqual(g, "Family")
+    }
+
     // MARK: - RulesStore: malformed-rule skipping (REP-024)
 
     private func tempRulesURL() -> URL {

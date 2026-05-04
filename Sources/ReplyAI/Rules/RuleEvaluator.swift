@@ -26,6 +26,11 @@ struct RuleContext: Sendable {
     /// Total number of messages loaded for the thread. Defaults to 0 when
     /// the context is built without loading full message history.
     var messageCount: Int = 0
+    /// Names of Contacts groups the sender belongs to. Empty when the
+    /// caller hasn't resolved Contacts groups (test fixtures, sources
+    /// without Contacts permission). The `contactGroupMatchesName`
+    /// predicate evaluates against this list.
+    var contactGroupNames: [String] = []
 
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
@@ -122,6 +127,11 @@ enum RuleEvaluator {
 
         case .messageCount(let n):
             return ctx.messageCount >= n
+
+        case .contactGroupMatchesName(let groupName):
+            return ctx.contactGroupNames.contains {
+                $0.localizedCaseInsensitiveContains(groupName)
+            }
         }
     }
 

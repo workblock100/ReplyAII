@@ -146,6 +146,8 @@ struct SfcRulesView: View {
             return "thread name matches /\(r)/"
         case .messageCount(let n):
             return "has at least \(n) message\(n == 1 ? "" : "s")"
+        case .contactGroupMatchesName(let group):
+            return "sender in contact group \"\(group)\""
         }
     }
 
