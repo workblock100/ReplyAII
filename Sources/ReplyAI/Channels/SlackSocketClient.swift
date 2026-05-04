@@ -17,6 +17,11 @@ protocol WebSocketTaskFactory: Sendable {
     func makeWebSocketTask(with url: URL) -> any WebSocketTaskProtocol
 }
 
+/// Production `WebSocketTaskFactory` — wraps `URLSession.webSocketTask(with:)`.
+/// `@unchecked Sendable` because URLSession is documented thread-safe for
+/// task creation but isn't formally `Sendable` (Apple typing gap). Tests
+/// inject a mock factory whose `makeWebSocketTask` returns a stub that
+/// drives the receive loop from in-memory events.
 struct URLSessionWebSocketFactory: WebSocketTaskFactory, @unchecked Sendable {
     private let session: URLSession
     init(session: URLSession = .shared) { self.session = session }

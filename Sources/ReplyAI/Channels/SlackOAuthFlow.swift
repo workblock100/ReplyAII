@@ -19,6 +19,11 @@ typealias OAuthCallbackListenerFactory = (UInt16, TimeInterval) -> any OAuthCall
 
 // MARK: - Default implementations
 
+/// Production `URLOpener` that hands the URL to AppKit's NSWorkspace, which
+/// dispatches it to the user's default browser. Tests substitute a mock
+/// implementation that captures the requested URL without launching a
+/// real Safari window — the OAuth flow's "did it try to open the right
+/// URL?" assertion lives there.
 struct WorkspaceURLOpener: URLOpener, Sendable {
     func open(_ url: URL) {
         NSWorkspace.shared.open(url)
