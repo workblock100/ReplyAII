@@ -214,4 +214,85 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         XCTAssertEqual(reader.conversationNames(), [])
         XCTAssertEqual(factory.capturedPID, 1, "factory still called for the PID even when root resolves to nil")
     }
+
+    // MARK: - additional traversal contract
+
+    func testRootElementAsRowIsCollected() {
+        // collectNames(from:) checks the *passed* element as well as its
+        // descendants. If Messages.app ever returns a sidebar root that is
+        // itself an AXRow (some AX trees look like this when the conversation
+        // list is the only window content), the root's title must still
+        // surface — otherwise we'd silently drop the only conversation.
+        let root = MockAXElement(role: "AXRow", title: "Solo conversation")
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Solo conversation"])
+    }
+
+    func testNestedAXRowInsideAXRowAllCollected() {
+        // AXOutline trees can produce parent rows with disclosure children
+        // that are themselves AXRow elements. The collector recurses into
+        // every child unconditionally, so both parent and nested rows must
+        // appear in the output — the rule engine downstream dedups on
+        // chatGUID, not on AX titles.
+        let child = MockAXElement(role: "AXRow", title: "Child row")
+        let parent = MockAXElement(role: "AXRow", title: "Parent row", children: [child])
+        let root = MockAXElement(role: "AXOutline", children: [parent])
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Parent row", "Child row"],
+                       "parent row title must appear before its nested children (DFS preorder)")
+    }
+
+    func testWhitespaceOnlyTitleIsKept() {
+        // Behavior pin: the skip rule is `!title.isEmpty`, not "isBlank".
+        // A title of `"   "` (all spaces) survives the filter today. If a
+        // future change tightens this, this test will fail loudly so we
+        // can decide deliberately whether to drop it.
+        let row = MockAXElement(role: "AXRow", title: "   ")
+        let root = MockAXElement(role: "AXApplication", children: [row])
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["   "],
+                       "whitespace-only titles are not currently treated as empty")
+    }
+
+    func testRoleMatchIsExactNotPrefixOrSuffix() {
+        // The role check is `element.role == "AXRow"`. AX exposes related but
+        // distinct roles ("AXRowHeader", "AXOutlineRow", lowercase variants
+        // from non-Apple apps). None should be confused with AXRow — a
+        // looser match would surface column headers as conversations.
+        let near: [any AXElement] = [
+            MockAXElement(role: "AXRowHeader", title: "Header"),
+            MockAXElement(role: "AXOutlineRow", title: "Outline child"),
+            MockAXElement(role: "axrow",       title: "lower"),
+            MockAXElement(role: "AXRow ",      title: "trailing space"),
+            MockAXElement(role: "AXRow",       title: "Real row"),
+        ]
+        let root = MockAXElement(role: "AXApplication", children: near)
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Real row"],
+                       "only the exact AXRow role should match — adjacent role names are ignored")
+    }
 }
