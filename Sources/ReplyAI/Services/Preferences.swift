@@ -40,6 +40,11 @@ enum PreferenceKey {
     /// Nil if no successful sync has occurred (fresh install or post-wipe).
     static let inboxLastSyncDate = "pref.inbox.lastSyncDate"
 
+    /// Short sample messages written in the user's voice, used by PromptBuilder to
+    /// steer reply tone toward the user's natural style. Defaults to []. Max 20
+    /// entries; each entry is capped at 500 chars — enforced at the setter.
+    static let voiceExampleMessages = "pref.voice.exampleMessages"
+
     /// Keys that match the `pref.` prefix but must survive `wipeReplyAIDefaults`.
     static let wipeExemptions: Set<String> = [launchCount, firstLaunchDate, demoModeActive, onboardingCompleted]
 }
@@ -115,6 +120,20 @@ extension UserDefaults {
             PreferenceKey.iMessageEnabled:      PreferenceDefaults.iMessageEnabled,
             PreferenceKey.slackEnabled:         PreferenceDefaults.slackEnabled,
         ])
+    }
+
+    /// Returns the stored voice example messages, or [] if none set.
+    func voiceExampleMessages() -> [String] {
+        stringArray(forKey: PreferenceKey.voiceExampleMessages) ?? []
+    }
+
+    /// Stores voice example messages with enforcement: list capped at 20 entries,
+    /// each entry truncated to 500 chars. Enforced at write time.
+    func setVoiceExampleMessages(_ messages: [String]) {
+        let sanitized = messages
+            .prefix(20)
+            .map { $0.count > 500 ? String($0.prefix(500)) : $0 }
+        set(Array(sanitized), forKey: PreferenceKey.voiceExampleMessages)
     }
 
     /// Erase every preference ReplyAI owns. Used by "Factory reset" in

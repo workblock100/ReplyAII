@@ -278,6 +278,50 @@ final class PromptBuilderTests: XCTestCase {
         }
     }
 
+    // MARK: - REP-222: voice example injection
+
+    func testVoiceExamplesInjectedIntoPrompt() {
+        let thread = makeThread(name: "VoiceTest")
+        let examples = ["Sure, sounds good!", "On it — give me a sec"]
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [], voiceExamples: examples)
+
+        XCTAssertTrue(prompt.contains("Style examples from the user's prior messages:"),
+                      "voice examples section header must appear when examples are non-empty")
+        XCTAssertTrue(prompt.contains("Sure, sounds good!"), "first example must appear in prompt")
+        XCTAssertTrue(prompt.contains("On it — give me a sec"), "second example must appear in prompt")
+    }
+
+    func testEmptyVoiceExamplesProduceNoHeader() {
+        let thread = makeThread(name: "NoVoice")
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [], voiceExamples: [])
+
+        XCTAssertFalse(prompt.contains("Style examples"),
+                       "voice examples section must not appear when examples list is empty")
+    }
+
+    func testVoiceExamplesSectionAppearsBeforeHistory() {
+        let thread = makeThread(name: "OrderVoice")
+        let examples = ["rep222_voice_token"]
+        let msg = makeMessage("rep222_history_token")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [msg], voiceExamples: examples)
+
+        let voiceRange = prompt.range(of: "rep222_voice_token")!
+        let historyRange = prompt.range(of: "rep222_history_token")!
+        XCTAssertLessThan(voiceRange.lowerBound, historyRange.lowerBound,
+                          "voice examples must appear before conversation history in the prompt")
+    }
+
+    func testMultipleVoiceExamplesAllAppearInPrompt() {
+        let thread = makeThread(name: "MultiVoice")
+        let examples = (1...5).map { "example_voice_\($0)" }
+        let prompt = PromptBuilder.build(thread: thread, tone: .playful, history: [], voiceExamples: examples)
+
+        for example in examples {
+            XCTAssertTrue(prompt.contains(example),
+                          "voice example '\(example)' must appear in prompt")
+        }
+    }
+
     // MARK: - REP-206: drop-oldest truncation direction
 
     /// When total message chars exceed the budget, the oldest (earliest in the array)

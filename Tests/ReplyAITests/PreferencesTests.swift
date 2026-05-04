@@ -452,3 +452,44 @@ final class PreferencesLastSyncDateTests: XCTestCase {
             "lastSyncDate must be removed from persistent domain by wipeReplyAIDefaults")
     }
 }
+
+// MARK: - REP-222: pref.voice.exampleMessages setter enforcement
+
+final class PreferencesVoiceExamplesTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUpWithError() throws {
+        suiteName = "test.ReplyAI.voiceExamples.\(UUID().uuidString)"
+        guard let d = UserDefaults(suiteName: suiteName) else {
+            XCTFail("couldn't create isolated UserDefaults suite")
+            return
+        }
+        defaults = d
+    }
+
+    override func tearDownWithError() throws {
+        defaults?.removePersistentDomain(forName: suiteName)
+    }
+
+    // Setter must clamp the list to 20 entries; entries beyond index 19 are dropped.
+    func testVoiceExamplesCapEnforcedAtTwenty() {
+        let messages = (1...30).map { "example \($0)" }
+        defaults.setVoiceExampleMessages(messages)
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored.count, 20,
+                       "voiceExampleMessages must clamp the list to 20 entries")
+        XCTAssertEqual(stored.first, "example 1", "first entry must be preserved after clamping")
+        XCTAssertEqual(stored.last, "example 20", "last surviving entry must be #20")
+    }
+
+    // Setter must truncate any individual entry longer than 500 chars.
+    func testVoiceExampleTruncatedAtFiveHundredChars() {
+        let longEntry = String(repeating: "a", count: 600)
+        defaults.setVoiceExampleMessages([longEntry])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored[0].count, 500,
+                       "individual voice example must be truncated to 500 chars at setter")
+    }
+}

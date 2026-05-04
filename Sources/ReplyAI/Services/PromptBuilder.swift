@@ -15,10 +15,24 @@ struct PromptBuilder {
     /// Embedded newlines within individual message texts are collapsed to a
     /// single space so each `speaker: text` pair stays on one line and the
     /// instruction at the bottom is never accidentally continued mid-line.
-    static func build(thread: MessageThread, tone: Tone, history: [Message]) -> String {
+    static func build(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message],
+        voiceExamples: [String] = []
+    ) -> String {
         var lines: [String] = []
         lines.append("Conversation with \(thread.name) via \(thread.channel.label).")
         lines.append("")
+
+        if !voiceExamples.isEmpty {
+            lines.append("Style examples from the user's prior messages:")
+            for example in voiceExamples {
+                lines.append("- \(example)")
+            }
+            lines.append("")
+        }
+
         lines.append("Recent messages (oldest first):")
 
         let truncated = truncate(history, budget: Self.historyCharBudget)

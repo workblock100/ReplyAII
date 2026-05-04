@@ -1503,8 +1503,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: M
 - ui_sensitive: false
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main commit (autopilot-2026-05-03-2031)
+- claimed_by: autopilot-2026-05-03-2031
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Services/PromptBuilder.swift`, `Tests/ReplyAITests/PromptBuilderTests.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: The `ob-voice` screen is a UI mock; full LoRA training is out of scope. Add the data layer: `pref.voice.exampleMessages: [String]` (UserDefaults key, defaults to `[]`, max 20 entries enforced at setter, each entry max 500 chars — truncated at setter). `PromptBuilder.buildPrompt(...)` gains optional `voiceExamples: [String]` parameter; when non-empty, inserts a "Style examples from the user's prior messages:" section above the conversation history. Tests: examples appear in built prompt; empty examples → no section header; >20 examples clamped to 20; entry >500 chars truncated at setter.
 - success_criteria:
