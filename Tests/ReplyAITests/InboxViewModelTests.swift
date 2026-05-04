@@ -765,6 +765,61 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
         XCTAssertEqual(result.first(where: { $0.id == "px-2" })?.pinned, false,
                        "id absent from pinnedIDs must remain unpinned")
     }
+
+    func testApplyPinnedEmptyPinnedIDsShortCircuits() {
+        // Early-return path: with no pinned IDs we skip the .map entirely
+        // and return the input unchanged.
+        let raw = [
+            MessageThread(id: "px-1", channel: .imessage, name: "X", avatar: "X", preview: "", time: ""),
+        ]
+        let result = InboxViewModel.applyPinned(raw, pinnedIDs: [])
+        XCTAssertEqual(result.map(\.id), raw.map(\.id),
+            "empty pinnedIDs must short-circuit to input passthrough")
+        XCTAssertFalse(result[0].pinned)
+    }
+
+    func testApplyPinnedEmptyInputReturnsEmpty() {
+        let result = InboxViewModel.applyPinned([], pinnedIDs: ["px-1"])
+        XCTAssertTrue(result.isEmpty,
+            "empty input must produce empty output regardless of pinnedIDs")
+    }
+
+    func testApplyPinnedAlreadyPinnedThreadIsPassedThrough() {
+        // The implementation guards `!t.pinned` so an already-pinned
+        // thread skips the copying() round-trip. Pin the optimization so
+        // a refactor doesn't burn an allocation per pinned thread on
+        // every sync.
+        let raw = [
+            MessageThread(
+                id: "px-1", channel: .imessage,
+                name: "X", avatar: "X", preview: "", time: "",
+                pinned: true
+            ),
+        ]
+        let result = InboxViewModel.applyPinned(raw, pinnedIDs: ["px-1"])
+        XCTAssertEqual(result.first?.pinned, true,
+            "already-pinned thread must remain pinned")
+        XCTAssertEqual(result.first?.id, "px-1",
+            "already-pinned thread must pass through with same id")
+    }
+
+    func testApplyPinnedDoesNotMutateUnrelatedFields() {
+        // Threads whose ids are not in pinnedIDs must not have any field
+        // modified — confirms the .map only touches the matching subset.
+        let raw = [
+            MessageThread(id: "px-1", channel: .imessage, name: "X", avatar: "X",
+                          preview: "preview-1", time: "now", unread: 5),
+            MessageThread(id: "px-2", channel: .slack, name: "Y", avatar: "Y",
+                          preview: "preview-2", time: "1m", unread: 0),
+        ]
+        let result = InboxViewModel.applyPinned(raw, pinnedIDs: ["px-1"])
+        let unrelated = result.first { $0.id == "px-2" }
+        XCTAssertEqual(unrelated?.preview, "preview-2",
+            "unrelated thread must keep its preview")
+        XCTAssertEqual(unrelated?.unread, 0,
+            "unrelated thread must keep its unread count")
+        XCTAssertEqual(unrelated?.pinned, false)
+    }
 }
 
 // MARK: - send() state transitions (REP-096)
