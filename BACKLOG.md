@@ -607,9 +607,10 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: false
-- status: blocked
+- status: done
+- done_on: c975e51 (impl + tests)
 - claimed_by: worker-2026-05-02-113834
-- blocker: implementation already on main (`SlackChannel.messages(forThreadID:limit:)`); two missing tests (`empty history`, `timestamp parsed`) added on `wip/2026-05-02-113834-rep272-rep257-slack-authorize` (bundled with REP-272). Could not run `swift test` — another SwiftPM session held `.build` lock for the full worker budget. Human should run tests on the wip branch and merge if green.
+- blocker: cleared — `SlackChannel.messages(forThreadID:limit:)` is on main calling `conversations.history`; `Tests/ReplyAITests/SlackChannelTests.swift` carries `testMessagesParsesConversationsHistory`, `testSlackMessagesForThreadEmptyHistoryReturnsEmpty`, `testSlackMessagesForThreadTimestampParsedCorrectly`, plus the `authorizationDenied` and `networkError` paths.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class, prereq: REP-237 + REP-242).** After `recentThreads()` populates the thread list, the inbox needs to fetch message history for a selected thread. Implement `SlackChannel.messagesForThread(threadID: String, limit: Int) async throws -> [Message]` using `SlackHTTPClient` (REP-237): `GET api/conversations.history?channel=<threadID>&limit=<limit>`. Parse `messages[]` array — each item has `text`, `user`, `ts` (Unix timestamp as string). Build `Message` with `body: text`, `sender: user`, `sentAt: Date(timeIntervalSince1970: Double(ts))`, `channel: .slack`. Tests: mock client returning 3-message history JSON → `[Message]` with correct fields; empty messages array → `[]`; `ts` string parses to correct Date; no token → `authorizationDenied`; HTTP error → `ChannelError.networkError`.
 - success_criteria:
