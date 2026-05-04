@@ -375,4 +375,32 @@ final class PromptBuilderTests: XCTestCase {
                           "message '\(text.prefix(5))…' must not be dropped at exact budget boundary")
         }
     }
+
+    // MARK: - Per-tone semantic markers in systemPrompt
+
+    func testWarmTonePromptMentionsWarmth() {
+        // Beyond the existing "non-empty" + "all-tones-distinct" guards, pin
+        // the load-bearing semantic marker for each tone. A refactor that
+        // swapped two tone-tail instructions (e.g. .warm acquired the
+        // .direct tail) would slip past both existing guards but ship a
+        // model that drafts in the wrong voice.
+        let prompt = PromptBuilder.systemPrompt(tone: .warm)
+        XCTAssertTrue(prompt.localizedCaseInsensitiveContains("warm"),
+                      ".warm system prompt must mention warmth, got: \(prompt)")
+    }
+
+    func testDirectTonePromptMentionsBrevity() {
+        let prompt = PromptBuilder.systemPrompt(tone: .direct)
+        // The .direct tail tells the model to be "direct" + "short" + lowercase.
+        // Pin "direct" since it's the most distinctive load-bearing token; the
+        // other markers are less diagnostic in isolation.
+        XCTAssertTrue(prompt.localizedCaseInsensitiveContains("direct"),
+                      ".direct system prompt must mention directness, got: \(prompt)")
+    }
+
+    func testPlayfulTonePromptMentionsPlayfulness() {
+        let prompt = PromptBuilder.systemPrompt(tone: .playful)
+        XCTAssertTrue(prompt.localizedCaseInsensitiveContains("playful"),
+                      ".playful system prompt must mention playfulness, got: \(prompt)")
+    }
 }
