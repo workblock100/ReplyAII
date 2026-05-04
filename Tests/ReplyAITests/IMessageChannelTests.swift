@@ -1620,3 +1620,34 @@ final class IMessageChannelMessageOrderTests: XCTestCase {
         }
     }
 }
+
+// MARK: - formatRelative time-bucket contract
+
+/// `formatRelative` is the function whose output appears as the time
+/// label on every thread row. The exact "h:mm a" / "MMM d" output is
+/// locale-dependent, but the structural contract — appleDate=0 returns
+/// "" as a sentinel for "no message ever", and any non-zero value
+/// produces a non-empty string — is invariant and worth pinning.
+final class IMessageChannelFormatRelativeTests: XCTestCase {
+
+    func testFormatRelativeZeroAppleDateReturnsEmptySentinel() {
+        // chat.db rows with no associated message ever (e.g. an empty thread
+        // surfaced via chat_handle_join with no chat_message_join entry) have
+        // date=0. The thread row should render with no time label, not the
+        // formatted Unix epoch ("Dec 31" or similar). Guarding the sentinel
+        // here prevents a refactor that swaps in a generic DateFormatter from
+        // accidentally producing a misleading historical date.
+        XCTAssertEqual(IMessageChannel.formatRelative(appleDate: 0), "",
+                       "appleDate=0 must return empty string as the no-message sentinel")
+    }
+
+    func testFormatRelativeNonZeroProducesNonEmptyLabel() {
+        // Any meaningful timestamp must yield SOMETHING — even a date long
+        // in the past should fall through to the "MMM d" branch rather than
+        // the empty-sentinel branch. Mirrors the inverse contract of the
+        // sentinel test above.
+        let yearAgo = IMessageChannel.formatRelative(appleDate: 700_000_000)
+        XCTAssertFalse(yearAgo.isEmpty,
+                       "non-zero appleDate must produce a non-empty label, got: '\(yearAgo)'")
+    }
+}
