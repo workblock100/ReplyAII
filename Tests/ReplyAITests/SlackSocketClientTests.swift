@@ -393,4 +393,17 @@ final class SlackSocketClientTests: XCTestCase {
 
         client.stop()
     }
+
+    // MARK: - maxReconnects literal contract
+
+    /// `testSlackSocketClientStopsReconnectAfterThreeAttempts` already verifies
+    /// the bound via `SlackSocketClient.maxReconnects + 1`, but that loop
+    /// references the constant — if the value drifted from 3 to 5 the loop
+    /// would still match. Pin the literal so a quiet retry-budget edit fails
+    /// here and prompts a deliberate review (more reconnects masks Socket
+    /// Mode endpoint instability; fewer drops events users expected to land).
+    func testMaxReconnectsLiteralIsThree() {
+        XCTAssertEqual(SlackSocketClient.maxReconnects, 3,
+                       "Slack Socket Mode reconnect budget is part of the durability contract — changing it shifts user-visible message-loss behavior")
+    }
 }
