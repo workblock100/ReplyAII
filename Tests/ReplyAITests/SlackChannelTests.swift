@@ -198,6 +198,71 @@ final class SlackChannelTests: XCTestCase {
         }
         XCTAssertEqual(msg, "nope")
     }
+
+    // MARK: - send(text:toThreadID:) — auth gate + ack handling
+
+    func testSendThrowsAuthDeniedWithNoToken() async {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        let channel = SlackChannel(tokenStore: store, http: NeverHTTP())
+
+        do {
+            try await channel.send(text: "hello", toThreadID: "C100")
+            XCTFail("Expected authorizationDenied to be thrown")
+        } catch ChannelError.authorizationDenied {
+            // Expected
+        } catch {
+            XCTFail("Expected authorizationDenied, got \(error)")
+        }
+    }
+
+    func testSendSucceedsWhenAckOk() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        let body = #"{ "ok": true }"#.data(using: .utf8)!
+        let recorder = RecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        try await channel.send(text: "hi", toThreadID: "C200")
+
+        XCTAssertEqual(recorder.lastPostEndpoint, "chat.postMessage")
+        XCTAssertEqual(recorder.lastPostJSON?["channel"] as? String, "C200")
+        XCTAssertEqual(recorder.lastPostJSON?["text"] as? String, "hi")
+    }
+
+    func testSendThrowsNetworkErrorWithSlackErrorString() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        let body = #"{ "ok": false, "error": "channel_not_found" }"#.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        do {
+            try await channel.send(text: "hi", toThreadID: "C-bogus")
+            XCTFail("Expected networkError to be thrown")
+        } catch ChannelError.networkError(let msg) {
+            XCTAssertEqual(msg, "channel_not_found",
+                "send must surface Slack's error string when ok:false")
+        } catch {
+            XCTFail("Expected networkError, got \(error)")
+        }
+    }
+
+    func testSendThrowsNetworkErrorWithFallbackWhenErrorMissing() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-abc", workspaceName: "Acme")
+        // Slack ack with ok:false but no error string.
+        let body = #"{ "ok": false }"#.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        do {
+            try await channel.send(text: "hi", toThreadID: "C200")
+            XCTFail("Expected networkError to be thrown")
+        } catch ChannelError.networkError(let msg) {
+            XCTAssertFalse(msg.isEmpty,
+                "fallback message must not be empty when Slack omits error")
+        } catch {
+            XCTFail("Expected networkError, got \(error)")
+        }
+    }
 }
 
 // MARK: - Test doubles
@@ -210,6 +275,28 @@ private struct StubHTTP: SlackHTTPClient {
     }
     func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
         payload
+    }
+}
+
+/// HTTP client that records the last POST it received and replays a canned
+/// payload. Used by send() tests to verify the request shape.
+private final class RecordingHTTP: SlackHTTPClient, @unchecked Sendable {
+    let payload: Data
+    private(set) var lastPostEndpoint: String?
+    private(set) var lastPostJSON: [String: Any]?
+    private let lock = NSLock()
+
+    init(payload: Data) { self.payload = payload }
+
+    func get(endpoint: String, token: String, params: [String: String]) async throws -> Data {
+        payload
+    }
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
+        lock.lock()
+        lastPostEndpoint = endpoint
+        lastPostJSON = json
+        lock.unlock()
+        return payload
     }
 }
 
