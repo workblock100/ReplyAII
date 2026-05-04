@@ -451,6 +451,67 @@ final class PreferencesLastSyncDateTests: XCTestCase {
         XCTAssertNil(stored,
             "lastSyncDate must be removed from persistent domain by wipeReplyAIDefaults")
     }
+
+    // MARK: - wipeExemptions membership pin
+    //
+    // The wipeExemptions Set is the single source of truth for which keys
+    // survive a factory reset. Pin its membership so that a refactor cannot
+    // silently drop a key (which would erase the user's launchCount or
+    // re-trigger onboarding) or quietly add one (which would leak state
+    // through a "fresh start" the user expected to be clean).
+
+    func testWipeExemptionsContainsLaunchCount() {
+        XCTAssertTrue(PreferenceKey.wipeExemptions.contains(PreferenceKey.launchCount),
+            "launchCount must survive factory wipe — it tracks app age and feeds product analytics")
+    }
+
+    func testWipeExemptionsContainsFirstLaunchDate() {
+        XCTAssertTrue(PreferenceKey.wipeExemptions.contains(PreferenceKey.firstLaunchDate),
+            "firstLaunchDate must survive factory wipe — it is a set-once install timestamp")
+    }
+
+    func testWipeExemptionsContainsDemoModeActive() {
+        XCTAssertTrue(PreferenceKey.wipeExemptions.contains(PreferenceKey.demoModeActive),
+            "demoModeActive must survive factory wipe — wiping it would drop the user back to demo mode after a reset, which is jarring")
+    }
+
+    func testWipeExemptionsContainsOnboardingCompleted() {
+        XCTAssertTrue(PreferenceKey.wipeExemptions.contains(PreferenceKey.onboardingCompleted),
+            "onboardingCompleted must survive factory wipe — re-running onboarding after a reset is a footgun, not a feature")
+    }
+
+    func testWipeExemptionsCardinalityIsExactlyFour() {
+        // Catches accidental additions to the exemption set. Adding a key
+        // here is a deliberate decision that should require updating this
+        // test alongside the exemption set itself.
+        XCTAssertEqual(PreferenceKey.wipeExemptions.count, 4,
+            "wipeExemptions has changed size — confirm the new exemption is intentional and update this test")
+    }
+
+    func testDemoModeActiveSurvivesWipe() {
+        defaults.set(false, forKey: PreferenceKey.demoModeActive)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertFalse(defaults.bool(forKey: PreferenceKey.demoModeActive),
+            "demoModeActive=false must persist through wipe — otherwise reset re-enables demo data")
+    }
+
+    func testOnboardingCompletedSurvivesWipe() {
+        defaults.set(true, forKey: PreferenceKey.onboardingCompleted)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: PreferenceKey.onboardingCompleted),
+            "onboardingCompleted=true must persist through wipe — otherwise reset re-runs onboarding")
+    }
+
+    func testFirstLaunchDateSurvivesWipe() {
+        let original = Date(timeIntervalSinceReferenceDate: 700_000_000)
+        defaults.set(original, forKey: PreferenceKey.firstLaunchDate)
+        UserDefaults.wipeReplyAIDefaults(in: defaults)
+        let stored = defaults.object(forKey: PreferenceKey.firstLaunchDate) as? Date
+        XCTAssertEqual(stored?.timeIntervalSinceReferenceDate ?? 0,
+                       original.timeIntervalSinceReferenceDate,
+                       accuracy: 1.0,
+            "firstLaunchDate must persist verbatim through wipe — it is a set-once install timestamp")
+    }
 }
 
 // MARK: - REP-222: pref.voice.exampleMessages setter enforcement
