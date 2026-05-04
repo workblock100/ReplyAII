@@ -403,4 +403,31 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.localizedCaseInsensitiveContains("playful"),
                       ".playful system prompt must mention playfulness, got: \(prompt)")
     }
+
+    // MARK: - Public-constant pins
+    //
+    // `historyCharBudget` and `minHistoryReserve` define the prompt's
+    // truncation envelope. Drift here changes how much history every
+    // draft request includes — quietly degrading completion quality on
+    // long threads. Pin the exact numbers so a change is acknowledged
+    // in code review rather than slipping through.
+
+    func testHistoryCharBudgetPinned() {
+        XCTAssertEqual(PromptBuilder.historyCharBudget, 2_000,
+            "historyCharBudget governs how many message-history characters reach the model — drift silently changes completion quality on long threads")
+    }
+
+    func testMinHistoryReservePinned() {
+        XCTAssertEqual(PromptBuilder.minHistoryReserve, 200,
+            "minHistoryReserve guarantees at least 200 chars of recent history survive the system-instruction overflow guard")
+    }
+
+    func testMinHistoryReserveLessThanBudget() {
+        // Logical invariant: the reserve must fit inside the total budget,
+        // otherwise the truncation math goes negative on every call. The
+        // values themselves are pinned above; this guards against a future
+        // edit that bumps the reserve above the budget.
+        XCTAssertLessThan(PromptBuilder.minHistoryReserve, PromptBuilder.historyCharBudget,
+            "minHistoryReserve must stay below historyCharBudget — otherwise truncate(_:budget:) produces a negative cap")
+    }
 }
