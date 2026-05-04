@@ -152,6 +152,98 @@ final class RulesTests: XCTestCase {
         }
     }
 
+    // MARK: - CodingKeys field names — wire-format contract
+    //
+    // The kind-discriminator tests above guarantee `kind` strings stay
+    // stable. The associated-value field names (`value`, `hours`,
+    // `clauses`, `clause`, `start_hour`, `end_hour`, `at_least`,
+    // `group_name`) are equally part of the on-disk contract — a
+    // rename in `RulePredicate.CodingKeys` orphans every shipped
+    // rules.json with that variant. Pin the literal JSON object shape
+    // for each variant so a typo in CodingKeys surfaces here.
+
+    /// Encode a predicate and return the parsed JSON object so individual
+    /// field names can be asserted.
+    private func encodedJSON<T: Encodable>(_ value: T) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(value)
+        return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    func testValueFieldUsedForStringPredicates() throws {
+        // senderIs / senderContains / textContains / textMatchesRegex /
+        // threadNameMatchesRegex all use the `value` key — pin literally.
+        let cases: [(RulePredicate, String)] = [
+            (.senderIs("alice"),                       "alice"),
+            (.senderContains("ali"),                   "ali"),
+            (.textContains("deck"),                    "deck"),
+            (.textMatchesRegex("^urgent"),             "^urgent"),
+            (.threadNameMatchesRegex(pattern: "team"), "team"),
+        ]
+        for (pred, expected) in cases {
+            let json = try encodedJSON(pred)
+            XCTAssertEqual(json["value"] as? String, expected,
+                "\(pred) must encode its string under the `value` key — renaming the CodingKey breaks rules.json")
+        }
+    }
+
+    func testChannelIsUsesValueKey() throws {
+        let json = try encodedJSON(RulePredicate.channelIs(.slack))
+        XCTAssertEqual(json["value"] as? String, "slack",
+            "channelIs must encode its Channel rawValue under the `value` key")
+    }
+
+    func testMessageAgeOlderThanUsesHoursKey() throws {
+        let json = try encodedJSON(RulePredicate.messageAgeOlderThan(hours: 48))
+        XCTAssertEqual(json["hours"] as? Int, 48,
+            "messageAgeOlderThan must encode its hours under the `hours` key")
+    }
+
+    func testTimeOfDayUsesStartEndHourKeys() throws {
+        let json = try encodedJSON(RulePredicate.timeOfDay(startHour: 22, endHour: 6))
+        XCTAssertEqual(json["start_hour"] as? Int, 22,
+            "timeOfDay must encode startHour under the `start_hour` key")
+        XCTAssertEqual(json["end_hour"] as? Int, 6,
+            "timeOfDay must encode endHour under the `end_hour` key")
+    }
+
+    func testMessageCountUsesAtLeastKey() throws {
+        let json = try encodedJSON(RulePredicate.messageCount(atLeast: 5))
+        XCTAssertEqual(json["at_least"] as? Int, 5,
+            "messageCount must encode its threshold under the `at_least` key")
+    }
+
+    func testContactGroupMatchesNameUsesGroupNameKey() throws {
+        let json = try encodedJSON(RulePredicate.contactGroupMatchesName(groupName: "Family"))
+        XCTAssertEqual(json["group_name"] as? String, "Family",
+            "contactGroupMatchesName must encode its name under the `group_name` key")
+    }
+
+    func testAndOrUseClausesKey() throws {
+        let andJSON = try encodedJSON(RulePredicate.and([.isUnread, .hasUnread]))
+        XCTAssertNotNil(andJSON["clauses"],
+            "and(...) must encode its child predicates under the `clauses` key")
+        let arr = try XCTUnwrap(andJSON["clauses"] as? [[String: Any]])
+        XCTAssertEqual(arr.count, 2)
+
+        let orJSON = try encodedJSON(RulePredicate.or([.isUnread]))
+        XCTAssertNotNil(orJSON["clauses"],
+            "or(...) must encode its child predicates under the `clauses` key")
+    }
+
+    func testNotUsesClauseKey() throws {
+        let json = try encodedJSON(RulePredicate.not(.isUnread))
+        XCTAssertNotNil(json["clause"],
+            "not(...) must encode its inner predicate under the singular `clause` key (not `clauses`)")
+        XCTAssertNil(json["clauses"],
+            "not(...) must NOT use `clauses` — that key is reserved for and/or")
+    }
+
+    func testSetDefaultToneActionUsesValueKey() throws {
+        let json = try encodedJSON(RuleAction.setDefaultTone(.direct))
+        XCTAssertEqual(json["value"] as? String, "Direct",
+            "setDefaultTone must encode its Tone rawValue under the `value` key")
+    }
+
     // MARK: - senderIs case-insensitive (REP-065)
 
     func testSenderIsCaseInsensitiveMatch() {
