@@ -27,6 +27,45 @@ final class ChannelTests: XCTestCase {
             XCTAssertFalse(channel.iconName.isEmpty, "\(channel.rawValue) has empty iconName")
         }
     }
+
+    func testRawValuesArePersistenceContract() {
+        // Channel raw values land in rules.json, the search index, per-channel
+        // Preferences keys, and the chat-list cache. Renaming a case orphans
+        // every persisted reference. Pin the strings so a typo or autocomplete
+        // accident here trips the test before it ships.
+        XCTAssertEqual(Channel.imessage.rawValue, "imessage")
+        XCTAssertEqual(Channel.whatsapp.rawValue, "whatsapp")
+        XCTAssertEqual(Channel.slack.rawValue,    "slack")
+        XCTAssertEqual(Channel.teams.rawValue,    "teams")
+        XCTAssertEqual(Channel.sms.rawValue,      "sms")
+        XCTAssertEqual(Channel.telegram.rawValue, "telegram")
+    }
+
+    func testAllCasesShape() {
+        // Order drives the per-channel filter UI and the sidebar legend; if
+        // a case were inserted in the middle the rendered icons would shift
+        // without anyone noticing.
+        XCTAssertEqual(Channel.allCases,
+                       [.imessage, .whatsapp, .slack, .teams, .sms, .telegram],
+                       "channel enumeration order must remain stable for layout + persistence")
+    }
+
+    func testIDMatchesRawValue() {
+        // SwiftUI ForEach keys lists by .id; if id ever drifts from rawValue
+        // the per-channel filter selection silently breaks.
+        for channel in Channel.allCases {
+            XCTAssertEqual(channel.id, channel.rawValue)
+        }
+    }
+
+    func testLabelAndDisplayNameMatch() {
+        // displayName is documented as a UI alias for label — pin them so a
+        // future tweak to one doesn't silently leave the other stale.
+        for channel in Channel.allCases {
+            XCTAssertEqual(channel.displayName, channel.label,
+                           "\(channel.rawValue): displayName must mirror label")
+        }
+    }
 }
 
 // MARK: - ChannelError.errorDescription
