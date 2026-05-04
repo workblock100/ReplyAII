@@ -158,6 +158,40 @@ final class ChatDBWatcherTests: XCTestCase {
         // Reaching here without trap is the assertion.
     }
 
+    /// Repeated system cancels must each increment the restart counter so the
+    /// exponential-backoff schedule walks forward; without this, every cancel
+    /// after the first would silently retry at the initial delay.
+    func testRepeatedSystemCancelsAccumulateRestartCount() {
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            restartDelay: 0.05,
+            onChange: {}
+        )
+        watcher.simulateSystemCancel()
+        watcher.simulateSystemCancel()
+        watcher.simulateSystemCancel()
+        XCTAssertEqual(watcher.restartCount.withLock { $0 }, 3,
+            "each system cancel must increment restartCount independently")
+    }
+
+    /// `stop()` is documented as an alias for `stopWatching()`. Both must block
+    /// subsequent restarts identically — the alias was added for callers
+    /// pre-dating the rename and a regression to "stop is a no-op" would
+    /// silently break shutdown for any caller still using the old name.
+    func testStopAliasBlocksRestartLikeStopWatching() {
+        let watcher = ChatDBWatcher(
+            paths: [],
+            debounce: debounce,
+            restartDelay: 0.05,
+            onChange: {}
+        )
+        watcher.stop()                 // alias path
+        watcher.simulateSystemCancel()
+        XCTAssertEqual(watcher.restartCount.withLock { $0 }, 0,
+            "stop() alias must set the stopped flag like stopWatching()")
+    }
+
     /// After 5 stop→reinit cycles, a 6th watcher instance must still fire its callback.
     func testFinalWatcherAfterCyclesFiresCallback() {
         for _ in 0..<5 {
