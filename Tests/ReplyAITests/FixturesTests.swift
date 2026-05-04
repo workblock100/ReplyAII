@@ -194,4 +194,50 @@ final class FixturesTests: XCTestCase {
         XCTAssertEqual(unique.count, Fixtures.sidebarChannels.count,
                        "sidebar channels must be unique — duplicates would render redundant icons")
     }
+
+    // MARK: - genericAcknowledgment per-tone copy pin
+
+    /// `Fixtures.genericAcknowledgment(tone:)` is what the stub LLM returns
+    /// for every real (non-fixture) thread. That means every user with iMessage
+    /// connected and no MLX model loaded sees this exact copy in the composer.
+    /// A silent edit changes the first impression across the entire user base
+    /// — pin verbatim so product copy review is forced to acknowledge the change.
+
+    func testGenericAcknowledgmentWarmCopyPinned() {
+        XCTAssertEqual(
+            Fixtures.genericAcknowledgment(tone: .warm),
+            "Thanks for the heads up — I'll circle back on this shortly."
+        )
+    }
+
+    func testGenericAcknowledgmentDirectCopyPinned() {
+        XCTAssertEqual(
+            Fixtures.genericAcknowledgment(tone: .direct),
+            "got it. back to you in a bit."
+        )
+    }
+
+    func testGenericAcknowledgmentPlayfulCopyPinned() {
+        XCTAssertEqual(
+            Fixtures.genericAcknowledgment(tone: .playful),
+            "Consider it received. A thoughtful reply is compiling 🙃"
+        )
+    }
+
+    func testGenericAcknowledgmentToneVoiceShape() {
+        // Tone identity invariants — warm starts capitalized + ends with a
+        // period; direct is all-lowercase + period; playful is capitalized
+        // and includes the 🙃 emoji. Drift in those shapes would erode the
+        // tone-distinctness the ⌘/ cycle is meant to communicate.
+        let warm    = Fixtures.genericAcknowledgment(tone: .warm)
+        let direct  = Fixtures.genericAcknowledgment(tone: .direct)
+        let playful = Fixtures.genericAcknowledgment(tone: .playful)
+
+        XCTAssertTrue(warm.first?.isUppercase ?? false,
+                      "warm tone leads capitalized")
+        XCTAssertTrue(direct.first?.isLowercase ?? false,
+                      "direct tone is intentionally lowercase")
+        XCTAssertTrue(playful.contains("🙃"),
+                      "playful tone keeps the upside-down-smile signature emoji")
+    }
 }
