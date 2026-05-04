@@ -1098,18 +1098,19 @@ final class InboxViewModelIsSyncingTests: XCTestCase {
 
         let syncTask = Task { await vm.syncFromIMessage() }
 
-        // Yield until recentThreads has been entered (callCount increments before the
-        // continuation is appended to pending). Both tasks share the MainActor, so
-        // after a yield that sees callCount > 0, syncTask has already suspended inside
-        // withCheckedThrowingContinuation — making it safe to call resumeAll().
-        var count = 0
-        while channel.recentThreadsCallCount == 0 && count < 100 {
-            await Task.yield()
-            count += 1
-        }
+        // Wait deterministically for `recentThreads` to be entered via the
+        // enteredStream signal — `BlockingMockChannel` yields a `()` event
+        // the moment it suspends inside the continuation. The previous
+        // `await Task.yield()` polling loop relied on Task.yield resuming
+        // the syncTask before the polling task, which is not actually
+        // guaranteed on the cooperative pool: when the polling task is the
+        // only one ready, yield is a no-op and the loop spins 100 iterations
+        // without observing the call. The stream wait can't no-op — the
+        // suspending task must run before the stream produces.
+        for await _ in channel.enteredStream { break }
 
-        // Safety guard: if the loop timed out before recentThreads was entered,
-        // turn off blocking so syncTask can still complete (avoids deadlock).
+        // Safety guard: turn off blocking and drain any pending continuations
+        // even if the assertion fails so the test can never deadlock.
         defer { channel.blocking = false; channel.resumeAll() }
 
         XCTAssertTrue(vm.isSyncing, "isSyncing must be true while syncFromIMessage is blocked in recentThreads")
