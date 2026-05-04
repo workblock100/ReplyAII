@@ -1,5 +1,11 @@
 import Foundation
 
+/// One row in the inbox sidebar / thread list. Conforms to `Hashable` so
+/// SwiftUI's `List(selection:)` and the rule engine's per-thread caches
+/// can key off identity — drift in any field invalidates those caches,
+/// which is the desired behavior on incoming messages and the reason
+/// `unread`/`preview` are stored on the thread itself rather than
+/// computed from `Message`s.
 struct MessageThread: Identifiable, Hashable, Sendable {
     let id: String
     let channel: Channel

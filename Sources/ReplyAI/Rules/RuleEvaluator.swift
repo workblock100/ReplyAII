@@ -61,6 +61,12 @@ struct RuleContext: Sendable {
     }
 }
 
+/// Pure-function namespace for evaluating `RulePredicate` and applying
+/// `RuleAction` against a `RuleContext`. Stateless and deterministic on
+/// purpose — every input that influences a match is passed in (including
+/// `currentDate` for time-based predicates) so the same call returns the
+/// same answer in tests, in CI, and at runtime. Lives in an `enum` (not
+/// a struct or class) to make instantiation a compile error.
 enum RuleEvaluator {
     /// True if the predicate holds against `ctx`.
     /// - Parameter currentDate: The reference "now" for time-based predicates.

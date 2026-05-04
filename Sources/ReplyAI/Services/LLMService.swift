@@ -2,6 +2,11 @@ import Foundation
 
 // MARK: - Public surface
 
+/// One step of the streaming draft. The composer renders `text` chunks
+/// as tokens arrive, exposes `confidence` for the bottom-of-composer
+/// indicator, surfaces `loadProgress` while MLX weights download/load,
+/// and treats `done` as the cue to enable the Send button. Stream-first
+/// so the UI doesn't block waiting for the full draft.
 struct DraftChunk: Sendable {
     enum Kind: Sendable {
         case text(String)
