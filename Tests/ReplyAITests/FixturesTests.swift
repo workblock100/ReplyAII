@@ -142,4 +142,56 @@ final class FixturesTests: XCTestCase {
         XCTAssertNil(Fixtures.contextSummary(for: "unknown-real-thread-id"),
             "unknown thread must return nil — ContextCard relies on this for its empty state")
     }
+
+    // MARK: - REP-XXX: Sidebar fixtures pin
+
+    /// `Fixtures.folders` and `Fixtures.sidebarChannels` are the sidebar's
+    /// empty-state when no real data has loaded — i.e. what every screenshot
+    /// in the App Store listing and design handoff is built from. Drift in
+    /// labels, order, or channel set silently changes those references.
+
+    func testFoldersOrderMatchesFolderKindAllCases() {
+        // Sidebar bucket order is defined by Folder.Kind.allCases; the
+        // fixtures must list folders in that exact order or the gallery
+        // and the live app render different sidebars.
+        XCTAssertEqual(Fixtures.folders.map(\.id), Folder.Kind.allCases,
+                       "fixture folder order must match Folder.Kind.allCases — gallery + live render the same sidebar")
+    }
+
+    func testFoldersLabelsArePinned() {
+        // Labels render in the sidebar — drift would silently change the
+        // copy users see on the empty/demo state.
+        let labels = Fixtures.folders.reduce(into: [Folder.Kind: String]()) {
+            $0[$1.id] = $1.label
+        }
+        XCTAssertEqual(labels[.all],      "Unified Inbox")
+        XCTAssertEqual(labels[.priority], "Priority")
+        XCTAssertEqual(labels[.awaiting], "Awaiting reply")
+        XCTAssertEqual(labels[.snoozed],  "Snoozed")
+        XCTAssertEqual(labels[.done],     "Replied")
+    }
+
+    func testFoldersCountsArePositiveOrZero() {
+        // Sidebar badges don't render negative counts; pin the invariant
+        // before any drift introduces one accidentally.
+        for folder in Fixtures.folders {
+            XCTAssertGreaterThanOrEqual(folder.count, 0,
+                                        "folder counts must be ≥ 0 — sidebar badge can't render negatives")
+        }
+    }
+
+    func testSidebarChannelsContentAndOrder() {
+        // Order defines the icon row in the sidebar's channels group.
+        XCTAssertEqual(Fixtures.sidebarChannels,
+                       [.imessage, .whatsapp, .slack, .teams, .sms, .telegram],
+                       "sidebar channel row order is part of the visual identity — pin verbatim")
+    }
+
+    func testSidebarChannelsAreUnique() {
+        // A duplicate channel would render two adjacent icons at the same
+        // tint — caught at render time but not until then.
+        let unique = Set(Fixtures.sidebarChannels)
+        XCTAssertEqual(unique.count, Fixtures.sidebarChannels.count,
+                       "sidebar channels must be unique — duplicates would render redundant icons")
+    }
 }
