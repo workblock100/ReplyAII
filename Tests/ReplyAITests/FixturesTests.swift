@@ -120,4 +120,26 @@ final class FixturesTests: XCTestCase {
                 "demo thread \(thread.id) has empty time label — would render misaligned")
         }
     }
+
+    // MARK: - Fixtures.contextSummary
+
+    func testContextSummaryReturnsSeededValueForT1() {
+        // ContextCard renders this string verbatim when the user opens the
+        // gallery's t1 thread. Pin the seeded ID set so a refactor doesn't
+        // silently drop these — the cards would render an empty body.
+        XCTAssertNotNil(Fixtures.contextSummary(for: "t1"),
+            "t1 must have a seeded contextSummary (rendered in gallery)")
+    }
+
+    func testContextSummaryReturnsSeededValueForT3() {
+        XCTAssertNotNil(Fixtures.contextSummary(for: "t3"),
+            "t3 must have a seeded contextSummary (rendered in gallery)")
+    }
+
+    func testContextSummaryReturnsNilForUnknownThread() {
+        // Default branch — non-fixture threads (real iMessage syncs)
+        // produce nil and ContextCard falls back to its empty state.
+        XCTAssertNil(Fixtures.contextSummary(for: "unknown-real-thread-id"),
+            "unknown thread must return nil — ContextCard relies on this for its empty state")
+    }
 }
