@@ -76,4 +76,67 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         XCTAssertEqual(callCount, 1,
             "two rapid activations within the debounce window must coalesce to one callback")
     }
+
+    // MARK: - stop() cancels pending callback
+
+    func testStopCancelsPendingDebouncedCallback() async throws {
+        let center = NotificationCenter()
+        var fired = false
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.1
+        )
+        observer.onMessagesActivated = { fired = true }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+
+        // Stop before the debounce fires.
+        observer.stop()
+
+        // Wait past the original debounce window.
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertFalse(fired,
+            "stop() before debounce expiry must cancel the pending callback")
+    }
+
+    func testActivationAfterStopDoesNotFire() async throws {
+        let center = NotificationCenter()
+        var fired = false
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+        observer.onMessagesActivated = { fired = true }
+
+        observer.stop()
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(fired,
+            "activation notifications posted after stop() must not be observed")
+    }
+
+    func testNilBundleIDExtractorDoesNotFire() async throws {
+        let center = NotificationCenter()
+        var fired = false
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: { _ in nil },
+            debounce: 0.0
+        )
+        observer.onMessagesActivated = { fired = true }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(fired,
+            "extractor returning nil must short-circuit before scheduling the callback")
+    }
 }
