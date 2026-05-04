@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every screen in the 28-screen inventory. IDs match app-shell.jsx SCREEN_GROUPS.
+/// Every screen in the 34-screen inventory. IDs match app-shell.jsx SCREEN_GROUPS.
 enum ScreenID: String, CaseIterable, Hashable, Identifiable {
     // Onboarding
     case obWelcome       = "ob-welcome"

@@ -5,7 +5,7 @@ import SwiftUI
 /// screen filling the rest. Left/right arrows step through screens.
 ///
 /// In a production build we'd gate this behind a debug flag; for v1 it's
-/// the default root so we can sweep across all 28 states.
+/// the default root so we can sweep across all 34 states.
 struct AppPrototypeView: View {
     @State private var screen: ScreenID = .appInbox
     @State private var navOpen: Bool = true
