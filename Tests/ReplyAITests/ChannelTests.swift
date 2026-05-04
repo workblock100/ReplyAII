@@ -66,6 +66,73 @@ final class ChannelTests: XCTestCase {
                            "\(channel.rawValue): displayName must mirror label")
         }
     }
+
+    func testLabelLiteralsArePinned() {
+        // Labels appear verbatim in onboarding ("Connect WhatsApp"),
+        // Settings → Channels rows, and the per-channel filter UI.
+        // A spell-correction edit (e.g. "iMessage" → "iMessages") would
+        // silently rewrite three surfaces. Pin literally so the diff
+        // surfaces in code review.
+        XCTAssertEqual(Channel.imessage.label, "iMessage")
+        XCTAssertEqual(Channel.whatsapp.label, "WhatsApp")
+        XCTAssertEqual(Channel.slack.label,    "Slack")
+        XCTAssertEqual(Channel.teams.label,    "Teams")
+        XCTAssertEqual(Channel.sms.label,      "SMS")
+        XCTAssertEqual(Channel.telegram.label, "Telegram")
+    }
+
+    func testIconNameLiteralsArePinned() {
+        // SF Symbol names are runtime-resolved strings — a typo prints
+        // a placeholder square in production but compiles silently. Pin
+        // the exact symbol per channel so a refactor that swaps icons
+        // shows up as a code-review diff, not a visual regression.
+        XCTAssertEqual(Channel.imessage.iconName, "message.fill")
+        XCTAssertEqual(Channel.whatsapp.iconName, "phone.bubble.fill")
+        XCTAssertEqual(Channel.slack.iconName,    "number.square.fill")
+        XCTAssertEqual(Channel.teams.iconName,    "person.3.fill")
+        XCTAssertEqual(Channel.sms.iconName,      "bubble.left.fill")
+        XCTAssertEqual(Channel.telegram.iconName, "paperplane.fill")
+    }
+
+    func testIconNamesAreUnique() {
+        // Two channels sharing an SF Symbol makes the channel indicator
+        // ambiguous in the inbox sidebar. Distinct names, distinct icons.
+        let names = Channel.allCases.map(\.iconName)
+        XCTAssertEqual(Set(names).count, names.count,
+                       "channel SF Symbols must be unique; got duplicates: \(names)")
+    }
+
+    func testDotColorMatchesThemeChannelToken() {
+        // dotColor wires the channel into the Theme palette. If a future
+        // refactor swaps a channel's dotColor to a different token (or
+        // worse, a literal Color), the channel-agnostic UX direction
+        // breaks: per-channel theming would no longer derive from a
+        // single source of truth.
+        XCTAssertEqual(
+            String(describing: Channel.imessage.dotColor),
+            String(describing: Theme.Color.channelIMessage)
+        )
+        XCTAssertEqual(
+            String(describing: Channel.whatsapp.dotColor),
+            String(describing: Theme.Color.channelWhatsApp)
+        )
+        XCTAssertEqual(
+            String(describing: Channel.slack.dotColor),
+            String(describing: Theme.Color.channelSlack)
+        )
+        XCTAssertEqual(
+            String(describing: Channel.teams.dotColor),
+            String(describing: Theme.Color.channelTeams)
+        )
+        XCTAssertEqual(
+            String(describing: Channel.sms.dotColor),
+            String(describing: Theme.Color.channelSMS)
+        )
+        XCTAssertEqual(
+            String(describing: Channel.telegram.dotColor),
+            String(describing: Theme.Color.channelTelegram)
+        )
+    }
 }
 
 // MARK: - ChannelError.errorDescription
