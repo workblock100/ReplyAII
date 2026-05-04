@@ -183,4 +183,38 @@ final class SlackTokenStoreTests: XCTestCase {
         XCTAssertNil(corruptStore.get(), "malformed JSON should return nil without crashing")
         keychain.delete(key: "slack-access-token")
     }
+
+    /// Pin the on-Keychain storage key and JSON wire format. The store's
+    /// private `storageKey` plus the `Entry` Codable fields together
+    /// define the on-disk shape every shipped install reads from. A
+    /// rename of either silently orphans every existing Slack token —
+    /// the user appears to be signed out for no clear reason. Pin both
+    /// here so a refactor surfaces as a code-review diff.
+    func testSlackTokenStoreWriteToKeychainKeyAndJSONShape() throws {
+        let keychain = KeychainHelper(service: "co.replyai.test-slack-shape-\(UUID().uuidString)")
+        let testStore = SlackTokenStore(keychain: keychain)
+        defer { keychain.delete(key: "slack-access-token") }
+
+        try testStore.set(token: "xoxb-shape-test", workspaceName: "Acme Corp")
+
+        // 1. The store must write under exactly the "slack-access-token"
+        //    Keychain account suffix (KeychainHelper prepends "ReplyAI-").
+        let raw = keychain.get(key: "slack-access-token")
+        XCTAssertNotNil(raw,
+            "SlackTokenStore must persist under the `slack-access-token` Keychain key — renaming orphans existing tokens")
+
+        // 2. Parse the raw JSON and assert both expected keys are present
+        //    with their exact field names. A future rename ("token" →
+        //    "accessToken", "workspaceName" → "workspace") must surface
+        //    here, not at runtime when get() returns nil.
+        let data = try XCTUnwrap(raw?.data(using: .utf8))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(json["token"] as? String, "xoxb-shape-test",
+            "Entry must encode the access token under the `token` JSON key")
+        XCTAssertEqual(json["workspaceName"] as? String, "Acme Corp",
+            "Entry must encode the workspace under the `workspaceName` JSON key (not `workspace_name` or similar)")
+        XCTAssertEqual(json.count, 2,
+            "Entry shape must remain {token, workspaceName} — extra fields here would silently bloat every Keychain write")
+    }
 }
