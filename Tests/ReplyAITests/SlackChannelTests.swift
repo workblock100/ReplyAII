@@ -137,6 +137,97 @@ final class SlackChannelTests: XCTestCase {
                        accuracy: 0.001)
     }
 
+    // MARK: - Limit clamping (Slack rejects > 200, < 1)
+
+    func testRecentThreadsClampsLimitAbove200ToSlackMaximum() async throws {
+        // Slack's conversations.list rejects limit > 200 with invalid_arguments.
+        // Without the clamp the user would see a confusing API error for what
+        // looks like a sane request.
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: 1000)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "200",
+                       "limit > 200 must be clamped to Slack's documented max")
+    }
+
+    func testRecentThreadsClampsZeroLimitToOne() async throws {
+        // limit < 1 makes no semantic sense; clamping to 1 keeps the request
+        // valid rather than letting Slack reject "limit=0".
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: 0)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "1",
+                       "limit < 1 must be clamped to 1")
+    }
+
+    func testMessagesClampsLimitAbove200ToSlackMaximum() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "messages": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.messages(forThreadID: "C100", limit: 5000)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "200")
+        XCTAssertEqual(recorder.lastGetParams?["channel"], "C100")
+    }
+
+    // MARK: - DM display name fallback
+
+    func testRecentThreadsDMWithoutDisplayNameFallsBackToChannelID() async throws {
+        // Slack DMs surface as `is_im: true` but `user_display_name` is fetched
+        // out-of-band; until that resolution lands we fall back to the channel
+        // id so the row at least renders something stable rather than blank.
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "D300", "is_im": true}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.first?.name, "D300")
+    }
+
+    // MARK: - Slack system messages (user == nil)
+
+    func testMessagesWithNilUserAreAttributedToMe() async throws {
+        // Slack's bot/system messages omit `user`. The current parser maps
+        // user==nil to `from = .me` — pinned here so a refactor that flips
+        // the fallback (which would surface system messages as if from a
+        // contact) doesn't ship silently.
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000000.0001", "text": "channel created"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.first?.from, .me)
+    }
+
     // MARK: - Identity
 
     func testSlackChannelIdentifiesAsSlack() {
@@ -297,6 +388,28 @@ private final class RecordingHTTP: SlackHTTPClient, @unchecked Sendable {
         lastPostJSON = json
         lock.unlock()
         return payload
+    }
+}
+
+/// HTTP client that records the last GET it received and replays a canned
+/// payload. Used by limit-clamp tests to verify the request shape.
+private final class GetRecordingHTTP: SlackHTTPClient, @unchecked Sendable {
+    let payload: Data
+    private(set) var lastGetEndpoint: String?
+    private(set) var lastGetParams: [String: String]?
+    private let lock = NSLock()
+
+    init(payload: Data) { self.payload = payload }
+
+    func get(endpoint: String, token: String, params: [String: String]) async throws -> Data {
+        lock.lock()
+        lastGetEndpoint = endpoint
+        lastGetParams = params
+        lock.unlock()
+        return payload
+    }
+    func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
+        payload
     }
 }
 
