@@ -1081,15 +1081,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: false
-- status: open
-- claimed_by: null
-- files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
-- scope: `InboxViewModel.pinThread` sets a flag that causes the thread to sort above others. Verify the pin state persists through Preferences so it survives an app relaunch. Test: pin a thread in one ViewModel instance with an injectable `UserDefaults` suite; create a second ViewModel from the same defaults; assert the thread is still marked pinned and appears at the top of the sorted list. Also pin: unpinThread removes from `pinnedIDs` and thread drops from pinned position.
-- success_criteria:
-  - `testPinStatePersistsThroughReInit` — pinned thread still at top after ViewModel re-init from same UserDefaults
-  - `testUnpinRemovesFromPinnedSet` — unpinned thread no longer pinned after reinit
-  - Existing InboxViewModelTests remain green
-- test_plan: 2 new tests in `InboxViewModelTests.swift` using suiteName-isolated `UserDefaults`.
+- status: done
+- done_on: autopilot-2026-05-03-2211
+- claimed_by: autopilot-2026-05-03-2211
+- files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
+- scope: Implemented `pinnedThreadIDs: Set<String>` persisted under `pref.inbox.pinnedThreadIDs`, plus public `pinThread(_:)` / `unpinThread(_:)` on InboxViewModel. The set is overlaid onto channel-fetched threads in `syncAllChannels` (channels always return `pinned: false`, so persistence is what makes pin survive sync) and onto cached threads at init. Centralised the field-copy in `InboxViewModel.copying(_:pinned:)` to stop chatGUID/hasAttachment getting silently dropped on the rebuild — the previous `markPinned` lost both. Added 3 tests: `testPinStatePersistsThroughReInit`, `testUnpinRemovesFromPinnedSet`, `testApplyPinnedReStampsPinFlag`. Full suite green at 738 tests (+3).
 
 ### REP-179 — RuleEvaluator: equal-priority rules maintain deterministic evaluation order
 - priority: P2

@@ -616,6 +616,66 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
         XCTAssertTrue(vm2.archivedThreadIDs.contains("p1"),
                       "archivedThreadIDs must survive a simulated relaunch via UserDefaults")
     }
+
+    // MARK: - Pin persistence (REP-178)
+
+    func testPinStatePersistsThroughReInit() {
+        let d = makeIsolatedDefaults(suffix: ".pin1")
+        let pinned = MessageThread(id: "pin-a", channel: .imessage, name: "Alice", avatar: "A", preview: "hey", time: "now")
+        let other  = MessageThread(id: "pin-b", channel: .imessage, name: "Bob",   avatar: "B", preview: "yo",  time: "now")
+
+        let vm1 = InboxViewModel(threads: [other, pinned], contacts: fastContacts(), defaults: d)
+        vm1.pinThread("pin-a")
+        XCTAssertTrue(vm1.threads.first(where: { $0.id == "pin-a" })?.pinned == true,
+                      "pin must mark the in-memory thread as pinned immediately")
+        XCTAssertTrue(vm1.pinnedThreadIDs.contains("pin-a"),
+                      "pin must register the id in pinnedThreadIDs for persistence")
+
+        // Simulate relaunch with the same UserDefaults — fresh VM, same threads
+        // come back from the channel as `pinned: false`. The persisted set must
+        // re-stamp pin state so the thread remains pinned and surfaces first.
+        let vm2 = InboxViewModel(threads: [other, pinned], contacts: fastContacts(), defaults: d)
+        XCTAssertTrue(vm2.pinnedThreadIDs.contains("pin-a"),
+                      "pinnedThreadIDs must survive relaunch via UserDefaults")
+        let restored = vm2.threads.first(where: { $0.id == "pin-a" })
+        XCTAssertEqual(restored?.pinned, true,
+                       "thread re-loaded after relaunch must regain pinned state from the persisted set")
+    }
+
+    func testUnpinRemovesFromPinnedSet() {
+        let d = makeIsolatedDefaults(suffix: ".pin2")
+        let t = MessageThread(id: "pin-c", channel: .imessage, name: "Carol", avatar: "C", preview: "sup", time: "now")
+        let vm1 = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+        vm1.pinThread("pin-c")
+        XCTAssertTrue(vm1.pinnedThreadIDs.contains("pin-c"))
+
+        vm1.unpinThread("pin-c")
+        XCTAssertFalse(vm1.pinnedThreadIDs.contains("pin-c"),
+                       "unpin must remove the id from pinnedThreadIDs")
+        XCTAssertEqual(vm1.threads.first(where: { $0.id == "pin-c" })?.pinned, false,
+                       "unpin must clear the pinned flag on the in-memory thread")
+
+        // Relaunch — the thread should no longer be pinned because the set is empty.
+        let vm2 = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+        XCTAssertFalse(vm2.pinnedThreadIDs.contains("pin-c"))
+        XCTAssertEqual(vm2.threads.first(where: { $0.id == "pin-c" })?.pinned, false,
+                       "after unpin + relaunch, the thread must come back unpinned")
+    }
+
+    func testApplyPinnedReStampsPinFlag() {
+        // Direct test of the helper used by syncAllChannels: thread that comes
+        // back from a channel as `pinned: false` gets re-stamped if its id is
+        // in the persisted set, and is left alone otherwise.
+        let raw = [
+            MessageThread(id: "px-1", channel: .imessage, name: "X", avatar: "X", preview: "", time: ""),
+            MessageThread(id: "px-2", channel: .imessage, name: "Y", avatar: "Y", preview: "", time: ""),
+        ]
+        let result = InboxViewModel.applyPinned(raw, pinnedIDs: ["px-1"])
+        XCTAssertEqual(result.first(where: { $0.id == "px-1" })?.pinned, true,
+                       "id present in pinnedIDs must come back pinned")
+        XCTAssertEqual(result.first(where: { $0.id == "px-2" })?.pinned, false,
+                       "id absent from pinnedIDs must remain unpinned")
+    }
 }
 
 // MARK: - send() state transitions (REP-096)

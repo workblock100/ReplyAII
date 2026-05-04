@@ -95,6 +95,15 @@ final class InboxViewModel {
         didSet { InboxViewModel.saveSilentlyIgnoredIDs(silentlyIgnoredThreadIDs, to: defaults) }
     }
 
+    /// Threads the user (or a `pin` rule action) has elevated to surface
+    /// above unpinned threads in the list. Persisted to UserDefaults so the
+    /// pin survives relaunch — channels return `pinned: false` for every
+    /// thread, so without persistence the user's pin would be erased on
+    /// the first sync.
+    var pinnedThreadIDs: Set<String> = [] {
+        didSet { InboxViewModel.savePinnedIDs(pinnedThreadIDs, to: defaults) }
+    }
+
     /// Threads eligible for the menu-bar waiting list: unread and not
     /// silently ignored. Archived threads are still counted (archive is a
     /// user-visible action); silentlyIgnore suppresses the notification.
@@ -203,13 +212,19 @@ final class InboxViewModel {
         self.stats = stats ?? Stats()
         let cacheURL = threadsCacheURL ?? Preferences.lastThreadsCacheURL
         self.threadsCacheURL = cacheURL
-        self.threads = threads.isEmpty ? InboxViewModel.loadThreadCache(from: cacheURL) : threads
+        let loadedPinnedIDs = InboxViewModel.loadPinnedIDs(from: defaults)
+        let initialThreads = threads.isEmpty ? InboxViewModel.loadThreadCache(from: cacheURL) : threads
+        // Re-stamp persisted pin state onto the freshly loaded threads — the
+        // thread cache and channel APIs both return `pinned: false`, so the
+        // user's prior pins would be lost without this overlay.
+        self.threads = InboxViewModel.applyPinned(initialThreads, pinnedIDs: loadedPinnedIDs)
         self.folders = folders
         self.channels = channels
         self.selectedThreadID = threads.first?.id ?? "t1"
         self.rules = rules ?? RulesStore()
         self.archivedThreadIDs = InboxViewModel.loadArchivedIDs(from: defaults)
         self.silentlyIgnoredThreadIDs = InboxViewModel.loadSilentlyIgnoredIDs(from: defaults)
+        self.pinnedThreadIDs = loadedPinnedIDs
         self.lastSeenRowID = InboxViewModel.loadLastSeenRowID(from: defaults)
         // Resolver is NSLock-guarded and callable from any thread, so we
         // can hand a plain Sendable closure to the SQLite worker without
@@ -429,19 +444,62 @@ final class InboxViewModel {
     }
 
     private func markPinned(_ threadID: String) {
+        // Record persistence first — even if the thread isn't in the in-memory
+        // list yet (e.g. it arrived from a background sync), the pin will be
+        // re-applied on the next sync via `applyPinned`.
+        pinnedThreadIDs.insert(threadID)
         guard let i = threads.firstIndex(where: { $0.id == threadID }),
               !threads[i].pinned else { return }
-        threads[i] = MessageThread(
-            id: threads[i].id,
-            channel: threads[i].channel,
-            name: threads[i].name,
-            avatar: threads[i].avatar,
-            preview: threads[i].preview,
-            time: threads[i].time,
-            unread: threads[i].unread,
-            pinned: true,
-            contextCount: threads[i].contextCount,
-            contextSummary: threads[i].contextSummary
+        threads[i] = InboxViewModel.copying(threads[i], pinned: true)
+    }
+
+    /// User-facing pin action — equivalent to a `pin` rule firing on the
+    /// thread, but invoked directly (e.g. from a keyboard shortcut or
+    /// context menu).
+    func pinThread(_ threadID: String) {
+        markPinned(threadID)
+    }
+
+    /// Removes the pin so the thread sorts with unpinned peers again. The
+    /// next sync will keep it unpinned (the persisted set no longer
+    /// contains it).
+    func unpinThread(_ threadID: String) {
+        pinnedThreadIDs.remove(threadID)
+        guard let i = threads.firstIndex(where: { $0.id == threadID }),
+              threads[i].pinned else { return }
+        threads[i] = InboxViewModel.copying(threads[i], pinned: false)
+    }
+
+    /// Returns a copy of `threads` with `.pinned = true` stamped on any thread
+    /// whose id appears in `pinnedIDs`. Used at init (overlay onto cached
+    /// threads) and after each sync (overlay onto channel-fetched threads,
+    /// which always come back unpinned).
+    static func applyPinned(_ threads: [MessageThread], pinnedIDs: Set<String>) -> [MessageThread] {
+        guard !pinnedIDs.isEmpty else { return threads }
+        return threads.map { t in
+            guard pinnedIDs.contains(t.id), !t.pinned else { return t }
+            return copying(t, pinned: true)
+        }
+    }
+
+    /// MessageThread fields are `let`-bound, so any mutation requires a fresh
+    /// init. Centralising the field copy here keeps every pin/unpin call site
+    /// from having to remember every field (and silently dropping new ones,
+    /// like `chatGUID` or `hasAttachment`, when the model grows).
+    static func copying(_ t: MessageThread, pinned: Bool) -> MessageThread {
+        MessageThread(
+            id: t.id,
+            channel: t.channel,
+            name: t.name,
+            avatar: t.avatar,
+            preview: t.preview,
+            time: t.time,
+            unread: t.unread,
+            pinned: pinned,
+            contextCount: t.contextCount,
+            contextSummary: t.contextSummary,
+            chatGUID: t.chatGUID,
+            hasAttachment: t.hasAttachment
         )
     }
 
@@ -676,9 +734,14 @@ final class InboxViewModel {
         var seen = Set<String>()
         let merged = batches.joined().filter { seen.insert($0.id).inserted }
 
+        // Re-stamp persisted pin state — channel APIs always return
+        // `pinned: false`, so without this overlay the user's pins would be
+        // erased on every sync (and disappear from the top of the list).
+        let pinned = InboxViewModel.applyPinned(merged, pinnedIDs: pinnedThreadIDs)
+
         // Pinned threads surface above unpinned; relative order within each
         // group is preserved (channels return newest-first from their own APIs).
-        return merged.sorted { $0.pinned && !$1.pinned }
+        return pinned.sorted { $0.pinned && !$1.pinned }
     }
 
     // MARK: - Rules on incoming
@@ -787,6 +850,23 @@ final class InboxViewModel {
     private static func saveSilentlyIgnoredIDs(_ ids: Set<String>, to defaults: UserDefaults) {
         let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
         defaults.set(data, forKey: silentlyIgnoredKey)
+    }
+
+    // MARK: - Pinned persistence (REP-178)
+
+    private static let pinnedKey = "pref.inbox.pinnedThreadIDs"
+
+    private static func loadPinnedIDs(from defaults: UserDefaults) -> Set<String> {
+        guard let data = defaults.data(forKey: pinnedKey),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(decoded)
+    }
+
+    private static func savePinnedIDs(_ ids: Set<String>, to defaults: UserDefaults) {
+        let data = (try? JSONEncoder().encode(Array(ids).sorted())) ?? Data()
+        defaults.set(data, forKey: pinnedKey)
     }
 
     // MARK: - lastSeenRowID persistence
