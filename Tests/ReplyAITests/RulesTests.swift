@@ -2548,3 +2548,60 @@ final class RuleMessageCountPredicateTests: XCTestCase {
                        "messageCount(atLeast:) must survive encode→decode round-trip")
     }
 }
+
+// MARK: - RuleValidationError.errorDescription pin
+//
+// invalidRegex's pattern interpolation is exercised by an existing test
+// (~line 1063) but tooManyRules's user-facing copy had no direct test.
+// Settings → Rules surfaces this string when the user tries to add a
+// 101st rule; pin the limit interpolation + recovery hint so a refactor
+// can't silently drop them.
+
+final class RuleValidationErrorDescriptionTests: XCTestCase {
+
+    func testTooManyRulesIncludesActualLimit() {
+        // The number is the most actionable piece of the message — users
+        // need to know how many rules they're allowed to keep.
+        let copy = RuleValidationError.tooManyRules(limit: 100).errorDescription ?? ""
+        XCTAssertTrue(copy.contains("100"),
+            "tooManyRules must include the actual limit — got: \(copy)")
+    }
+
+    func testTooManyRulesGivesRecoveryHint() {
+        // The user is blocked from saving; the message must tell them
+        // what to do (remove an existing rule) rather than just refusing.
+        let copy = RuleValidationError.tooManyRules(limit: 100).errorDescription ?? ""
+        XCTAssertTrue(copy.lowercased().contains("remove"),
+            "tooManyRules should suggest removing an existing rule — got: \(copy)")
+    }
+
+    func testInvalidRegexIncludesReason() {
+        // The NSRegularExpression error message ("Invalid escape sequence",
+        // "Unmatched parentheses", etc.) is what tells the user what to fix.
+        let copy = RuleValidationError.invalidRegex(
+            pattern: "[abc",
+            reason: "Unbalanced bracket"
+        ).errorDescription ?? ""
+        XCTAssertTrue(copy.contains("Unbalanced bracket"),
+            "invalidRegex must surface the reason — got: \(copy)")
+    }
+
+    func testEveryCaseProducesNonEmptyDescription() {
+        let cases: [RuleValidationError] = [
+            .invalidRegex(pattern: "x", reason: "y"),
+            .tooManyRules(limit: 1),
+        ]
+        for err in cases {
+            let desc = err.errorDescription ?? ""
+            XCTAssertFalse(desc.isEmpty, "empty description for \(err)")
+        }
+    }
+
+    func testLocalizedErrorBridgeSurfacesOurCopy() {
+        // SwiftUI alerts use `error.localizedDescription` — confirm the
+        // bridge returns our text, not the generic CFString fallback.
+        let err: Error = RuleValidationError.tooManyRules(limit: 100)
+        XCTAssertTrue(err.localizedDescription.contains("100"),
+            "LocalizedError bridge must surface our copy — got: \(err.localizedDescription)")
+    }
+}
