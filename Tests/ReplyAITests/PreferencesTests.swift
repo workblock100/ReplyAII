@@ -111,6 +111,15 @@ final class PreferencesTests: XCTestCase {
             "upper bound 200 caps query cost to avoid unbounded scans on large chat.db files")
     }
 
+    func testDemoModeActiveDefaultsToTrue() {
+        // Fresh installs land in demo mode so the inbox is non-empty before
+        // any channel sync succeeds. Flipping this default to false would
+        // silently send first-run users to an empty/loading inbox — the
+        // exact failure REP-228 was added to prevent.
+        XCTAssertTrue(PreferenceDefaults.demoModeActive,
+            "demoModeActive must default true so REP-228 first-launch demo experience holds")
+    }
+
     func testInboxThreadLimitWipedAndRestored() {
         defaults.set(100, forKey: PreferenceKey.inboxThreadLimit)
         XCTAssertEqual(defaults.integer(forKey: PreferenceKey.inboxThreadLimit), 100)
