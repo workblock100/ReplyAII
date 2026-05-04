@@ -38,4 +38,61 @@ final class ScreenInventoryTests: XCTestCase {
         XCTAssertEqual(Set(grouped), Set(ScreenID.allCases))
         XCTAssertEqual(grouped.count, ScreenID.allCases.count, "no duplicates across groups")
     }
+
+    // MARK: - Group invariants
+
+    func testEveryGroupHasNonEmptyTitleAndItems() {
+        for group in ScreenInventory.groups {
+            XCTAssertFalse(group.title.isEmpty, "group title must not be empty")
+            XCTAssertFalse(group.items.isEmpty, "group '\(group.title)' must not be empty")
+        }
+    }
+
+    func testEveryItemLabelIsNonEmpty() {
+        for item in ScreenInventory.allItems {
+            XCTAssertFalse(item.label.isEmpty,
+                "label for \(item.id.rawValue) must not be empty")
+        }
+    }
+
+    // MARK: - item(for:) / index(of:)
+
+    func testItemLookupReturnsMatchingItemForEveryID() {
+        for id in ScreenID.allCases {
+            XCTAssertEqual(ScreenInventory.item(for: id).id, id)
+        }
+    }
+
+    func testIndexOfIsContiguousAndZeroBased() {
+        var indexes = Set<Int>()
+        for id in ScreenID.allCases {
+            indexes.insert(ScreenInventory.index(of: id))
+        }
+        XCTAssertEqual(indexes, Set(0..<ScreenID.allCases.count),
+            "indexes must cover [0, count) without gaps")
+    }
+
+    // MARK: - next/previous as inverses
+
+    func testNextAndPreviousAreInverses() {
+        for id in ScreenID.allCases {
+            XCTAssertEqual(
+                ScreenInventory.previous(before: ScreenInventory.next(after: id)),
+                id,
+                "previous(next(\(id))) should equal \(id)"
+            )
+        }
+    }
+
+    // MARK: - Stable raw values (persistence-shaped)
+
+    func testKnownRawValuesAreStable() {
+        // These string IDs ship into app-shell.jsx + persistence; renaming a
+        // case is a migration, not a refactor. Lock the public surface here.
+        XCTAssertEqual(ScreenID.obWelcome.rawValue, "ob-welcome")
+        XCTAssertEqual(ScreenID.appInbox.rawValue, "app-inbox")
+        XCTAssertEqual(ScreenID.sfcPalette.rawValue, "sfc-palette")
+        XCTAssertEqual(ScreenID.setAccount.rawValue, "set-account")
+        XCTAssertEqual(ScreenID.errDisconnected.rawValue, "err-disconnected")
+    }
 }
