@@ -132,4 +132,86 @@ final class AccessibilityAPIReaderTests: XCTestCase {
 
         XCTAssertEqual(reader.conversationNames(), ["Alice", "Bob"])
     }
+
+    func testCollectsRowsFromDeeplyNestedSubtree() {
+        // Real Messages.app sidebar has wrapping AXScrollArea / AXOutline / AXGroup
+        // before the AXRow leaves. Collector must recurse to arbitrary depth.
+        let leaves: [any AXElement] = [
+            MockAXElement(role: "AXRow", title: "Mom"),
+            MockAXElement(role: "AXRow", title: "Group: Family"),
+        ]
+        let group = MockAXElement(role: "AXGroup",      children: leaves)
+        let outline = MockAXElement(role: "AXOutline",  children: [group])
+        let scroll = MockAXElement(role: "AXScrollArea", children: [outline])
+        let window = MockAXElement(role: "AXWindow",    children: [scroll])
+        let app    = MockAXElement(role: "AXApplication", children: [window])
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: app),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Mom", "Group: Family"])
+    }
+
+    func testIgnoresNonRowElementsEvenWithTitle() {
+        // AXButton, AXText, AXStaticText — anything that's not AXRow must
+        // be ignored even if it carries a title attribute. Otherwise we'd
+        // pick up "Send", "Search", or column headers in the sidebar.
+        let mixed: [any AXElement] = [
+            MockAXElement(role: "AXButton",    title: "Send"),
+            MockAXElement(role: "AXStaticText", title: "Search"),
+            MockAXElement(role: "AXRow",       title: "Alice"),
+            MockAXElement(role: "AXText",      title: "Footer"),
+        ]
+        let root = MockAXElement(role: "AXApplication", children: mixed)
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Alice"])
+    }
+
+    func testPreservesOrderAcrossMultipleSubtrees() {
+        // The Messages sidebar can be split into Pinned + Unpinned regions.
+        // Order across regions is meaningful (most-recent first) — collection
+        // must walk subtrees in order, not by depth/breadth interleaving.
+        let pinnedRows: [any AXElement] = [
+            MockAXElement(role: "AXRow", title: "Pinned 1"),
+            MockAXElement(role: "AXRow", title: "Pinned 2"),
+        ]
+        let unpinnedRows: [any AXElement] = [
+            MockAXElement(role: "AXRow", title: "Recent A"),
+            MockAXElement(role: "AXRow", title: "Recent B"),
+        ]
+        let pinnedGroup = MockAXElement(role: "AXGroup", children: pinnedRows)
+        let unpinnedGroup = MockAXElement(role: "AXGroup", children: unpinnedRows)
+        let root = MockAXElement(role: "AXApplication", children: [pinnedGroup, unpinnedGroup])
+
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    MockAXElementFactory(root: root),
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), ["Pinned 1", "Pinned 2", "Recent A", "Recent B"])
+    }
+
+    func testReturnsEmptyWhenRootElementIsNil() {
+        // Real-world cause: Messages.app is in the middle of launching and
+        // AXUIElementCreateApplication briefly returns no usable root.
+        let factory = MockAXElementFactory(root: nil)
+        let reader = AccessibilityAPIReader(
+            pidProvider:       { 1 },
+            elementFactory:    factory,
+            isTrustedProvider: { true }
+        )
+
+        XCTAssertEqual(reader.conversationNames(), [])
+        XCTAssertEqual(factory.capturedPID, 1, "factory still called for the PID even when root resolves to nil")
+    }
 }
