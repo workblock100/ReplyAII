@@ -1651,3 +1651,26 @@ final class IMessageChannelFormatRelativeTests: XCTestCase {
                        "non-zero appleDate must produce a non-empty label, got: '\(yearAgo)'")
     }
 }
+
+// MARK: - chatDBPath default contract
+//
+// `IMessageChannel.chatDBPath` is the path production callers hit when
+// `dbPathOverride` is nil — i.e. the real Messages database. Pin its
+// resolved value so a refactor can't silently redirect the production
+// read path away from the FDA-gated location.
+
+final class IMessageChannelChatDBPathTests: XCTestCase {
+
+    func testChatDBPathEndsWithLibraryMessagesChatDB() {
+        let path = IMessageChannel.chatDBPath
+        XCTAssertTrue(path.hasSuffix("Library/Messages/chat.db"),
+            "chatDBPath must point at ~/Library/Messages/chat.db, got: \(path)")
+    }
+
+    func testChatDBPathExpandsTilde() {
+        // The static initializer expands `~` via NSString — the resolved
+        // path must NOT still contain the literal "~".
+        XCTAssertFalse(IMessageChannel.chatDBPath.hasPrefix("~"),
+            "chatDBPath must expand the leading tilde, got: \(IMessageChannel.chatDBPath)")
+    }
+}
