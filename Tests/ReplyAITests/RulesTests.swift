@@ -679,6 +679,62 @@ final class RulesTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
     }
 
+    @MainActor
+    func testLastSeenRowIDLoadsFromLiteralKey() async throws {
+        // The existing persistence test (testLastSeenRowIDPersistsAcrossInstances)
+        // verifies behavior across instances using `UserDefaults.standard`, but
+        // both save and load go through the same private constant — a silent
+        // rename of `pref.inbox.lastSeenRowID` would still pass that test. Pin
+        // the literal key here by writing payload directly at the literal,
+        // building a fresh model, and observing that the rule engine treats
+        // those rowIDs as already-seen. If the key drifts, the watermark won't
+        // hydrate and the archive rule will fire.
+        let suite = "test.ReplyAI.lastSeenRowID-literal-key.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        defer { d.removePersistentDomain(forName: suite) }
+
+        let payload = try JSONEncoder().encode(["watermark-literal": Int64(99)])
+        d.set(payload, forKey: "pref.inbox.lastSeenRowID")
+
+        let thread = MessageThread(
+            id: "watermark-literal", channel: .imessage, name: "Pinner",
+            avatar: "P", preview: "x", time: "now", unread: 1
+        )
+        let rule = SmartRule(name: "would archive", when: .channelIs(.imessage), then: .archive)
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ReplyAITests-\(UUID())/rules.json")
+        try? FileManager.default.createDirectory(
+            at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let store = RulesStore(fileURL: tmp)
+        for r in store.rules { store.remove(r.id) }
+        try store.add(rule)
+
+        // Incoming rowID 50 is below the persisted watermark (99) — if the
+        // load path read the literal key the rule must not fire. If the key
+        // drifted, lastSeenRowID would default to 0 and the rule would archive
+        // the thread.
+        let model = InboxViewModel(
+            threads: [thread],
+            imessage: MockChannel(
+                fixedThreads: [thread],
+                incoming: ["watermark-literal": [
+                    Message(from: .them, text: "old", time: "now", rowID: 50)
+                ]]
+            ),
+            rules: store,
+            defaults: d
+        )
+
+        await model.processIncomingForRules(model.threads)
+
+        XCTAssertFalse(
+            model.archivedThreadIDs.contains("watermark-literal"),
+            "lastSeenRowID load path must read 'pref.inbox.lastSeenRowID' literally — renaming abandons every shipped user's watermark and re-fires every rule against already-seen messages"
+        )
+    }
+
     // MARK: - REP-002: SmartRule priority + conflict resolution
 
     func testHigherPrioritySetDefaultToneWins() {
