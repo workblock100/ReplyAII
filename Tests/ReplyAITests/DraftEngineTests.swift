@@ -851,6 +851,49 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertFalse(state.text.isEmpty, "regenerated draft must have content")
     }
 
+    // MARK: - DraftState.isLowConfidence threshold pin
+    //
+    // ComposerView shows the low-confidence affordance when
+    // `state.isLowConfidence`. The threshold (0.4) is the boundary
+    // between "show the warning" and "stay quiet"; drifting it would
+    // silently change when the warning appears for users.
+
+    func testIsLowConfidenceTrueJustBelowThreshold() {
+        var s = DraftEngine.DraftState()
+        s.confidence = 0.39
+        XCTAssertTrue(s.isLowConfidence,
+            "0.39 must be flagged low — threshold is 0.4 (strict less-than)")
+    }
+
+    func testIsLowConfidenceFalseAtThreshold() {
+        var s = DraftEngine.DraftState()
+        s.confidence = 0.4
+        XCTAssertFalse(s.isLowConfidence,
+            "0.4 must NOT be flagged low — threshold is strict less-than 0.4")
+    }
+
+    func testIsLowConfidenceFalseAboveThreshold() {
+        var s = DraftEngine.DraftState()
+        s.confidence = 0.85
+        XCTAssertFalse(s.isLowConfidence)
+    }
+
+    func testIsLowConfidenceTrueAtZero() {
+        var s = DraftEngine.DraftState()
+        s.confidence = 0.0
+        XCTAssertTrue(s.isLowConfidence,
+            "zero confidence must be flagged low")
+    }
+
+    func testDefaultDraftStateIsHighConfidence() {
+        let s = DraftEngine.DraftState()
+        // The default confidence (1.0) must NOT trigger the warning so
+        // a freshly-instantiated state doesn't render the affordance
+        // before any chunk has arrived.
+        XCTAssertFalse(s.isLowConfidence,
+            "default confidence (1.0) must not be low — would render warning before any chunk arrives")
+    }
+
 }
 
 // MARK: - Test-only mock LLM services (REP-038)
