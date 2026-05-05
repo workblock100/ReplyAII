@@ -217,4 +217,44 @@ final class SlackTokenStoreTests: XCTestCase {
         XCTAssertEqual(json.count, 2,
             "Entry shape must remain {token, workspaceName} — extra fields here would silently bloat every Keychain write")
     }
+
+    /// A second `set(...)` call after a workspace-rotation or token-refresh
+    /// must REPLACE the prior entry — not stack a duplicate Keychain row,
+    /// which would leave `get()` racing between two values. Pin the
+    /// last-write-wins contract here so a future Keychain-helper rewrite
+    /// can't regress to "add" semantics without surfacing in CI.
+    func testSlackTokenStoreSetReplacesExistingEntry() throws {
+        try store.set(token: "xoxb-old", workspaceName: "Old Workspace")
+        try store.set(token: "xoxb-new", workspaceName: "New Workspace")
+        let result = store.get()
+        XCTAssertEqual(result?.token, "xoxb-new",
+            "second set() must overwrite the first — last write wins")
+        XCTAssertEqual(result?.workspaceName, "New Workspace",
+            "second set() must overwrite the workspace name too, not partially update")
+    }
+
+    /// Slack itself rejects empty `access_token` values upstream, but the
+    /// store should still round-trip them faithfully — silently rewriting
+    /// "" → some sentinel would mask a real authorization bug. The shape
+    /// pin (above) checks the keys; this one checks the empty-value path.
+    func testSlackTokenStoreEmptyTokenRoundTrips() throws {
+        try store.set(token: "", workspaceName: "Some Workspace")
+        let result = store.get()
+        XCTAssertEqual(result?.token, "",
+            "empty token must round-trip verbatim — masking it would hide upstream auth bugs")
+        XCTAssertEqual(result?.workspaceName, "Some Workspace")
+    }
+
+    /// Workspace names commonly contain non-ASCII (emoji, accents, CJK)
+    /// because Slack lets users type arbitrary Unicode. JSON encoding
+    /// should preserve those bytes through the Keychain round-trip
+    /// without mojibake or NFC/NFD normalization that would change the
+    /// displayed string in Settings.
+    func testSlackTokenStorePreservesUnicodeWorkspaceName() throws {
+        let unicode = "Café 東京 🌮 — Eng"
+        try store.set(token: "xoxb-unicode", workspaceName: unicode)
+        let result = store.get()
+        XCTAssertEqual(result?.workspaceName, unicode,
+            "Unicode in workspace names must round-trip verbatim through Keychain JSON")
+    }
 }
