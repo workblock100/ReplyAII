@@ -92,4 +92,47 @@ final class SettingsShellTabTests: XCTestCase {
             )
         }
     }
+
+    func testRawValuesAreUniqueAcrossTabs() {
+        // Identifiable.id collisions silently break the SwiftUI selection
+        // binding — two rows with the same id make ForEach swap them
+        // unpredictably on selection. Defense against a future copy-paste
+        // adding a duplicate raw value.
+        let raws = SettingsTab.allCases.map(\.rawValue)
+        XCTAssertEqual(Set(raws).count, raws.count,
+            "tab rawValues must be unique; got duplicates in \(raws)")
+    }
+
+    func testLabelsAreUniqueAcrossTabs() {
+        // Two sidebar rows with identical labels are an immediate UX bug —
+        // the user can't distinguish destinations. Lock the contract here
+        // so a future "split this section into two" refactor must give
+        // each new section its own label.
+        let labels = SettingsTab.allCases.map(\.label)
+        XCTAssertEqual(Set(labels).count, labels.count,
+            "tab labels must be unique; got duplicates in \(labels)")
+    }
+
+    func testInitFromUnknownRawValueReturnsNil() {
+        // Defensive: a future "lastSettingsTab" pref restoring from disk
+        // could carry a stale value after a tab rename or removal. The
+        // initializer must reject unknown values cleanly so the caller
+        // can fall back to .account rather than crash decode.
+        XCTAssertNil(SettingsTab(rawValue: ""))
+        XCTAssertNil(SettingsTab(rawValue: "Account"),
+            "raw values are lowercase — case-sensitive decode")
+        XCTAssertNil(SettingsTab(rawValue: "voice "),
+            "trailing whitespace must not decode")
+        XCTAssertNil(SettingsTab(rawValue: "deprecated-tab"))
+    }
+
+    func testAllCasesCountMatchesSetScreenIDCount() {
+        // The SettingsShell tab list and the Settings ScreenID prefix list
+        // must remain in lockstep. If a tab is added without the matching
+        // ScreenID (or vice-versa) the navigation surface is half-wired
+        // and the alignment test above can't catch the missing case.
+        let setScreens = ScreenID.allCases.filter { $0.rawValue.hasPrefix("set-") }
+        XCTAssertEqual(SettingsTab.allCases.count, setScreens.count,
+            "tab count (\(SettingsTab.allCases.count)) must equal set- ScreenID count (\(setScreens.count))")
+    }
 }
