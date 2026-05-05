@@ -199,4 +199,41 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertNil(IMessagePreview.singleURLHost(in: weird),
             "URL with embedded NBSP must not be treated as a single-URL token")
     }
+
+    // MARK: - Pass-through preserves verbatim text
+
+    /// `displayString` uses `trimmed` for the URL/attachment branch
+    /// detection but returns the ORIGINAL `body` on plain-text
+    /// pass-through — leading/trailing whitespace survives. Pin this
+    /// because a "tidy up" refactor that returned `trimmed` instead
+    /// would silently change every sidebar preview that arrived with
+    /// surrounding whitespace, and cross-channel paste-from-clipboard
+    /// flows commonly produce exactly that.
+    func testPlainTextPassThroughPreservesLeadingAndTrailingWhitespace() {
+        let body = "  hello world  "
+        XCTAssertEqual(IMessagePreview.displayString(from: body), body,
+            "plain-text pass-through must preserve leading/trailing whitespace verbatim")
+    }
+
+    /// Embedded newlines are part of the verbatim pass-through too —
+    /// the sidebar trims for layout via SwiftUI's `.lineLimit(1)` and
+    /// truncation rather than by mutating the source text. A refactor
+    /// that pre-flattened newlines here would diverge the cached
+    /// preview from the canonical message body and break any future
+    /// `previewMatches(message:)` invariant.
+    func testPlainTextPassThroughPreservesEmbeddedNewlines() {
+        let body = "line one\nline two"
+        XCTAssertEqual(IMessagePreview.displayString(from: body), body,
+            "plain-text pass-through must preserve embedded newlines verbatim")
+    }
+
+    /// Tab characters are pass-through too. `.whitespacesAndNewlines`
+    /// includes `\t` (U+0009), so a tab-only body falls back to the
+    /// non-text label (covered in the trimming tests), but a mixed
+    /// "tab + content" body must survive intact.
+    func testPlainTextPassThroughPreservesEmbeddedTabs() {
+        let body = "col1\tcol2\tcol3"
+        XCTAssertEqual(IMessagePreview.displayString(from: body), body,
+            "plain-text pass-through must preserve embedded tabs verbatim")
+    }
 }
