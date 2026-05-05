@@ -84,4 +84,48 @@ final class MessageTests: XCTestCase {
         let m = Message(id: id, from: .me, text: "x", time: "—", rowID: 7)
         XCTAssertEqual(m.id, id)
     }
+
+    /// Pin every remaining field (`from`, `text`, `time`, `hasAttachment`,
+    /// `deliveredAt`) as equality-contributing. The existing
+    /// `testEqualityRequiresEveryFieldToMatch` covered rowID and isRead;
+    /// this fills the gap so a future refactor that drops a field from
+    /// the synthesized `Equatable` is caught even if no caller currently
+    /// observes the difference.
+    func testHashableEqualityRespectsAuthorTextTimeAttachmentDeliveredAt() {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let base = Message(id: id, from: .them, text: "x", time: "t",
+                           rowID: 1, hasAttachment: false, isRead: false,
+                           deliveredAt: date)
+
+        let diffFrom = Message(id: id, from: .me, text: "x", time: "t",
+                               rowID: 1, hasAttachment: false, isRead: false,
+                               deliveredAt: date)
+        XCTAssertNotEqual(base, diffFrom,
+            "from drives every UI bubble alignment — must contribute to equality")
+
+        let diffText = Message(id: id, from: .them, text: "y", time: "t",
+                               rowID: 1, hasAttachment: false, isRead: false,
+                               deliveredAt: date)
+        XCTAssertNotEqual(base, diffText,
+            "text difference must break equality — drives the visible bubble")
+
+        let diffTime = Message(id: id, from: .them, text: "x", time: "u",
+                               rowID: 1, hasAttachment: false, isRead: false,
+                               deliveredAt: date)
+        XCTAssertNotEqual(base, diffTime,
+            "time string difference must break equality — drives the timestamp chip")
+
+        let diffAttachment = Message(id: id, from: .them, text: "x", time: "t",
+                                     rowID: 1, hasAttachment: true, isRead: false,
+                                     deliveredAt: date)
+        XCTAssertNotEqual(base, diffAttachment,
+            "hasAttachment flip must break equality — rule engine reads this column")
+
+        let diffDelivered = Message(id: id, from: .them, text: "x", time: "t",
+                                    rowID: 1, hasAttachment: false, isRead: false,
+                                    deliveredAt: date.addingTimeInterval(60))
+        XCTAssertNotEqual(base, diffDelivered,
+            "deliveredAt must contribute to equality — surfaces in delivery-receipt UI")
+    }
 }
