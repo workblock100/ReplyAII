@@ -139,4 +139,128 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         XCTAssertFalse(fired,
             "extractor returning nil must short-circuit before scheduling the callback")
     }
+
+    // MARK: - Defensive paths
+
+    /// `stop()` is invoked from `deinit` and is safe to call from app teardown
+    /// after the observer has already been stopped (e.g. window-close + app
+    /// quit). Calling it twice must not crash, double-remove, or leave the
+    /// notification center in a broken state.
+    func testDoubleStopDoesNotCrash() async throws {
+        let center = NotificationCenter()
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+        observer.stop()
+        observer.stop()  // must be a no-op, not a crash
+
+        // After two stops, posting a Messages activation must not fire the callback.
+        var fired = false
+        observer.onMessagesActivated = { fired = true }
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(fired,
+            "after two stop() calls the observer must remain detached")
+    }
+
+    /// A notification posted with no `userInfo` (the default behavior of some
+    /// AppKit-internal call sites and unit tests) must be tolerated — the
+    /// extractor will return nil, and the observer must not crash on the
+    /// optional chain or schedule a spurious callback.
+    func testNotificationWithoutUserInfoIsIgnored() async throws {
+        let center = NotificationCenter()
+        var fired = false
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.0
+        )
+        observer.onMessagesActivated = { fired = true }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification,
+                    object: nil, userInfo: nil)
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(fired,
+            "missing userInfo must short-circuit cleanly without firing")
+    }
+
+    /// Activations from non-Messages apps within the debounce window must not
+    /// reset the trailing-edge timer — non-Messages activations are filtered
+    /// before scheduleCallback() so they don't perturb a pending Messages fire.
+    func testNonMessagesActivationDoesNotInfluenceDebounce() async throws {
+        let center = NotificationCenter()
+        var callCount = 0
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.05
+        )
+        observer.onMessagesActivated = { callCount += 1 }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.Safari"])
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.Terminal"])
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(callCount, 1,
+            "non-Messages activations must not perturb the Messages debounce timer")
+    }
+
+    /// `onMessagesActivated` is a `var` closure — a caller can clear it after
+    /// install (e.g. a view model resetting on tab change). When it's nil at
+    /// fire-time the dispatched work item must not crash; the optional-chain
+    /// inside the closure is the only safety net.
+    func testNilCallbackAfterScheduleDoesNotCrash() async throws {
+        let center = NotificationCenter()
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.05
+        )
+        observer.onMessagesActivated = { /* will be cleared */ }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+
+        // Clear the callback before the debounce window closes.
+        observer.onMessagesActivated = nil
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNil(observer.onMessagesActivated,
+            "callback cleared after schedule must remain nil and the dispatched fire must be tolerant of it")
+    }
+
+    /// After `stop()`, the observer's debounce queue should not retain a
+    /// pending fire that could surface after a new callback is reattached.
+    /// Guards against the failure mode where a stopped observer is reused
+    /// (not supported, but historically possible) and would deliver a stale
+    /// callback to the new owner.
+    func testStopThenReattachCallbackDoesNotFireFromStaleSchedule() async throws {
+        let center = NotificationCenter()
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: center,
+            bundleIDExtractor: testExtractor,
+            debounce: 0.1
+        )
+        observer.onMessagesActivated = { XCTFail("original callback must not fire after stop") }
+
+        center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
+                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+
+        observer.stop()
+
+        var newFired = false
+        observer.onMessagesActivated = { newFired = true }
+
+        try await Task.sleep(nanoseconds: 250_000_000)
+        XCTAssertFalse(newFired,
+            "stop() must not allow a stale-schedule callback to surface to a re-attached handler")
+    }
 }
