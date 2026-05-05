@@ -33,6 +33,46 @@ final class FolderKindTests: XCTestCase {
     }
 }
 
+/// `Folder` itself (the struct wrapping Kind+label+count) ships into
+/// SidebarView as one row each. The `Hashable` synthesis is what
+/// SwiftUI uses to diff sidebar rows on each refresh — drift in any
+/// field invalidates the row's identity and triggers a re-render. Pin
+/// the value-equality contract so an accidental `Hashable` removal
+/// (or addition of a non-Hashable field) surfaces here rather than as
+/// a sidebar flicker the next time threads sync.
+final class FolderValueTests: XCTestCase {
+
+    func testIdentifiableIDComesFromKind() {
+        // SwiftUI's `List(selection:)` keys off `id`, which on `Folder`
+        // is `Kind` (declared `let id: Kind`). Two Folders with the
+        // same Kind but different labels share an id — exactly what
+        // the sidebar wants when `count` refreshes independently of
+        // bucket identity.
+        let a = Folder(id: .all, label: "All", count: 3)
+        let b = Folder(id: .all, label: "All", count: 99)
+        XCTAssertEqual(a.id, b.id, "id must come from Kind alone, not from (Kind, label, count)")
+    }
+
+    func testEqualityRespectsAllFields() {
+        let base = Folder(id: .priority, label: "Priority", count: 5)
+        XCTAssertNotEqual(base, Folder(id: .all,      label: "Priority", count: 5),
+            "different Kind must surface as inequality")
+        XCTAssertNotEqual(base, Folder(id: .priority, label: "PRIORITY", count: 5),
+            "different label must surface as inequality")
+        XCTAssertNotEqual(base, Folder(id: .priority, label: "Priority", count: 6),
+            "different count must surface as inequality")
+        XCTAssertEqual(base, Folder(id: .priority, label: "Priority", count: 5),
+            "identical Kind+label+count must compare equal")
+    }
+
+    func testHashableEqualValuesShareHash() {
+        let a = Folder(id: .snoozed, label: "Snoozed", count: 0)
+        let b = Folder(id: .snoozed, label: "Snoozed", count: 0)
+        XCTAssertEqual(a.hashValue, b.hashValue,
+            "Hashable equality must imply hash equality so SwiftUI's diff doesn't double-render identical rows")
+    }
+}
+
 final class ToneTests: XCTestCase {
 
     func testAllCasesShape() {
