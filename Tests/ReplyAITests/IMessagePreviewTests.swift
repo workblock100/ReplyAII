@@ -151,4 +151,52 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertTrue(preview.hasPrefix("🔗 "),
             "single-URL preview must keep the 🔗 prefix; got: \(preview)")
     }
+
+    // MARK: - Unicode whitespace contract
+
+    /// Foundation's `.whitespacesAndNewlines` set includes Unicode
+    /// whitespace beyond ASCII (NBSP U+00A0, EM SPACE U+2003, etc.).
+    /// Pin the implementation choice because a future refactor that
+    /// switched to `String.isASCII`-style trimming or a regex `\s` set
+    /// (which doesn't match NBSP on every platform) would silently let
+    /// NBSP-only payloads slip through as visible text instead of
+    /// falling back to the non-text label.
+    func testNonBreakingSpaceOnlyBodyTreatedAsEmpty() {
+        // U+00A0 (NBSP) — common in pasted text from web sources.
+        let nbspBody = "\u{00A0}\u{00A0}"
+        XCTAssertEqual(IMessagePreview.displayString(from: nbspBody),
+                       IMessagePreview.nonTextFallback,
+                       "NBSP-only body must collapse to non-text fallback")
+    }
+
+    func testEmSpaceOnlyBodyTreatedAsEmpty() {
+        // U+2003 (EM SPACE) — sometimes emitted by typography-aware
+        // editors when copy-pasting.
+        let emSpaceBody = "\u{2003}"
+        XCTAssertEqual(IMessagePreview.displayString(from: emSpaceBody),
+                       IMessagePreview.nonTextFallback,
+                       "EM SPACE-only body must collapse to non-text fallback")
+    }
+
+    func testAttachmentMarkerWithUnicodeWhitespaceCollapsesToPaperclip() {
+        // Mixed: attachment sentinel plus Unicode whitespace must still
+        // resolve to the paperclip fallback. The sentinel-strip step
+        // re-trims with the same `.whitespacesAndNewlines` set, so this
+        // path also depends on Foundation including NBSP.
+        let body = "\u{FFFC}\u{00A0}\u{FFFC}\u{2003}"
+        XCTAssertEqual(IMessagePreview.displayString(from: body),
+                       IMessagePreview.attachmentFallback,
+                       "attachment markers + Unicode whitespace must collapse to paperclip")
+    }
+
+    /// `singleURLHost` must reject a URL string that has any non-ASCII
+    /// whitespace character mixed in — those tokens aren't valid URLs
+    /// and the preview should fall through to verbatim display, not
+    /// crash and not collapse.
+    func testSingleURLHostRejectsURLWithEmbeddedNBSP() {
+        // NBSP between scheme and host — not a valid URL token.
+        let weird = "https://exa\u{00A0}mple.com"
+        XCTAssertNil(IMessagePreview.singleURLHost(in: weird),
+            "URL with embedded NBSP must not be treated as a single-URL token")
+    }
 }
