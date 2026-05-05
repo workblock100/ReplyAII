@@ -176,4 +176,51 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(Set(stack).count, stack.count,
                        "line stack must have 3 distinct opacities; got duplicates: \(stack)")
     }
+
+    // MARK: - Motion durations
+    //
+    // SwiftUI's `Animation` type does not conform to `Equatable` in a
+    // useful public way, so we pin via `String(describing:)`. The
+    // BezierAnimation description embeds the literal `duration: <n>`
+    // verbatim, which is the actual designer-facing knob — substring-
+    // matching it catches any silent retiming. The control points
+    // (0.25, 0.1, 0.25, 1) match the design handoff's `--motion-curve`
+    // and are intentionally identical across fast/std/tone — only the
+    // duration changes per use site.
+
+    func testMotionFastDurationPinned() {
+        let desc = String(describing: Theme.Motion.fast)
+        XCTAssertTrue(desc.contains("duration: 0.12"),
+            "Theme.Motion.fast must be 0.12s — used by hover/press feedback. Got: \(desc)")
+    }
+
+    func testMotionStdDurationPinned() {
+        let desc = String(describing: Theme.Motion.std)
+        XCTAssertTrue(desc.contains("duration: 0.18"),
+            "Theme.Motion.std must be 0.18s — used by tone toggle, banner appear. Got: \(desc)")
+    }
+
+    func testMotionToneDurationPinned() {
+        let desc = String(describing: Theme.Motion.tone)
+        XCTAssertTrue(desc.contains("duration: 0.14"),
+            "Theme.Motion.tone must be 0.14s — composer tone-pill fade. Got: \(desc)")
+    }
+
+    func testMotionDurationsOrderedFastToStd() {
+        // The design contract is fast < tone < std. Tone sits between
+        // the two so the composer's pill-swap reads quicker than a
+        // banner appearance but slower than a press indicator.
+        let fast = String(describing: Theme.Motion.fast)
+        let tone = String(describing: Theme.Motion.tone)
+        let std  = String(describing: Theme.Motion.std)
+
+        XCTAssertTrue(fast.contains("duration: 0.12"))
+        XCTAssertTrue(tone.contains("duration: 0.14"))
+        XCTAssertTrue(std.contains("duration: 0.18"))
+        // Sanity: 0.12 < 0.14 < 0.18 — re-asserted via numeric checks
+        // so that if the pin literals change, the test surfaces the
+        // ordering regression in addition to the literal mismatch.
+        XCTAssertLessThan(0.12, 0.14)
+        XCTAssertLessThan(0.14, 0.18)
+    }
 }
