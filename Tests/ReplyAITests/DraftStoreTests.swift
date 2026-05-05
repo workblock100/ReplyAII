@@ -188,4 +188,84 @@ final class DraftStoreTests: XCTestCase {
                        "listing must be order-independent — set equality suffices")
     }
 
+    // MARK: - Defensive paths
+
+    /// Empty draft text must round-trip as the empty string, not nil. The
+    /// composer treats nil ("never had a draft") and "" ("user cleared the
+    /// draft") differently — a clear-then-relaunch must come back empty,
+    /// not regenerate from scratch. This is the regression that turns
+    /// "I cleared this on purpose" into "the LLM keeps refilling it."
+    func testEmptyDraftRoundTripsAsEmptyStringNotNil() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "cleared", text: "")
+        XCTAssertEqual(store.read(threadID: "cleared"), "",
+            "empty-string write must round-trip as empty, not as nil")
+        XCTAssertTrue(store.listStoredDraftIDs().contains("cleared"),
+            "empty draft still occupies a slot — listing must include it")
+    }
+
+    /// `delete()` on a thread that never had a persisted draft must be a
+    /// silent no-op. The inbox calls delete after every send/archive
+    /// without checking presence first; throwing or printing here would
+    /// flood logs with phantom errors for every never-drafted thread.
+    func testDeleteOnUnknownThreadIsSilentNoOp() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.delete(threadID: "never-existed")
+        XCTAssertNil(store.read(threadID: "never-existed"),
+            "delete on absent thread leaves state unchanged")
+        XCTAssertTrue(store.listStoredDraftIDs().isEmpty,
+            "delete on absent thread must not create a marker file")
+    }
+
+    /// Custom prune horizon must be honored. Default is 7 days; passing a
+    /// smaller value (e.g. 1 day for an aggressive sweep before
+    /// factory-reset migration) needs to actually prune the 2-day-old
+    /// drafts that the default would keep. Pinning so a future refactor
+    /// of the cutoff math doesn't silently ignore the parameter.
+    func testPruneStaleHonorsCustomHorizon() throws {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "two-day-old", text: "content")
+
+        let twoDaysAgo = Date().addingTimeInterval(-2 * 86_400)
+        let fileURL = tmpDir.appendingPathComponent("two-day-old.md")
+        try FileManager.default.setAttributes(
+            [.modificationDate: twoDaysAgo],
+            ofItemAtPath: fileURL.path
+        )
+
+        // Default horizon (7 days) keeps it; explicit 1-day horizon drops it.
+        store.pruneStale(olderThan: 7)
+        XCTAssertEqual(store.read(threadID: "two-day-old"), "content",
+            "default horizon must keep a 2-day-old draft")
+
+        store.pruneStale(olderThan: 1)
+        XCTAssertNil(store.read(threadID: "two-day-old"),
+            "1-day horizon must prune the 2-day-old draft")
+    }
+
+    /// `listStoredDraftIDs` reflects the filesystem after `pruneStale`
+    /// runs at the next init. A stale entry should disappear from the
+    /// list along with the file — the list method does not cache.
+    func testListStoredDraftIDsExcludesPrunedEntries() throws {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "old", text: "stale")
+        store.write(threadID: "fresh", text: "keep")
+
+        // Back-date the "old" file so the next init prunes it.
+        let oldURL = tmpDir.appendingPathComponent("old.md")
+        let eightDaysAgo = Date().addingTimeInterval(-8 * 86_400)
+        try FileManager.default.setAttributes(
+            [.modificationDate: eightDaysAgo],
+            ofItemAtPath: oldURL.path
+        )
+
+        // Fresh init triggers prune.
+        let store2 = DraftStore(draftsDirectory: tmpDir)
+        let ids = store2.listStoredDraftIDs()
+        XCTAssertFalse(ids.contains("old"),
+            "pruned entry must drop out of the listing")
+        XCTAssertTrue(ids.contains("fresh"),
+            "non-stale entries must remain in the listing")
+    }
+
 }
