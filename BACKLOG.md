@@ -270,6 +270,33 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 
 ## P1 — significant value, not urgent
 
+### REP-XCUI-001 — bootstrap an XCUITest target for autonomous UI verification
+- priority: P1
+- effort: M
+- ui_sensitive: false
+- status: open
+- claimed_by: null
+- scope: The autopilot's UI verification gate (in SKILL.md as of 2026-05-05) currently uses AppleScript window introspection + system log scan. That catches "process died" / "no windows" / "wrong window titles" / "zero-sized layout" / "crash signature in log" — about 80% of regressions a user would notice. It does NOT catch: button labels silently changing, a screen rendering empty (blank but full-sized), a click-handler that no-ops, a SwiftUI binding that displays stale state. Add a new `Tests/ReplyAIUITests/` target (XCUITest framework, not XCTest) running via `xctest` headless — runs as part of `swift test` with no permission dialogs after a one-time grant. Cover 5–7 critical flows: (1) launch → onboarding `01 Welcome` renders with "Get started" button enabled, (2) onboarding `03 Permissions` renders all permission rows, (3) `⌘⇧O` opens the inbox window with at least one thread visible (using the Fixtures demo data), (4) selecting a thread shows the composer with the WARM tone selected by default, (5) typing in the composer doesn't crash, (6) `⌘.` dismisses the draft, (7) the menu-bar `R` extra is registered. Each test should use accessibility identifiers (`.accessibilityIdentifier(...)`) added to the relevant SwiftUI views — that requires sprinkling a small number of these into Sources/ReplyAI/ in addition to the test target. The autopilot's smoke-launch step should grow a fourth layer that runs `swift test --filter ReplyAIUITests` after build succeeds — if any UI test fails, skip the merge same as the other layers.
+- success_criteria:
+  - `Tests/ReplyAIUITests/` target exists in `Package.swift` with `dependencies: ["ReplyAI"]`
+  - At least 5 XCUITest cases passing on main
+  - SKILL.md smoke-launch section grows a `swift test --filter ReplyAIUITests` step
+  - One-time `xctest` grant (Screen Recording / Accessibility) documented in AGENTS.md gotchas — once granted, runs forever in headless fires
+  - A fire that ships a regression (e.g. button label changed, inbox window empty) gets caught by the UI tests and the wip merge is skipped
+- test_plan: After the target exists, deliberately introduce a regression on a wip branch (e.g. rename `WelcomeView`'s "Get started" button to "Continue") and verify the smoke-launch step skips the merge with reason "ui-test-failed".
+
+### REP-AUDIT-260505 — audit findings from manual UI walkthrough on 2026-05-05
+- priority: P1
+- effort: S
+- ui_sensitive: true
+- status: open
+- claimed_by: human
+- scope: Two bugs surfaced during manual computer-use audit of `co.replyai.mac` (built from main `47b8f43`, MLX disabled via `pref.model.useMLX=false`). (1) The "Open inbox →" button in the prototype gallery toolbar (top-right) does NOT open the inbox window when clicked — the keyboard shortcut `⌘⇧O` does open it correctly, so the inbox scene wiring works; the button's action handler is the issue. Likely a stale binding or a `WindowGroup` mismatch in `Sources/ReplyAI/App/ReplyAIApp.swift` or wherever the gallery toolbar lives. (2) The inbox window (opened via `⌘⇧O`) shows a persistent error pill at the bottom-left of the sidebar reading "● error · database is locked" — this is the chat.db conflict with Messages.app (the FDA path the 2026-04-23 pivot was deprioritizing, but the error UI is leaking through into the inbox header and looks broken to a first-time user). Either: hide this error when the AppleScript / Accessibility / UNNotification fallback is active, or replace the copy with something actionable like "iMessage unavailable — using fallback channels" so the user understands it's not a bug, it's the pivot path.
+- success_criteria:
+  - Clicking "Open inbox →" in the prototype gallery toolbar opens the same inbox window that `⌘⇧O` opens (verified manually + via XCUITest once REP-XCUI-001 lands)
+  - The "database is locked" error pill is either suppressed when fallback channels are healthy OR rephrased to non-alarming copy
+- test_plan: For (1), add an XCUITest that clicks the gallery toolbar button by accessibility identifier and asserts a second window appears. For (2), unit test on the InboxViewModel sidebar-status computed property — given `iMessageChannel.health == .databaseLocked` and `slackChannel.health == .ok`, the user-visible string should not contain the word "error".
+
 ### REP-016 — human: review + merge wip/quality-senderknown-fix
 - priority: P1
 - effort: S
