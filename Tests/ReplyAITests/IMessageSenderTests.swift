@@ -408,6 +408,45 @@ final class IMessageSenderTests: XCTestCase {
         }
     }
 
+    /// Non-iMessage / non-SMS channels currently have no GUID write path —
+    /// the validator's `default:` arm throws unconditionally so that a
+    /// future caller who reuses GUID-based send routing for WhatsApp /
+    /// Teams / Telegram has to wire per-channel format rules first. Pin
+    /// the contract for each currently-unsupported channel so a refactor
+    /// that accidentally widens the supported-channel set surfaces here.
+    func testValidateChatGUIDForWhatsAppAlwaysThrows() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("whatsapp:+15551234567", for: .whatsapp),
+            ".whatsapp must hit the default arm and throw — no write path defined yet"
+        ) { error in
+            guard case IMessageSender.SendError.invalidChatGUID = error else {
+                XCTFail("Expected invalidChatGUID, got \(error)"); return
+            }
+        }
+    }
+
+    func testValidateChatGUIDForTeamsAlwaysThrows() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("teams:thread/abc", for: .teams),
+            ".teams must hit the default arm and throw — no write path defined yet"
+        ) { error in
+            guard case IMessageSender.SendError.invalidChatGUID = error else {
+                XCTFail("Expected invalidChatGUID, got \(error)"); return
+            }
+        }
+    }
+
+    func testValidateChatGUIDForTelegramAlwaysThrows() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("tg://chat/12345", for: .telegram),
+            ".telegram must hit the default arm and throw — no write path defined yet"
+        ) { error in
+            guard case IMessageSender.SendError.invalidChatGUID = error else {
+                XCTFail("Expected invalidChatGUID, got \(error)"); return
+            }
+        }
+    }
+
     func testNonRetriableErrorFailsImmediately() {
         let prevTimeout = IMessageSender.sendTimeout
         let prevHook = IMessageSender.executeHook
