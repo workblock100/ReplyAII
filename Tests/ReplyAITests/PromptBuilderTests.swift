@@ -128,6 +128,41 @@ final class PromptBuilderTests: XCTestCase {
             "budget=0 must drop every message — first-iteration break condition")
     }
 
+    /// Edge case: the most-recent (last) message ALONE exceeds the
+    /// budget. The current implementation drops it silently — it does
+    /// NOT force-retain the most-recent message — because the loop's
+    /// `if total + chars > budget { break }` fires on the first
+    /// iteration with `total = 0`. Pinning the actual behavior so a
+    /// future force-retain refactor (which existing comments at
+    /// `testLongHistoryIsTruncatedToCharBudget` ASSUME is in place but
+    /// isn't) surfaces here as a deliberate change rather than a
+    /// silent drift. If the implementation ever switches to
+    /// "force-retain when it alone fits within e.g. 2× budget," this
+    /// test should be updated to match — but the change should be
+    /// intentional and reviewed.
+    func testTruncateDropsMostRecentWhenItAloneExceedsBudget() {
+        let huge = makeMessage(String(repeating: "x", count: 300))
+        let result = PromptBuilder.truncate([huge], budget: 100)
+        XCTAssertTrue(result.isEmpty,
+            "single message larger than budget is dropped — first-iteration break, no force-retain")
+    }
+
+    /// Sibling case: when the most-recent message exceeds budget AND
+    /// older messages would fit, the older ones are still dropped
+    /// because the reversed iteration stops at the first over-budget
+    /// item. Confirms the loop does NOT skip the over-budget item and
+    /// continue with smaller older messages.
+    func testTruncateBreaksOnFirstOverBudgetAndDoesNotSkipForward() {
+        let huge   = makeMessage(String(repeating: "x", count: 300))
+        let small1 = makeMessage("a")  // 1 char, would fit
+        let small2 = makeMessage("b")  // 1 char, would fit
+        // Order: [small1, small2, huge] → reversed: [huge, small2, small1]
+        // Loop hits huge first, breaks; small1/small2 never visited.
+        let result = PromptBuilder.truncate([small1, small2, huge], budget: 100)
+        XCTAssertTrue(result.isEmpty,
+            "loop breaks on first over-budget message; older smaller messages are NOT recovered after the break")
+    }
+
     // MARK: - Tone system instruction tests (REP-112)
 
     func testEachToneProducesNonEmptySystemInstruction() {
