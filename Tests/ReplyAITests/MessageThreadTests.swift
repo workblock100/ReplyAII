@@ -113,3 +113,99 @@ final class MessageModelTests: XCTestCase {
             "two messages differing only in rowID must compare unequal — the rule engine dedups by rowID")
     }
 }
+
+// MARK: - REP-XX: per-field equality contract
+
+/// Pin that every field contributes to MessageThread equality / hash. The
+/// rule engine and SwiftUI selection use the synthesized `==` to detect
+/// thread changes; if any field stops contributing, the inbox would miss
+/// updates (e.g. an unread-count bump or a pinned-state flip would fail
+/// to invalidate the cached row and the UI would lag the model).
+final class MessageThreadEqualityFieldsTests: XCTestCase {
+
+    private func base() -> MessageThread {
+        MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567",
+            hasAttachment: false
+        )
+    }
+
+    func testEqualityRespectsChannel() {
+        let other = MessageThread(
+            id: "T", channel: .slack, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), other,
+            "channel difference must break equality — channel-filtered views depend on it")
+    }
+
+    func testEqualityRespectsPinned() {
+        let other = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: true,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), other,
+            "pinned-state flip must break equality so the sidebar reorders")
+    }
+
+    func testEqualityRespectsChatGUID() {
+        let other = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;+;chat1234567890",  // group instead of 1:1
+            hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), other,
+            "chatGUID difference must break equality — IMessageSender routes by it")
+    }
+
+    func testEqualityRespectsContextSummary() {
+        let other = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: "summary changed",
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), other,
+            "contextSummary change must invalidate the row's cache")
+    }
+
+    func testEqualityRespectsHasAttachment() {
+        let other = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: true
+        )
+        XCTAssertNotEqual(base(), other,
+            "hasAttachment flip must break equality — rule engine reads this column instead of the 📎 sentinel")
+    }
+
+    func testEqualityRespectsPreviewAndTime() {
+        let differingPreview = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "different", time: "t", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), differingPreview,
+            "preview text drives the sidebar row label — must contribute to equality")
+
+        let differingTime = MessageThread(
+            id: "T", channel: .imessage, name: "n", avatar: "A",
+            preview: "p", time: "yesterday", unread: 0, pinned: false,
+            contextCount: 41, contextSummary: nil,
+            chatGUID: "iMessage;-;+15551234567", hasAttachment: false
+        )
+        XCTAssertNotEqual(base(), differingTime,
+            "time chip auto-ticks; the row must invalidate when it advances")
+    }
+}
