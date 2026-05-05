@@ -143,7 +143,7 @@ final class FixturesTests: XCTestCase {
             "unknown thread must return nil — ContextCard relies on this for its empty state")
     }
 
-    // MARK: - REP-XXX: Sidebar fixtures pin
+    // MARK: - Sidebar fixtures pin
 
     /// `Fixtures.folders` and `Fixtures.sidebarChannels` are the sidebar's
     /// empty-state when no real data has loaded — i.e. what every screenshot
