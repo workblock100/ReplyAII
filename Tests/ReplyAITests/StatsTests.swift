@@ -788,3 +788,103 @@ final class StatsDefaultFileURLTests: XCTestCase {
                       "stats path must be absolute so behavior doesn't depend on the cwd of the launching process")
     }
 }
+
+// MARK: - resetIndexedCounters + guard-clause coverage
+
+final class StatsResetAndGuardTests: XCTestCase {
+    private var tempDir: URL!
+
+    override func setUpWithError() throws {
+        tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ReplyAIStatsResetTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    private func tempURL(_ name: String = "stats.json") -> URL {
+        tempDir.appendingPathComponent(name)
+    }
+
+    func testResetIndexedCountersZeroesAggregateAndPerChannel() {
+        // SearchIndex.clear() relies on this to keep the counter aligned
+        // with current index content rather than cumulative history. Both
+        // the aggregate counter and every per-channel bucket must drop
+        // to zero in one call.
+        let stats = Stats(fileURL: tempURL())
+        stats.recordMessagesIndexed(100)
+        stats.incrementIndexed(channel: .imessage, count: 30)
+        stats.incrementIndexed(channel: .slack, count: 70)
+        XCTAssertEqual(stats.snapshot().messagesIndexed, 100,
+                       "precondition: aggregate counter was bumped")
+        XCTAssertEqual(stats.snapshot().messagesIndexedByChannel.values.reduce(0, +), 100,
+                       "precondition: per-channel total was bumped")
+
+        stats.resetIndexedCounters()
+
+        XCTAssertEqual(stats.snapshot().messagesIndexed, 0,
+                       "aggregate counter must zero after reset")
+        XCTAssertTrue(stats.snapshot().messagesIndexedByChannel.isEmpty,
+                      "per-channel dictionary must empty after reset — not just zeroed values")
+    }
+
+    func testResetIndexedCountersLeavesUnrelatedCountersAlone() {
+        // resetIndexedCounters is targeted — drafts/rules counters belong
+        // to lifetime stats and must survive a search-index rebuild.
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated()
+        stats.recordDraftSent()
+        stats.recordRuleFired(action: "archive")
+        stats.recordMessagesIndexed(50)
+
+        stats.resetIndexedCounters()
+
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.draftsGenerated, 1,
+                       "drafts counter must survive an indexed-counter reset")
+        XCTAssertEqual(snap.draftsSent, 1,
+                       "drafts-sent counter must survive an indexed-counter reset")
+        XCTAssertEqual(snap.rulesFiredByAction["archive"], 1,
+                       "rules-fired counter must survive an indexed-counter reset")
+        XCTAssertEqual(snap.messagesIndexed, 0)
+    }
+
+    func testResetIndexedCountersPersistsToDisk() {
+        // The reset must round-trip through stats.json so a process restart
+        // doesn't see the pre-reset counters resurrect.
+        let url = tempURL()
+        let stats = Stats(fileURL: url)
+        stats.incrementIndexed(channel: .imessage, count: 5)
+        stats.recordMessagesIndexed(5)
+        stats.resetIndexedCounters()
+        stats.flushNow()
+
+        let reopened = Stats(fileURL: url)
+        XCTAssertEqual(reopened.snapshot().messagesIndexed, 0)
+        XCTAssertTrue(reopened.snapshot().messagesIndexedByChannel.isEmpty)
+    }
+
+    func testIncrementIndexedIgnoresZeroAndNegativeCounts() {
+        // Defensive guard — callers passing 0 (no-op rebuild) or a negative
+        // (bug) must not corrupt the per-channel dictionary with phantom
+        // entries.
+        let stats = Stats(fileURL: tempURL())
+        stats.incrementIndexed(channel: .slack, count: 0)
+        stats.incrementIndexed(channel: .slack, count: -3)
+        XCTAssertTrue(stats.snapshot().messagesIndexedByChannel.isEmpty,
+                      "non-positive counts must not create a per-channel entry")
+    }
+
+    func testRecordRuleLoadSkipsIgnoresZeroAndNegativeCounts() {
+        // Same defensive guard — passing 0 (clean load, no skips) or a
+        // negative (bug) must leave the counter untouched.
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleLoadSkips(2)  // baseline
+        stats.recordRuleLoadSkips(0)
+        stats.recordRuleLoadSkips(-5)
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 2,
+                       "non-positive counts must leave the counter at the prior value")
+    }
+}
