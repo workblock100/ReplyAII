@@ -422,4 +422,75 @@ final class SlackHTTPClientTests: XCTestCase {
             XCTFail("Expected .authorizationDenied, got \(error)")
         }
     }
+
+    // MARK: - 2xx success boundary
+
+    /// 204 No Content is part of the 200…299 success range that the client
+    /// treats as OK. Slack's `chat.delete` and `conversations.archive` happen
+    /// to return 200 with an empty body, but defensive coding around the
+    /// boundary matters because any future endpoint Slack adds (or any
+    /// proxy in front of it) could legitimately return 204. The test pins
+    /// the contract: empty 204 response data passes through unchanged
+    /// instead of throwing.
+    func test204SuccessReturnsEmptyDataWithoutThrowing() async throws {
+        let session = MockHTTPSession(statusCode: 204, body: Data())
+        let client = URLSessionSlackClient(session: session)
+        let data = try await client.get(endpoint: "anything.endpoint", token: "t", params: [:])
+        XCTAssertEqual(data, Data(),
+            "204 No Content must yield empty Data() without throwing")
+    }
+
+    func test299SuccessBoundaryReturnsBody() async throws {
+        // Last status code in the 2xx switch range. If a future refactor
+        // narrows the success arm to 200..<299 or similar, this asserts
+        // 299 still passes.
+        let body = Data("{\"ok\":true}".utf8)
+        let session = MockHTTPSession(statusCode: 299, body: body)
+        let client = URLSessionSlackClient(session: session)
+        let data = try await client.get(endpoint: "anything", token: "t", params: [:])
+        XCTAssertEqual(data, body,
+            "299 must remain in the success arm of the status switch")
+    }
+
+    // MARK: - URL-encoding contract for query params
+
+    /// Slack workspace IDs and channel IDs don't include reserved chars,
+    /// but Slack search queries (`search.messages` `query=...`) routinely
+    /// contain spaces, ampersands, plus signs, etc. URLComponents must
+    /// percent-encode those into the query string — passing them raw
+    /// would either land at the wrong endpoint or confuse Slack's parser.
+    func testGetParamsAreURLEncodedForReservedCharacters() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+        _ = try await client.get(
+            endpoint: "search.messages",
+            token: "t",
+            params: ["query": "hello world & more"]
+        )
+        let urlString = session.capturedRequest?.url?.absoluteString ?? ""
+        // The exact percent-encoding URLComponents picks is "hello%20world..."
+        // for spaces and "%26" for ampersand — assert the raw chars don't
+        // leak through.
+        XCTAssertFalse(urlString.contains("hello world"),
+            "raw spaces must not appear unencoded in the URL: \(urlString)")
+        XCTAssertFalse(urlString.contains(" & "),
+            "raw ampersand must not appear unencoded — would be parsed as a separator: \(urlString)")
+        XCTAssertTrue(urlString.contains("query="),
+            "query parameter name must be present: \(urlString)")
+    }
+
+    /// POST endpoints set Content-Type to `application/json; charset=utf-8`
+    /// — pinned exactly because Slack's API docs reject `application/json`
+    /// alone for some endpoints, and a refactor that drops the charset
+    /// would surface as 400 errors only in production.
+    func testPostContentTypeIncludesUTF8Charset() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+        _ = try await client.post(endpoint: "chat.postMessage", token: "t", json: ["text": "hi"])
+        XCTAssertEqual(
+            session.capturedRequest?.value(forHTTPHeaderField: "Content-Type"),
+            "application/json; charset=utf-8",
+            "Content-Type must include charset=utf-8 — Slack rejects bare application/json on some endpoints"
+        )
+    }
 }
