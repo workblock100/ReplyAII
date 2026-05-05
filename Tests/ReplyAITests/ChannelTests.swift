@@ -133,6 +133,40 @@ final class ChannelTests: XCTestCase {
             String(describing: Theme.Color.channelTelegram)
         )
     }
+
+    func testDotColorsAreDistinctAcrossChannels() {
+        // Sidebar channel dots and the per-channel filter pills depend on
+        // visually distinguishing channels at a glance. Two channels sharing
+        // the same Theme color makes the inbox ambiguous — a Slack thread
+        // and a Teams thread lit by the same dot is a UX regression that
+        // would silently slip past the per-token mapping test above.
+        let descriptors = Channel.allCases.map { String(describing: $0.dotColor) }
+        XCTAssertEqual(
+            Set(descriptors).count, descriptors.count,
+            "channel dotColor must be unique per channel; got duplicates in \(descriptors)"
+        )
+    }
+
+    func testDisplayNameMatchesLabelForEveryCase() {
+        // displayName is the public alias UI code reaches for; label is the
+        // legacy name. Keeping them aligned is the one-line invariant that
+        // prevents drift if a future refactor edits one without the other.
+        for channel in Channel.allCases {
+            XCTAssertEqual(channel.displayName, channel.label,
+                "displayName must equal label for \(channel)")
+        }
+    }
+
+    func testInitFromUnknownRawValueReturnsNil() {
+        // Defensive: rules.json on disk could carry a stale channel string
+        // after a downgrade, and Codable falls back to this initializer.
+        // It must reject unknown values cleanly so the rule is skipped
+        // rather than crashing decode.
+        XCTAssertNil(Channel(rawValue: ""))
+        XCTAssertNil(Channel(rawValue: "iMessage"),  "case-sensitive: rawValues are lowercase")
+        XCTAssertNil(Channel(rawValue: "discord"),   "channels not in the enum must not decode")
+        XCTAssertNil(Channel(rawValue: "imessage "), "trailing whitespace must not decode")
+    }
 }
 
 // MARK: - ChannelError.errorDescription
