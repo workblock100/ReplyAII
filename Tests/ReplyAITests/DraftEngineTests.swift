@@ -296,6 +296,70 @@ final class DraftEngineTests: XCTestCase {
         XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).text.isEmpty)
     }
 
+    /// The composer renders `modelLoadStatus.message` directly under the
+    /// progress bar (e.g. "Downloading Llama 3.2 3B · 47%"), so each
+    /// loadProgress chunk must replace the prior status — not append, not
+    /// linger. Pin that the latest fraction + message reach observers
+    /// verbatim, and that the status is held while the stream pauses
+    /// after the final progress chunk.
+    func testLoadProgressLatestChunkReplacesPriorStatus() async throws {
+        let engine = DraftEngine(service: PausingProgressService(
+            stages: [
+                (0.10, "Downloading · 10%"),
+                (0.55, "Downloading · 55%"),
+                (0.95, "Warming · 95%"),
+            ]
+        ))
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+
+        try await waitUntil(timeout: 2.0) {
+            engine.modelLoadStatus?.message == "Warming · 95%"
+        }
+        XCTAssertEqual(engine.modelLoadStatus,
+                       DraftEngine.ModelLoadStatus(fraction: 0.95, message: "Warming · 95%"),
+                       "modelLoadStatus must reflect the LATEST loadProgress chunk verbatim, not an aggregate or stale earlier value")
+    }
+
+    /// `DraftEngine.apply(.text)` clears `modelLoadStatus` immediately —
+    /// not on `.done`. The composer relies on this so the progress bar
+    /// disappears the moment the first token streams in, and the user
+    /// sees the draft instead of "Warming · 100%" lingering during
+    /// generation. A regression that delayed the clear to `.done` would
+    /// keep the spinner up for the whole stream.
+    func testLoadProgressClearedOnFirstTextChunkBeforeDone() async throws {
+        let engine = DraftEngine(service: ProgressThenHoldingTextService())
+        let thread = Fixtures.threads[0]
+
+        engine.prime(thread: thread, tone: .warm, history: [])
+
+        // Wait until at least one text chunk has been applied (text non-empty)
+        // BUT before .done arrives (isDone still false).
+        try await waitUntil(timeout: 2.0) {
+            !engine.state(threadID: thread.id, tone: .warm).text.isEmpty
+        }
+        XCTAssertFalse(engine.state(threadID: thread.id, tone: .warm).isDone,
+                       "test setup precondition: stream must still be live after first text chunk")
+        XCTAssertNil(engine.modelLoadStatus,
+                     "modelLoadStatus must clear on the first .text chunk — not delayed until .done")
+    }
+
+    /// `ModelLoadStatus` is `Equatable` so SwiftUI views can `.onChange`
+    /// or `.equatable()` against it without falling back to reference
+    /// identity. Pin the value-equality contract here — a future struct
+    /// change that drops Equatable (or adds a non-Equatable field) would
+    /// silently regress the composer's progress-bar update path.
+    func testModelLoadStatusEqualityIsValueBased() {
+        let a = DraftEngine.ModelLoadStatus(fraction: 0.5, message: "Loading")
+        let b = DraftEngine.ModelLoadStatus(fraction: 0.5, message: "Loading")
+        let cFraction = DraftEngine.ModelLoadStatus(fraction: 0.5001, message: "Loading")
+        let cMessage = DraftEngine.ModelLoadStatus(fraction: 0.5, message: "Loading…")
+        XCTAssertEqual(a, b, "identical fraction+message must compare equal")
+        XCTAssertNotEqual(a, cFraction, "fraction differences must surface as inequality")
+        XCTAssertNotEqual(a, cMessage, "message differences must surface as inequality")
+    }
+
     func testCancellationTransitionsToIdle() async throws {
         let engine = DraftEngine(service: CancellableLongService())
         let thread = Fixtures.threads[0]
@@ -1052,6 +1116,69 @@ private struct EmptyStreamService: LLMService {
     ) -> AsyncThrowingStream<DraftChunk, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish()
+        }
+    }
+}
+
+/// Emits a fixed list of (fraction, message) loadProgress chunks then pauses
+/// indefinitely without yielding text or done. Lets tests assert the LATEST
+/// emitted progress is what `modelLoadStatus` exposes — the existing
+/// `LoadProgressThenTextService` proceeds to text + done immediately, which
+/// would race the assertion against the load-status clear in `apply(.text)`.
+private struct PausingProgressService: LLMService {
+    let stages: [(Double, String)]
+
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                for (fraction, message) in stages {
+                    if Task.isCancelled { continuation.finish(); return }
+                    continuation.yield(DraftChunk(kind: .loadProgress(
+                        fraction: fraction, message: message
+                    )))
+                    try? await Task.sleep(nanoseconds: 5_000_000)
+                }
+                // Hold open — never yield text or done — so the test can
+                // observe the final progress chunk before any clear path
+                // (text/done) fires.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+/// Emits one loadProgress chunk, then one text chunk, then holds open
+/// without ever sending `.done`. Lets the test observe `modelLoadStatus`
+/// being cleared mid-stream by the first text chunk specifically — not
+/// indirectly by the `.done` path which also clears it.
+private struct ProgressThenHoldingTextService: LLMService {
+    func draft(
+        thread: MessageThread,
+        tone: Tone,
+        history: [Message]
+    ) -> AsyncThrowingStream<DraftChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                continuation.yield(DraftChunk(kind: .loadProgress(
+                    fraction: 0.5, message: "Loading"
+                )))
+                try? await Task.sleep(nanoseconds: 5_000_000)
+                if Task.isCancelled { continuation.finish(); return }
+                continuation.yield(DraftChunk(kind: .text("first ")))
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }
