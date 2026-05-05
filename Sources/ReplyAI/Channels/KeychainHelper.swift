@@ -1,9 +1,16 @@
 import Foundation
 import Security
 
-/// Thin Keychain wrapper for per-channel OAuth tokens.
-/// Keys are stored under the `ReplyAI-` prefix so factory-reset can
-/// sweep them by prefix without touching unrelated system entries.
+/// Thin Keychain wrapper for per-channel OAuth + relay tokens.
+///
+/// Each item lives at (`kSecAttrService = service`,
+/// `kSecAttrAccount = "ReplyAI-" + key`). The `ReplyAI-` prefix on the
+/// account side lets a factory-reset sweep all our entries via an
+/// account-prefix query without iterating every service. The `service`
+/// is per-channel and may use either the `ReplyAI-<Channel>` form or a
+/// reverse-DNS form like `co.replyai.telegram` — see each channel's
+/// `keychainService` constant for the exact value (pinned by
+/// `ChannelStubKeychainContractTests`).
 struct KeychainHelper: Sendable {
     let service: String
 
