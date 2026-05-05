@@ -1,6 +1,12 @@
 import SwiftUI
 import AppKit
 
+/// Rounded-square gradient avatar with the contact's initials and a small
+/// channel-identity dot in the bottom-right corner. The gradient is
+/// channel-colored so a glance at the inbox tells you which network a
+/// thread belongs to without reading the channel chip. `cutout` is the
+/// surface color the avatar sits on, threaded through to `ChannelDot` so
+/// its border blends with the host surface.
 struct Avatar: View {
     var text: String
     var channel: Channel
