@@ -10,11 +10,22 @@ import Observation
 @Observable
 @MainActor
 final class DraftEngine {
+    /// Per-(thread, tone) cache key. The composer asks for a draft via this
+    /// key and re-uses an existing in-flight or finished draft instead of
+    /// re-streaming when the user toggles back to a tone they've already
+    /// seen this session — the same key collapses to the same `DraftState`.
     struct Key: Hashable {
         let threadID: String
         let tone: Tone
     }
 
+    /// One in-flight or completed draft. The composer reads `text` while
+    /// `isStreaming` is true (token-by-token append), flips to the "Send"
+    /// affordance once `isDone` is true, and surfaces `error` inline rather
+    /// than via a toast so the user can retry without losing their place.
+    /// `confidence` drives the bottom-of-composer indicator; below 0.4 the
+    /// view shows a low-confidence warning (`isLowConfidence`) so the user
+    /// double-checks before sending.
     struct DraftState: Equatable {
         var text: String = ""
         var confidence: Double = 1.0
