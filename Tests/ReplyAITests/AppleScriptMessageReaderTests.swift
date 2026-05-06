@@ -280,4 +280,53 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "AppleScript failed: \(raw)"
         )
     }
+
+    // MARK: - Edge cases on recentChats parsing
+
+    /// `recentChats()` returns threads sorted by `name` using
+    /// `localizedCaseInsensitiveCompare`. The sidebar relies on this for
+    /// stable ordering across syncs — an unsorted output would shuffle
+    /// rows on every refresh and look like a UI bug. Pin so a refactor
+    /// that drops the sort or swaps to case-sensitive surfaces here.
+    func testRecentChatsSortsByNameCaseInsensitively() throws {
+        let raw = """
+        zoe wong||iMessage;-;+15550000001
+        Alice Smith||iMessage;-;+15550000002
+        bob jones||iMessage;-;+15550000003
+        """
+        let reader = makeReader(returning: raw)
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.map(\.name),
+                       ["Alice Smith", "bob jones", "zoe wong"],
+                       "rows must sort by name using case-insensitive compare — capital A precedes lowercase b precedes lowercase z")
+    }
+
+    /// `ContactsResolver.name(for:)` echoes the input handle back when access
+    /// is granted but no contact matches — the AppleScript reader treats
+    /// that echo as "no resolution" so the prettyPhone formatter still
+    /// runs. Without this defense, a 1:1 chat with a saved-but-unmatched
+    /// number would render the raw `+12014623980` form. Pin so a future
+    /// resolver that drops the echo behavior surfaces here as a deliberate
+    /// change to this callsite.
+    func testRecentChatsTreatsNameForEchoAsNoMatch() throws {
+        let raw = "missing value||iMessage;-;+12014623980"
+        let reader = makeReader(returning: raw,
+                                nameFor: { handle in handle })  // echo the input verbatim
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.first?.name, "+1 (201) 462-3980",
+            "echo from nameFor must NOT win over prettyPhone — otherwise unmatched handles render unformatted")
+    }
+
+    /// Empty-string echo from `nameFor` is treated identically to nil: the
+    /// reader falls through to the chatID suffix, then to prettyPhone.
+    /// Pin so a future resolver that returns "" for "no match" doesn't
+    /// silently zero out the sidebar's display name.
+    func testRecentChatsTreatsNameForEmptyStringAsNoMatch() throws {
+        let raw = "missing value||iMessage;-;+12014623980"
+        let reader = makeReader(returning: raw,
+                                nameFor: { _ in "" })  // empty-string match
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.first?.name, "+1 (201) 462-3980",
+            "empty-string nameFor result must be treated as no match — otherwise the sidebar shows an empty name cell")
+    }
 }
