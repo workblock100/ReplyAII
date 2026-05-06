@@ -887,4 +887,64 @@ final class StatsResetAndGuardTests: XCTestCase {
         XCTAssertEqual(stats.snapshot().ruleLoadSkips, 2,
                        "non-positive counts must leave the counter at the prior value")
     }
+
+    // MARK: - Forward-compat decode of partial stats.json
+
+    /// Pin that an on-disk stats.json missing some-but-not-all keys decodes
+    /// successfully, with the missing keys defaulting to their zero values.
+    /// This is the contract that makes a counter-set extension safe: when a
+    /// new counter (`rulesMatchedCount`, future `tokensConsumed`, etc.) is
+    /// added, existing stats.json files written by older builds still load
+    /// without dropping accumulated lifetime counts.
+    ///
+    /// The custom `Snapshot.init(from:)` uses `decodeIfPresent ?? default`
+    /// for every key. `testEmptyFileReturnsFreshSnapshot` covers the
+    /// empty-file path; `testMalformedFileFallsBackToFreshSnapshot` covers
+    /// the invalid-JSON path; this test covers the in-between case where
+    /// the JSON is valid but incomplete.
+    func testStatsSnapshotDecodesPartialJSONWithDefaultedMissingKeys() throws {
+        let url = tempURL()
+        // Only `draftsGenerated` and `messagesIndexed` are written. Every
+        // other key is omitted — older builds produced files of this shape
+        // before the per-tone, per-channel, and matched-count counters
+        // landed. The decode must NOT throw on the missing keys.
+        let partialJSON = #"{"draftsGenerated": 7, "messagesIndexed": 42}"#
+        try Data(partialJSON.utf8).write(to: url)
+
+        let stats = Stats(fileURL: url)
+        let snap = stats.snapshot()
+
+        XCTAssertEqual(snap.draftsGenerated, 7,
+            "explicitly-set key must round-trip")
+        XCTAssertEqual(snap.messagesIndexed, 42,
+            "explicitly-set key must round-trip")
+
+        // Every other key must default cleanly. Drift here (e.g. swapping
+        // any `decodeIfPresent ?? …` to a bare `decode`) would break the
+        // upgrade path for every user with an existing stats.json.
+        XCTAssertEqual(snap.draftsSent, 0)
+        XCTAssertEqual(snap.rulesFiredByAction, [:])
+        XCTAssertEqual(snap.draftsGeneratedByTone, [:])
+        XCTAssertEqual(snap.draftsSentByTone, [:])
+        XCTAssertEqual(snap.messagesIndexedByChannel, [:])
+        XCTAssertEqual(snap.ruleLoadSkips, 0)
+        XCTAssertEqual(snap.rulesMatchedCount, 0)
+    }
+
+    /// Pin that an on-disk stats.json containing extra/unknown keys (e.g.
+    /// from a newer build that's been downgraded) decodes successfully and
+    /// silently ignores the unknown keys. This is the symmetric forward-
+    /// compat invariant: old code reading new files must not lose known-key
+    /// data just because there are extras.
+    func testStatsSnapshotDecodeIgnoresUnknownKeys() throws {
+        let url = tempURL()
+        let futureJSON = #"""
+        {"draftsGenerated": 3, "tokensConsumed": 99, "futureCounter": "hello"}
+        """#
+        try Data(futureJSON.utf8).write(to: url)
+
+        let stats = Stats(fileURL: url)
+        XCTAssertEqual(stats.snapshot().draftsGenerated, 3,
+            "decoder must accept and ignore unknown keys without dropping known-key data")
+    }
 }
