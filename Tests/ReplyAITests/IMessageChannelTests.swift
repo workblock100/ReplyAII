@@ -1650,6 +1650,40 @@ final class IMessageChannelFormatRelativeTests: XCTestCase {
         XCTAssertFalse(yearAgo.isEmpty,
                        "non-zero appleDate must produce a non-empty label, got: '\(yearAgo)'")
     }
+
+    /// A timestamp from ~25 hours ago must land in the "Yesterday" bucket.
+    /// Using Date()-relative arithmetic keeps the assertion deterministic
+    /// independent of when the test runs (modulo daylight-saving edge
+    /// cases, where the timestamp may briefly land in "today" depending on
+    /// the wall clock — a 25-hour offset gives an hour of slack against
+    /// that edge). "Yesterday" is the only bucket whose output is
+    /// locale-stable enough to pin verbatim; today/this-week buckets
+    /// would produce DateFormatter-localized strings that vary by user.
+    func testFormatRelativeYesterdayBucketReturnsYesterdayLiteral() {
+        let twentyFiveHoursAgo = Date().addingTimeInterval(-25 * 3600)
+        let appleDate = Int64(twentyFiveHoursAgo.timeIntervalSinceReferenceDate)
+        XCTAssertEqual(IMessageChannel.formatRelative(appleDate: appleDate), "Yesterday",
+                       "a timestamp from 25 hours ago must land in the Yesterday bucket — drift here would silently relabel every yesterday-thread as MMM d")
+    }
+
+    /// A timestamp from "now" must land in the "today" bucket and produce
+    /// a time-shaped label. We don't assert the exact format ("h:mm a" is
+    /// locale-dependent — `2:31 PM` in en_US, `14:31` in en_GB, etc.) but
+    /// the result must contain at least one digit, must NOT equal the
+    /// "Yesterday" literal, and must NOT match the empty sentinel.
+    /// Together those assertions pin the today bucket without assuming a
+    /// particular DateFormatter dialect.
+    func testFormatRelativeTodayBucketReturnsNonEmptyTimeShapedLabel() {
+        let now = Date()
+        let appleDate = Int64(now.timeIntervalSinceReferenceDate)
+        let label = IMessageChannel.formatRelative(appleDate: appleDate)
+        XCTAssertFalse(label.isEmpty,
+                       "today's timestamp must yield a non-empty label, got: '\(label)'")
+        XCTAssertNotEqual(label, "Yesterday",
+                          "today's timestamp must not collapse into the Yesterday bucket")
+        XCTAssertTrue(label.contains(where: { $0.isNumber }),
+                      "today's label must contain at least one digit (h:mm a format), got: '\(label)'")
+    }
 }
 
 // MARK: - chatDBPath default contract
