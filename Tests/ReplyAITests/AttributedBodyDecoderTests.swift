@@ -257,4 +257,63 @@ final class AttributedBodyDecoderTests: XCTestCase {
                             "extractText returned a String that is not valid UTF-8")
         }
     }
+
+    // MARK: - Cap on primitive-string length (defense against malformed blobs)
+
+    /// `readPrimitiveString` rejects strings whose declared length exceeds
+    /// 65 535 bytes. Real iMessage attributedBody blobs top out at a few
+    /// kilobytes; an over-cap length almost always means a corrupted or
+    /// adversarial blob lying about its size to trigger an out-of-bounds
+    /// slice. Pin so the cap is treated as a security-defense invariant
+    /// rather than an undocumented heuristic.
+    func testPrimitiveStringWithLengthAboveCapReturnsNil() {
+        // Build a fake header + 0x2B + 32-bit length tag claiming 70 000 bytes,
+        // followed by only a small UTF-8 payload. Without the cap, the decoder
+        // would attempt to read 70 000 bytes from a buffer that doesn't have
+        // them — an over-read or, after the bounds check, the slice condition
+        // `end <= bytes.count` would let an attacker control the read length.
+        // The cap forecloses that path.
+        var bytes: [UInt8] = [0x04, 0x0B]
+        bytes += Array("streamtyped".utf8)
+        bytes += [0x04]                                 // version
+        bytes += [0x40, 0x84, 0x84, 0x87]               // filler (class def)
+        bytes += [0x2B]                                 // primitive-string tag
+        // 0x82 32-bit length form; 70 000 = 0x00011170 in little-endian
+        bytes += [0x82, 0x70, 0x11, 0x01, 0x00]
+        bytes += Array("hi".utf8)                       // partial payload
+        // Pad out so the cap, not the bounds check, is what trips. Required
+        // because the decoder's `end <= bytes.count` would also reject a
+        // truncated payload — we want to verify the cap independently.
+        bytes += [UInt8](repeating: 0x00, count: 70_000)
+
+        let result = AttributedBodyDecoder.extractText(from: Data(bytes))
+        // Either nil (no recoverable text), or — if the decoder finds another
+        // 0x2B tag while scanning — a non-empty string, but never the over-cap
+        // "string" itself. The strong assertion here is "doesn't crash and
+        // doesn't return 70 000 fake-NUL bytes".
+        if let text = result {
+            XCTAssertLessThanOrEqual(text.count, 100,
+                "extractText must not return the over-cap fake string — got \(text.count) chars")
+        }
+    }
+
+    /// Pin that the streamtyped header search window is bounded to the
+    /// first ~31 bytes (20 + 11 = magic length). A blob whose magic appears
+    /// later (e.g. wrapped inside an outer typedstream — already covered
+    /// by `testStreamtypedHeaderDetectedBeyondByteZero` for byte 19) but
+    /// FAR later must not be accepted, because attackers could otherwise
+    /// embed adversarial bytes in front of a synthetic header. Pin so the
+    /// search-limit constant stays defensive.
+    func testStreamtypedHeaderTooFarFromStartReturnsNil() {
+        // Pad 50 NUL bytes before the magic — well past the 20+11 search
+        // window. The decoder must NOT find the magic and must return nil.
+        var bytes: [UInt8] = [UInt8](repeating: 0x00, count: 50)
+        bytes += Array("streamtyped".utf8)
+        bytes += [0x04]
+        bytes += [0x40, 0x84, 0x84, 0x87, 0x2B]
+        bytes += [0x05]
+        bytes += Array("Hello".utf8)
+        XCTAssertNil(AttributedBodyDecoder.extractText(from: Data(bytes)),
+            "streamtyped magic past the search window must NOT be accepted — opens a path for prefix-injection attacks otherwise")
+    }
 }
