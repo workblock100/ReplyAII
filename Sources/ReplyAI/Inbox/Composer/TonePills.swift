@@ -10,11 +10,17 @@ import SwiftUI
 struct TonePills: View {
     @Binding var selection: Tone
 
+    /// Respect the macOS Reduce Motion accessibility setting. With it on
+    /// the tone selection still updates instantly but without the
+    /// `Theme.Motion.tone` crossfade — matches REP-083 contract for the
+    /// "tone-pill animations" entry from AGENTS.md priority queue #2.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Tone.allCases) { tone in
                 Button {
-                    withAnimation(Theme.Motion.tone) { selection = tone }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.tone) { selection = tone }
                 } label: {
                     Text(tone.rawValue)
                         .font(Theme.Font.mono(10))

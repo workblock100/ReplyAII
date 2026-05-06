@@ -5,6 +5,12 @@ struct PillToggle: View {
     @Binding var value: Bool
     var action: (() -> Void)? = nil
 
+    /// Respect the macOS Reduce Motion accessibility setting (System
+    /// Settings → Accessibility → Display → Reduce Motion). When the
+    /// user has it on, the capsule + knob still flip but without the
+    /// `Theme.Motion.fast` spring — matches REP-083 contract.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     init(value: Binding<Bool>, action: (() -> Void)? = nil) {
         self._value = value
         self.action = action
@@ -12,7 +18,7 @@ struct PillToggle: View {
 
     var body: some View {
         Button {
-            withAnimation(Theme.Motion.fast) { value.toggle() }
+            withAnimation(reduceMotion ? nil : Theme.Motion.fast) { value.toggle() }
             action?()
         } label: {
             ZStack(alignment: value ? .trailing : .leading) {
