@@ -1708,3 +1708,51 @@ final class IMessageChannelChatDBPathTests: XCTestCase {
             "chatDBPath must expand the leading tilde, got: \(IMessageChannel.chatDBPath)")
     }
 }
+
+// MARK: - formatTime structural pin
+//
+// `formatTime(appleDate:)` formats a chat.db timestamp into a `h:mm a`
+// string for the message-bubble timestamp chip. The exact rendering is
+// locale-dependent (en_US `2:31 PM`, en_GB `14:31`, fr_FR `14:31`), so
+// we pin the SHAPE rather than the literal: result must be non-empty,
+// must contain at least one digit, and must vary with the input.
+
+final class IMessageChannelFormatTimeTests: XCTestCase {
+
+    func testFormatTimeReturnsNonEmptyForAnyTimestamp() {
+        let now = Int64(Date().timeIntervalSinceReferenceDate)
+        let result = IMessageChannel.formatTime(appleDate: now)
+        XCTAssertFalse(result.isEmpty,
+            "formatTime must yield a non-empty string for any non-zero timestamp")
+        XCTAssertTrue(result.contains(where: { $0.isNumber }),
+            "formatTime output must contain at least one digit (h:mm a shape), got: '\(result)'")
+    }
+
+    /// Two timestamps that are clearly in different minutes should produce
+    /// different labels — pin so a refactor that accidentally returned a
+    /// constant (e.g. the formatter cached an empty input) surfaces here.
+    func testFormatTimeOutputVariesWithInput() {
+        let now = Int64(Date().timeIntervalSinceReferenceDate)
+        // 12 hours apart — guaranteed different minute-of-day regardless
+        // of clock or DST so the labels can't accidentally coincide.
+        let twelveHoursAgo = now - (12 * 3600)
+        let a = IMessageChannel.formatTime(appleDate: now)
+        let b = IMessageChannel.formatTime(appleDate: twelveHoursAgo)
+        XCTAssertNotEqual(a, b,
+            "12-hour-apart timestamps must produce different formatted labels, got both: '\(a)'")
+    }
+
+    /// formatTime accepts both the seconds-since-reference and
+    /// nanoseconds-since-reference encodings (the auto-detect lives in
+    /// `secondsSinceReferenceDate`). Pin that the same wall-clock instant
+    /// produces the same output regardless of which encoding chat.db hands
+    /// us — drift here would silently double-format messages from devices
+    /// on different macOS versions.
+    func testFormatTimeAcceptsSecondsAndNanosecondsEncodings() {
+        let secs: Int64 = 700_000_000           // < 10¹² → seconds
+        let nanos: Int64 = secs * 1_000_000_000 // ≥ 10¹² → nanoseconds
+        XCTAssertEqual(IMessageChannel.formatTime(appleDate: secs),
+                       IMessageChannel.formatTime(appleDate: nanos),
+                       "seconds and nanoseconds encodings of the same instant must format identically")
+    }
+}
