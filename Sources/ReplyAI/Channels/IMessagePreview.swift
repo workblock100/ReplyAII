@@ -49,8 +49,10 @@ enum IMessagePreview {
     }
 
     /// Returns the host of `input` iff the whole body is one URL with
-    /// an http/https/mailto scheme. nil for anything else (plain text,
-    /// text + URL, multi-line, invalid URL).
+    /// an http or https scheme. nil for anything else (plain text,
+    /// text + URL, multi-line, invalid URL, or non-clickable schemes
+    /// like mailto/tel/ftp — those pass through verbatim per
+    /// `testNonHTTPSchemeDoesNotCollapse`).
     static func singleURLHost(in input: String) -> String? {
         let tokens = input.split(whereSeparator: \.isWhitespace)
         guard tokens.count == 1 else { return nil }
