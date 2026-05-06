@@ -29,6 +29,14 @@ struct RootView: View {
     }
 }
 
+/// `@main` entry point. Wires together the two SwiftUI WindowGroups
+/// (prototype gallery + inbox), the MenuBarExtra `R` icon, and the
+/// retained services that need to outlive any single window:
+/// `NotificationCoordinator` (for incoming-message capture and
+/// reply-from-notification) and `GlobalHotkey` (the Carbon-backed `⌘⇧R`
+/// summon). Both are stored on the App value because the App's lifetime
+/// equals the process's — releasing them would silently disable their
+/// system-level integrations.
 @main
 struct ReplyAIApp: App {
     @State private var coordinator = NotificationCoordinator()
