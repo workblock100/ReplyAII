@@ -4,6 +4,15 @@ Rolling 6-hour quality assessments written by the reviewer agent every 6 hours. 
 
 The reviewer never modifies code — only this file, AGENTS.md, and the planner's backlog. If quality trends badly for four consecutive 6h windows, it pushes a `STOP AUTO-MERGE` item to BACKLOG.md.
 
+> **Operating mode (2026-05): single-agent autopilot.** The dedicated
+> reviewer fire has been deprecated under the autopilot pivot — the
+> autopilot's per-fire smoke-launch + banned-pattern scan + log audit
+> covers the quality-gate role. New review entries below this line are
+> rare and only appear when the reviewer is reactivated for a specific
+> incident; the autopilot's `.automation/logs/autopilot-*.md` files are
+> the canonical per-fire quality record. Historical entries below this
+> blockquote stay as the previous quarter's audit trail.
+
 ---
 
 ## Window 2026-05-02 08:51 – 14:51 UTC (last ~6h) — ⭐⭐
