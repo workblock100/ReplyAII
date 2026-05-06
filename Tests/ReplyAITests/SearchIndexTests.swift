@@ -35,6 +35,34 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(SearchIndex.ftsQuery(from: "   "), "")
     }
 
+    /// All-special-char inputs sanitize down to nothing — the function
+    /// strips `"` and `-` then drops empty tokens. A query like `--` or
+    /// `"` should produce the empty string, NOT a malformed FTS5 query
+    /// like `*` or `AND` that SQLite would reject. Pin so a future
+    /// sanitizer change that emits an empty `""` token (and lets it
+    /// through) surfaces here.
+    func testFTSQueryAllSanitizedAwayReturnsEmpty() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "--"),    "",
+            "input that sanitizes to no tokens must return empty, not a malformed FTS query")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "\""),    "",
+            "input of bare double-quote must return empty after sanitization")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "\"-\""), "",
+            "input of all-strip chars must return empty after sanitization")
+    }
+
+    /// Hyphens are stripped wholesale, not just leading — so `hello-world`
+    /// becomes a single token `helloworld` (not two tokens). This is
+    /// intentional: FTS5 treats `-` as a NOT operator, so leaving it in
+    /// the query would silently exclude the second term. Pin the
+    /// merge-into-one-token behavior so a future "preserve hyphens"
+    /// refactor surfaces here as a deliberate FTS-semantics change.
+    func testFTSQueryHyphensCollapseInternal() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello-world"), "helloworld*",
+            "internal hyphens must be stripped — token collapses to one prefix-search term")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "co-op-store"), "coopstore*",
+            "multiple internal hyphens must all be stripped, producing a single token")
+    }
+
     // MARK: - Live index
 
     func testIndexSearchMatchesText() async {
