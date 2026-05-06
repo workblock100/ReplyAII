@@ -8,6 +8,12 @@ import SwiftUI
 struct InboxScreen: View {
     @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
     @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?
+    /// Honor System Settings → Accessibility → Display → Reduce Motion.
+    /// Every `withAnimation(...)` call in this file gates on this flag —
+    /// a Reduce Motion user gets instant cuts on palette open/close,
+    /// thread switch, tone cycle, and palette-jump-to-thread (matches the
+    /// REP-083 contract for the inbox surface).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = InboxViewModel()
     @State private var engine: DraftEngine = {
         let useMLXNow = UserDefaults.standard.bool(forKey: PreferenceKey.useMLX)
@@ -97,11 +103,11 @@ struct InboxScreen: View {
         ZStack(alignment: .top) {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
-                .onTapGesture { withAnimation(Theme.Motion.fast) { paletteOpen = false } }
+                .onTapGesture { withAnimation(reduceMotion ? nil : Theme.Motion.fast) { paletteOpen = false } }
             PalettePopover(
                 searchIndex: model.searchIndex,
                 onJump: { hit in
-                    withAnimation(Theme.Motion.std) { model.selectThread(hit.threadID) }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.std) { model.selectThread(hit.threadID) }
                     paletteOpen = false
                 }
             )
@@ -109,7 +115,7 @@ struct InboxScreen: View {
         }
         .background(
             Button("Close palette") {
-                withAnimation(Theme.Motion.fast) { paletteOpen = false }
+                withAnimation(reduceMotion ? nil : Theme.Motion.fast) { paletteOpen = false }
             }
             .keyboardShortcut(.escape, modifiers: [])
             .opacity(0)
@@ -134,7 +140,7 @@ struct InboxScreen: View {
             )
             .background(
                 Button("Cycle tone") {
-                    withAnimation(Theme.Motion.tone) { model.cycleTone() }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.tone) { model.cycleTone() }
                 }
                 .keyboardShortcut("/", modifiers: .command)
                 .opacity(0)
@@ -161,7 +167,7 @@ struct InboxScreen: View {
             )
             .background(
                 Button("Command palette") {
-                    withAnimation(Theme.Motion.std) { paletteOpen.toggle() }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.std) { paletteOpen.toggle() }
                 }
                 .keyboardShortcut("k", modifiers: .command)
                 .opacity(0)
@@ -179,7 +185,7 @@ struct InboxScreen: View {
         let ids = model.threads.map(\.id)
         guard let i = ids.firstIndex(of: model.selectedThreadID) else { return }
         let next = ids[(i + 1) % ids.count]
-        withAnimation(Theme.Motion.std) { model.selectThread(next) }
+        withAnimation(reduceMotion ? nil : Theme.Motion.std) { model.selectThread(next) }
     }
 }
 
