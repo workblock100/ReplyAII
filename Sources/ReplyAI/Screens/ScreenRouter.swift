@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// Renders one of the 28 screens by ID. Mirrors `ScreenRouter` + `SCREEN_MAP`
-/// in app-screens.jsx.
+/// Renders one of the 34 screens by ID. Mirrors `ScreenRouter` + `SCREEN_MAP`
+/// in app-screens.jsx. The comment used to say "28" — the README still does
+/// — but the enum is the source of truth and ScreenInventoryTests pins
+/// `ScreenInventory.allItems.count == ScreenID.allCases.count`.
 struct ScreenRouter: View {
     let screen: ScreenID
 
