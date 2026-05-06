@@ -1664,6 +1664,102 @@ final class InboxViewModelViewStateTests: XCTestCase {
     }
 }
 
+// MARK: - chat.db pivot fallback (REP-AUDIT-260505 / 2026-04-23 pivot)
+// The 2026-04-23 pivot says: chat.db + FDA is unreliable; ANY chat.db-side
+// failure should silently fall back to demo/empty rather than surfacing a
+// scary "error · database is locked" pill in the sidebar. These tests pin
+// that the pivot's silent-fallback logic now covers all chat.db failure
+// modes (FDA denial, SQLITE_BUSY lock contention, SQLite NOTADB corruption),
+// not just permissionDenied.
+
+@MainActor
+final class InboxViewModelChatDBPivotFallbackTests: XCTestCase {
+
+    private final class DatabaseLockedChannel: ChannelService, @unchecked Sendable {
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            // SQLITE_BUSY (5) — Messages.app is holding chat.db.
+            throw ChannelError.databaseError(code: 5, message: "database is locked")
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    private final class DatabaseCorruptedChannel: ChannelService, @unchecked Sendable {
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            throw ChannelError.databaseCorrupted
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    private final class GenericFailureChannel: ChannelService, @unchecked Sendable {
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            throw ChannelError.unavailable("transient backend hiccup")
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    func testDatabaseLockedDoesNotSurfaceErrorPill() async {
+        let vm = InboxViewModel(
+            imessage: DatabaseLockedChannel(),
+            contacts: fastContacts())
+        await vm.syncFromIMessage()
+        // The whole point: syncStatus must NOT be .failed. The sidebar reads
+        // syncStatus to decide whether to show "error · database is locked"
+        // — pivot says don't show it; chat.db is dead to us.
+        XCTAssertEqual(vm.syncStatus, .idle,
+            "SQLITE_BUSY (database is locked) must silent-fallback per 2026-04-23 pivot, not produce an error pill")
+    }
+
+    func testDatabaseLockedFallsBackToDemoWhenDemoModeOn() async {
+        let suite = "test.ReplyAI.pivotDBLock.demo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(true, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: DatabaseLockedChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .demo,
+            "with demoModeActive=true and chat.db locked, fall back to demo fixtures")
+    }
+
+    func testDatabaseLockedFallsBackToEmptyNoPermissionsWhenDemoModeOff() async {
+        let suite = "test.ReplyAI.pivotDBLock.noDemo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(false, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: DatabaseLockedChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .empty(.noPermissions),
+            "with demoModeActive=false and chat.db locked, surface noPermissions empty state (NOT .error)")
+    }
+
+    func testDatabaseCorruptedAlsoSilentlyFallsBack() async {
+        let vm = InboxViewModel(
+            imessage: DatabaseCorruptedChannel(),
+            contacts: fastContacts())
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.syncStatus, .idle,
+            "databaseCorrupted (SQLITE_NOTADB) must silent-fallback like permissionDenied — pivot ignores chat.db failures regardless of cause")
+    }
+
+    func testGenericChannelErrorStillSurfacesFailedStatus() async {
+        // Negative test: a non-chat.db error (e.g. transient backend hiccup
+        // from a future channel) MUST still go through the .failed path so
+        // we don't accidentally swallow real bugs in non-iMessage channels.
+        let vm = InboxViewModel(
+            imessage: GenericFailureChannel(),
+            contacts: fastContacts())
+        await vm.syncFromIMessage()
+        if case .failed = vm.syncStatus {
+            // pass
+        } else {
+            XCTFail("non-chat.db ChannelError (.unavailable) must still surface as .failed; got \(vm.syncStatus)")
+        }
+    }
+}
+
 // MARK: - Bulk thread actions and channel filtering
 
 @MainActor

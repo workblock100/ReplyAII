@@ -756,14 +756,23 @@ final class InboxViewModel {
 
             startWatchingIfNeeded()
         } catch let err as ChannelError {
-            // Pivot 2026-04-23: chat.db + FDA is unreliable. When the channel
-            // returns permissionDenied, we no longer surface an FDA banner —
-            // fall back silently to fixture/demo threads (the existing `threads`
-            // value at init time) so the app remains usable. Console-log so
-            // diagnostics still capture the denial.
-            if case .permissionDenied(let hint) = err {
-                // Pivot 2026-04-23: silently fall back to demo fixtures, no FDA banner.
-                NSLog("[ReplyAI] iMessage permissionDenied (FDA): \(hint) — falling back to demo fixtures")
+            // Pivot 2026-04-23: chat.db + FDA is unreliable. ANY chat.db-side
+            // failure (FDA denial, SQLITE_BUSY because Messages.app holds the
+            // file lock, SQLITE_NOTADB after iCloud-sync corruption, raw I/O
+            // errors) gets the silent-fallback treatment — the user shouldn't
+            // see a sidebar error pill saying "database is locked" while their
+            // Slack/Telegram/AppleScript channels are perfectly healthy.
+            // We log to the system log so diagnostics still surface the cause.
+            let isChatDBPivotIgnored: Bool
+            switch err {
+            case .permissionDenied, .databaseError, .databaseCorrupted:
+                isChatDBPivotIgnored = true
+            default:
+                isChatDBPivotIgnored = false
+            }
+
+            if isChatDBPivotIgnored {
+                NSLog("[ReplyAI] iMessage chat.db pivot-ignored error (\(err.errorDescription ?? "unknown")) — falling back to demo fixtures")
                 if defaults.bool(forKey: PreferenceKey.demoModeActive) {
                     threads = Fixtures.demoChatThreads
                     if !threads.contains(where: { $0.id == selectedThreadID }) {
