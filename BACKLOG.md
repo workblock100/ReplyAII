@@ -787,8 +787,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: true
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main commit 049fb6f (`Sources/ReplyAI/Screens/Settings/SetChannelsView.swift` renders Connect/Disconnect, drives `SlackOAuthFlow.authorize` for the connect path, surfaces connected/disconnected/error rows from `SlackTokenStore`)
+- claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Screens/Settings/` (existing settings screens), `Sources/ReplyAI/Channels/SlackChannel.swift`
 - scope: **Pivot-aligned (Slack UX, prereq: REP-272).** Add a "Channels" section to the Settings screen. The Slack row shows "Connect Workspace" button when no token is stored; shows "Connected: <workspace name>" + a "Disconnect" button when connected (workspace name from `SlackTokenStore`, REP-274). Tapping "Connect Workspace" calls `SlackChannel.authorize(clientID:clientSecret:)` — credentials from `Preferences.slack.clientID/clientSecret` (hard-coded constants for now, Preferences keys in a follow-up). Shows a progress spinner during OAuth. Shows an inline error label on failure with a retry option. UI-sensitive → worker pushes to `wip/` branch. Human reviews layout and copy. Non-UI state transitions (connected/disconnected/loading/error) should be testable via an extracted ViewModel property.
 - success_criteria:
@@ -828,8 +829,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: M
 - ui_sensitive: true
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main commit 5b7fa77 (`Sources/ReplyAI/Services/GlobalHotkey.swift` exists, ReplyAIApp.swift owns a `GlobalHotkey` instance, GlobalHotkeyContractTests cover the matcher, and ⌘⇧R is surfaced through ObShortcutsView / ObDoneView / SetShortcutsView / SfcMenubarView)
+- claimed_by: human
 - files_to_touch: `Sources/ReplyAI/GlobalHotkey.swift` (new), `Sources/ReplyAI/App/ReplyAIApp.swift`, `Sources/ReplyAI/Resources/Info.plist`
 - scope: `NSEvent.addGlobalMonitorForEvents(matching: .keyDown)` to catch `⌘⇧R` from anywhere. On match, `openWindow(id: "inbox")`. Needs `NSAccessibilityUsageDescription`. If Accessibility not granted, show a small banner in the inbox with a deep-link to System Settings. UI-sensitive (new banner surface) → branch-only, human merges.
 - success_criteria: code lands on `wip/...` branch; human reviews banner copy + placement before merge.
@@ -884,8 +886,9 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: true
-- status: open
-- claimed_by: null
+- status: done
+- done_on: main `InboxViewModel.sendToast` (`Sent to <name>`) with 2.5s auto-dismiss is wired and pinned by `InboxViewModel.confirmSend` success-toast tests
+- claimed_by: human
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Inbox/Composer/ComposerView.swift`
 - scope: After `send(thread:)` returns, the composer continues showing the draft until the watcher fires (up to 600ms). Add an optimistic clear: on send success, immediately clear the draft in `InboxViewModel` and show a brief "Sent ✓" state in the composer before the next sync. Use `Task.sleep(for: .seconds(1.5))` then reset to idle. UI-sensitive → `wip/`. Human reviews the "Sent ✓" microcopy and animation timing.
 - success_criteria: `wip/` branch; human reviews copy + timing.
