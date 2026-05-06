@@ -496,6 +496,26 @@ final class PromptBuilderTests: XCTestCase {
             "instruction line must be the LAST line, not buried in the middle — got last line: '\(lastLine)'")
     }
 
+    /// Pin the per-message speaker prefix: `me: <text>` for outgoing,
+    /// `<thread.name>: <text>` for incoming. Drift here would either
+    /// duplicate the user's name as the speaker (the model sees "me" as
+    /// the user, "<name>" as the contact) or misattribute messages, both
+    /// of which silently produce confused replies.
+    func testBuildPromptSpeakerPrefixIsMeForOutgoingAndThreadNameForIncoming() {
+        let thread = MessageThread(id: "t-spk", channel: .imessage,
+                                   name: "Maya", avatar: "M",
+                                   preview: "", time: "")
+        let history = [
+            Message(from: .them, text: "ping", time: ""),
+            Message(from: .me,   text: "pong", time: ""),
+        ]
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: history)
+        XCTAssertTrue(prompt.contains("Maya: ping"),
+            "incoming message must be prefixed with the thread name — got prompt: \(prompt)")
+        XCTAssertTrue(prompt.contains("me: pong"),
+            "outgoing message must be prefixed with literal `me` — got prompt: \(prompt)")
+    }
+
     /// Tone is interpolated lowercased into the instruction (`.warm` → "warm",
     /// `.direct` → "direct", etc.). Pin so a future tone case (e.g. `.terse`)
     /// or a casing change is a deliberate edit rather than a quiet
