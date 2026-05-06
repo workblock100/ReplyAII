@@ -5,12 +5,35 @@ import Foundation
 /// Factory reset wipes every default whose key starts with `pref.` —
 /// EXCEPT keys listed in `PreferenceKey.wipeExemptions`.
 enum PreferenceKey {
+    /// Privacy toggle for opt-in crash reports surfaced in `set-privacy`.
+    /// Read by the crash-reporting hook at upload time, so flipping it
+    /// takes effect without an app restart.
     static let crashReports   = "pref.privacy.crashReports"
+    /// Toggles the license-server liveness probe. Defaults on so paid
+    /// installs stay validated; the user can opt out (offline-only).
     static let licenseUpdates = "pref.privacy.licenseUpdates"
+    /// Reserved — iCloud sync of drafts/rules is scoped out of v1; the
+    /// key exists so the toggle in `set-privacy` has a stable backing
+    /// store for when the feature lands. Reads as false today.
     static let iCloudSync     = "pref.privacy.iCloudSync"
+    /// User's preferred composer tone. Persisted as `Tone.rawValue`
+    /// ("Warm"/"Direct"/"Playful"). The composer falls back to `.warm`
+    /// when the key is absent or its raw value drifts off
+    /// `Tone.allCases` (handled in `Tone(rawValue:)` callers).
     static let defaultTone    = "pref.composer.defaultTone"
+    /// Toggles whether the on-device MLX model loads on launch. Setting
+    /// false pins the StubLLMService — currently the smoke-test workaround
+    /// for REP-ALERT-260504-1650 (MLX dependency load path crashes the
+    /// app on launch). The structural fix is REP-501→REP-505 SPM split.
     static let useMLX         = "pref.model.useMLX"
+    /// Cap on the number of threads `recentThreads(limit:)` requests per
+    /// sync. Tuned downward on slower Macs; default 50 matches the
+    /// `ChannelService.recentThreads()` convenience overload.
     static let inboxThreadLimit = "pref.inbox.threadLimit"
+    /// When true, opening a thread immediately kicks off draft generation
+    /// in the user's default tone so the composer is hot when the user
+    /// arrives at it. False burns less compute but adds latency to every
+    /// thread visit.
     static let autoPrime        = "pref.drafts.autoPrime"
     /// When false, rules skip the bulk-sync path; only fire on thread select.
     static let autoApplyRulesOnSync = "pref.rules.autoApplyOnSync"
