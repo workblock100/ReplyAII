@@ -329,4 +329,69 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertEqual(threads.first?.name, "+1 (201) 462-3980",
             "empty-string nameFor result must be treated as no match — otherwise the sidebar shows an empty name cell")
     }
+
+    // MARK: - parseMessages — direction edge cases
+
+    /// Pin that direction parsing is case-insensitive — AppleScript's
+    /// `direction of message` is documented as returning `incoming` /
+    /// `outgoing`, but a future macOS revision could uppercase the value
+    /// (e.g. `OUTGOING`) without warning. The implementation already
+    /// lowercases the comparison; pin so a regression that drops the
+    /// lowercasing surfaces here.
+    func testMessagesForChatDirectionIsCaseInsensitive() throws {
+        let raw = """
+        cap||OUTGOING
+        title||Outgoing
+        mixed||OuTgOiNg
+        normal||outgoing
+        """
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 10)
+        XCTAssertEqual(msgs.count, 4)
+        XCTAssertTrue(msgs.allSatisfy { $0.from == .me },
+            "every casing of `outgoing` must map to .me — got: \(msgs.map(\.from))")
+    }
+
+    /// Pin that any direction value other than (case-insensitive) `outgoing`
+    /// maps to `.them`. Without this default, an AppleScript that returns
+    /// e.g. an empty string or a localized form like `entrant` would silently
+    /// flip messages to `.me` and the LLM would misattribute the user's own
+    /// voice. The implementation chooses `.them` as the safe default.
+    func testMessagesForChatUnknownDirectionMapsToThem() throws {
+        let raw = """
+        a||incoming
+        b||sideways
+        c||
+        d||outgoing
+        """
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 10)
+        XCTAssertEqual(msgs.count, 4)
+        XCTAssertEqual(msgs[0].from, .them, "incoming → .them")
+        XCTAssertEqual(msgs[1].from, .them, "unknown direction (`sideways`) must default to .them, not .me")
+        XCTAssertEqual(msgs[2].from, .them, "empty direction defaults to .them via the parts.count<=1 fallback")
+        XCTAssertEqual(msgs[3].from, .me,   "outgoing → .me (sanity check)")
+    }
+
+    /// Pin that the limit cap is enforced post-parse, not just inside
+    /// AppleScript. The script-side `repeat … to msgCount` could leak
+    /// extra rows if a future Messages.app revision adds tapbacks or
+    /// system rows that bypass the index math. Parse-side enforcement
+    /// is the safety net so the inbox never sees more than `limit`
+    /// messages per call.
+    func testMessagesForChatParseSideLimitCap() throws {
+        let raw = """
+        a||outgoing
+        b||outgoing
+        c||outgoing
+        d||outgoing
+        e||outgoing
+        """
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 3)
+        XCTAssertEqual(msgs.count, 3,
+            "parser must cap at limit=3 even when executor returns 5 rows — otherwise a misbehaving executor breaks the contract")
+        XCTAssertEqual(msgs.map(\.text), ["a", "b", "c"],
+            "rows must be returned in arrival order with the tail dropped, not the head")
+    }
 }
