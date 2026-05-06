@@ -7,14 +7,26 @@ import SwiftUI
 struct ThreadRow: View {
     let thread: MessageThread
     let isSelected: Bool
+    /// Shared namespace from the parent ThreadListView. The selected row's
+    /// accent bar uses `matchedGeometryEffect` against the same id across
+    /// every row, so SwiftUI animates the bar between rows on selection
+    /// instead of snapping. Optional so callers/tests can omit it; without
+    /// a namespace the bar still renders but doesn't slide. REP-082.
+    var selectionNamespace: Namespace.ID? = nil
+    /// When true, skip `matchedGeometryEffect` so reduced-motion users
+    /// see a snap rather than a slide. REP-082 + REP-083.
+    var reduceMotion: Bool = false
     let onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // Left accent bar for selected state — 2px, slides on select.
-                Rectangle()
-                    .fill(isSelected ? Theme.Color.accent : .clear)
+                // Left accent bar for selected state — 2px. With the
+                // matchedGeometryEffect (namespace passed in), SwiftUI slides
+                // the bar between rows on selection. Without it, it snaps —
+                // which is what we want for reduce-motion or callers that
+                // don't supply a namespace.
+                accentBar
                     .frame(width: 2)
 
                 Avatar(text: thread.avatar, channel: thread.channel, cutout: rowBg)
@@ -61,6 +73,24 @@ struct ThreadRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Selected row's accent bar — extracted so the matchedGeometryEffect
+    /// modifier can apply only when both a namespace is supplied AND
+    /// reduce-motion is off. SwiftUI's `matchedGeometryEffect` requires
+    /// the modified view exist on every row at the same z-position, so
+    /// the unselected case still emits a transparent rectangle of the
+    /// same shape — this is what makes the slide animation work.
+    @ViewBuilder
+    private var accentBar: some View {
+        if let ns = selectionNamespace, !reduceMotion, isSelected {
+            Rectangle()
+                .fill(Theme.Color.accent)
+                .matchedGeometryEffect(id: "thread-selection-bar", in: ns)
+        } else {
+            Rectangle()
+                .fill(isSelected ? Theme.Color.accent : .clear)
+        }
     }
 
     private var rowBg: Color {

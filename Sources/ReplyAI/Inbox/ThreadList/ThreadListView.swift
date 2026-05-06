@@ -7,12 +7,15 @@ import SwiftUI
 /// quirks it imposes on `selection:` on macOS 14+.
 struct ThreadListView: View {
     @Bindable var model: InboxViewModel
-
-    /// Respect macOS Reduce Motion. The selection-bar slide between rows
-    /// is the most noticeable animation in this view; gating
-    /// `withAnimation(Theme.Motion.std)` here means thread switching
-    /// becomes an instant cut for users who opt out of motion. Matches
-    /// the REP-083 contract for the inbox surface.
+    /// Drives the matchedGeometryEffect on the selected-row accent bar so
+    /// SwiftUI slides the bar between rows on selection instead of
+    /// snapping. REP-082.
+    @Namespace private var selectionNamespace
+    /// Reduced-motion users get a snap instead of a slide. We feed this
+    /// flag down into ThreadRow which then opts out of
+    /// `matchedGeometryEffect` entirely (REP-082) and also skip the
+    /// `withAnimation(Theme.Motion.std)` envelope around `selectThread`
+    /// so thread switching is an instant cut (REP-083).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -27,10 +30,21 @@ struct ThreadListView: View {
                     ForEach(sortedThreads) { thread in
                         ThreadRow(
                             thread: thread,
-                            isSelected: thread.id == model.selectedThreadID
+                            isSelected: thread.id == model.selectedThreadID,
+                            selectionNamespace: selectionNamespace,
+                            reduceMotion: reduceMotion
                         ) {
-                            withAnimation(reduceMotion ? nil : Theme.Motion.std) {
+                            // Wrap the model mutation so the highlight bar
+                            // slides between rows via matchedGeometryEffect —
+                            // without `withAnimation`, SwiftUI matches the
+                            // geometry but renders instantly. Skipped under
+                            // reduce-motion so the state change is a cut.
+                            if reduceMotion {
                                 model.selectThread(thread.id)
+                            } else {
+                                withAnimation(Theme.Motion.std) {
+                                    model.selectThread(thread.id)
+                                }
                             }
                         }
                     }
