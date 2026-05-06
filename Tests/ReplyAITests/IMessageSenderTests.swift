@@ -46,6 +46,36 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(IMessageSender.chatGUID(for: t), "SMS;-;+15551234567")
     }
 
+    /// Pin: `chatGUID(for:)` synthesis falls back to the `iMessage`
+    /// service prefix for every non-SMS channel. The synthesized
+    /// string is intentionally still iMessage-shaped for Slack /
+    /// Teams / WhatsApp / Telegram threads (since none of those
+    /// channels go through `IMessageSender` to send) — but
+    /// `validateChatGUID(_:for:)` then refuses to send through the
+    /// AppleScript path. Pinning the synthesis output here means a
+    /// future "let's also handle Slack here" refactor can't silently
+    /// flip the prefix to "Slack;-;..." (which would still fail
+    /// validation but produce a different invalid-GUID error string)
+    /// without surfacing in CI.
+    func testChatGUIDSynthesisPrefixIsIMessageForNonSMSChannels() {
+        for channel in [Channel.slack, .teams, .whatsapp, .telegram] {
+            let t = MessageThread(
+                id: "abc",
+                channel: channel,
+                name: "X",
+                avatar: "X",
+                preview: "",
+                time: "",
+                chatGUID: nil
+            )
+            XCTAssertEqual(
+                IMessageSender.chatGUID(for: t),
+                "iMessage;-;abc",
+                "synthesis for \(channel.rawValue) must keep the iMessage prefix; non-iMessage channels never reach the AppleScript send path so this is the documented fallback shape (validateChatGUID then rejects it)"
+            )
+        }
+    }
+
     func testEmptyChatGUIDStringTreatedAsNil() {
         // COALESCE(c.guid, '') in IMessageChannel can surface "" for
         // freak rows; the sender should ignore empties and synthesize.
