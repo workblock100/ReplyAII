@@ -8,6 +8,13 @@ import SwiftUI
 struct ThreadListView: View {
     @Bindable var model: InboxViewModel
 
+    /// Respect macOS Reduce Motion. The selection-bar slide between rows
+    /// is the most noticeable animation in this view; gating
+    /// `withAnimation(Theme.Motion.std)` here means thread switching
+    /// becomes an instant cut for users who opt out of motion. Matches
+    /// the REP-083 contract for the inbox surface.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -22,7 +29,7 @@ struct ThreadListView: View {
                             thread: thread,
                             isSelected: thread.id == model.selectedThreadID
                         ) {
-                            withAnimation(Theme.Motion.std) {
+                            withAnimation(reduceMotion ? nil : Theme.Motion.std) {
                                 model.selectThread(thread.id)
                             }
                         }
