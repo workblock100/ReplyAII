@@ -101,9 +101,30 @@ struct KeychainHelper: Sendable {
 enum KeychainError: LocalizedError, Sendable {
     case unhandledError(status: OSStatus)
 
+    /// Surfaces in Settings → Channels when an OAuth token write fails.
+    /// The bare-integer fallback used to read "Keychain error -25308" which
+    /// is unactionable — translating the handful of statuses ReplyAI can
+    /// realistically hit gives the user a clear next step (re-grant access,
+    /// unlock the keychain, reconnect the account) instead of a number to
+    /// google. Unknown codes still include the raw OSStatus so a support
+    /// engineer can look it up against Apple's `SecBase.h` table.
     var errorDescription: String? {
         switch self {
-        case .unhandledError(let status): "Keychain error \(status)"
+        case .unhandledError(let status):
+            switch status {
+            case errSecAuthFailed:
+                return "Keychain refused access. Sign in to your Mac and try again."
+            case errSecUserCanceled:
+                return "Keychain access canceled. Try connecting again to retry."
+            case errSecInteractionNotAllowed:
+                return "Keychain is locked. Unlock your login keychain in Keychain Access and try again."
+            case errSecDuplicateItem:
+                return "Keychain already has a saved entry for this account. Disconnect the account in Settings → Channels and reconnect."
+            case errSecItemNotFound:
+                return "Keychain entry missing. Reconnect the account in Settings → Channels."
+            default:
+                return "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
+            }
         }
     }
 }

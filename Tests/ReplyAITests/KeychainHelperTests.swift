@@ -144,6 +144,70 @@ final class KeychainHelperTests: XCTestCase {
     }
 }
 
+// MARK: - KeychainError.errorDescription
+
+/// `KeychainError` only ships a single case (`unhandledError(status:)`),
+/// but its `errorDescription` switches on common `OSStatus` values to
+/// translate raw integers into actionable user copy. Pin each known
+/// status's recovery hint here so a future copy edit can't silently
+/// regress to a bare integer (which the user can't act on) without
+/// failing CI.
+final class KeychainErrorTests: XCTestCase {
+
+    func testKeychainErrorAuthFailedHasActionableCopy() throws {
+        let desc = KeychainError.unhandledError(status: errSecAuthFailed).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertFalse(s.contains("\(errSecAuthFailed)"),
+            "errSecAuthFailed surface must be plain English, not a raw OSStatus")
+        XCTAssertTrue(s.lowercased().contains("sign in"),
+            "errSecAuthFailed copy must tell the user to sign in")
+    }
+
+    func testKeychainErrorUserCanceledHasActionableCopy() throws {
+        let desc = KeychainError.unhandledError(status: errSecUserCanceled).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertTrue(s.lowercased().contains("canceled"),
+            "errSecUserCanceled copy must mention cancellation so the user knows nothing broke")
+    }
+
+    func testKeychainErrorInteractionNotAllowedMentionsUnlocking() throws {
+        let desc = KeychainError.unhandledError(status: errSecInteractionNotAllowed).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertTrue(s.lowercased().contains("locked"),
+            "errSecInteractionNotAllowed (locked Keychain) must point the user at unlocking")
+        XCTAssertTrue(s.contains("Keychain Access"),
+            "Direct the user to Keychain Access by name so they can find the app")
+    }
+
+    func testKeychainErrorDuplicateItemPointsAtReconnect() throws {
+        let desc = KeychainError.unhandledError(status: errSecDuplicateItem).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertTrue(s.contains("Settings"),
+            "errSecDuplicateItem copy must point the user at Settings → Channels for the disconnect path")
+    }
+
+    func testKeychainErrorItemNotFoundPointsAtReconnect() throws {
+        let desc = KeychainError.unhandledError(status: errSecItemNotFound).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertTrue(s.lowercased().contains("reconnect"),
+            "errSecItemNotFound copy must direct the user to reconnect — that's the recovery path")
+    }
+
+    /// Unknown OSStatus values still need to surface the raw code so a
+    /// support engineer can look it up against `SecBase.h`. The previous
+    /// "Keychain error <n>" format is preserved as a fallback prefix so
+    /// existing log-grep / support workflows keep working.
+    func testKeychainErrorUnknownStatusFallsBackToRawCode() throws {
+        let bogus: OSStatus = -99999
+        let desc = KeychainError.unhandledError(status: bogus).errorDescription
+        let s = try XCTUnwrap(desc)
+        XCTAssertTrue(s.contains("\(bogus)"),
+            "Unknown OSStatus values must still surface the raw code for support triage")
+        XCTAssertTrue(s.contains("Settings"),
+            "Unknown-code copy still points the user at Settings → Channels as the recovery path")
+    }
+}
+
 // MARK: - SlackTokenStore (REP-274)
 
 final class SlackTokenStoreTests: XCTestCase {
