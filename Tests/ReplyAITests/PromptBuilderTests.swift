@@ -534,4 +534,80 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(playful.contains("a playful tone."),
             "playful instruction must read `a playful tone.` (lowercase)")
     }
+
+    /// Pin the exact first line of every built prompt:
+    /// `Conversation with <name> via <channel.label>.`
+    /// The LLM uses this opening to anchor "who am I writing to" and the
+    /// channel-aware register (Slack ≠ iMessage tone). A copy edit that
+    /// silently breaks the trailing period or swaps "with" for "to" would
+    /// still pass `testThreadContextAppearsInPrompt` (which only does
+    /// substring contains) but would degrade real prompts. Pinned exactly
+    /// here so any rewording surfaces as a deliberate test edit.
+    func testBuildPromptFirstLineLiteral() {
+        let thread = makeThread(channel: .slack, name: "#growth")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [])
+        let firstLine = prompt
+            .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            .first.map(String.init) ?? ""
+        XCTAssertEqual(firstLine, "Conversation with #growth via Slack.",
+            "first line of build() must be exactly `Conversation with <name> via <channel.label>.` — got: `\(firstLine)`")
+    }
+
+    /// Pin the empty-history fallback as the exact literal `(no messages yet)`.
+    /// `testEmptyHistoryFallback` only checks `contains("no messages")`, which
+    /// would still pass after a rewrite to e.g. "no messages here". The exact
+    /// literal matters: it's what the LLM sees in place of conversation
+    /// context, and the parenthesized form signals "metadata, not user text"
+    /// so the model doesn't echo it back as a reply.
+    func testBuildPromptEmptyHistoryFallbackLiteral() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        XCTAssertTrue(prompt.contains("(no messages yet)"),
+            "empty-history fallback must be the exact literal `(no messages yet)` — got prompt: \(prompt)")
+    }
+
+    /// Pin the recent-messages header as the exact literal
+    /// `Recent messages (oldest first):`. The "(oldest first)" parenthetical
+    /// is load-bearing — it tells the LLM how to interpret message ordering
+    /// so the most recent line is treated as the immediate context. Drift
+    /// here (e.g. truncating to "Recent messages:") would silently confuse
+    /// the model on long threads.
+    func testBuildPromptRecentMessagesHeaderLiteral() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [makeMessage("hi")])
+        XCTAssertTrue(prompt.contains("Recent messages (oldest first):"),
+            "recent-messages header must read exactly `Recent messages (oldest first):` — got prompt: \(prompt)")
+    }
+
+    /// Pin the voice-examples header as the exact literal
+    /// `Style examples from the user's prior messages:`. The phrasing tells
+    /// the LLM the section is descriptive (the user's *style*) rather than
+    /// content to reply to. A rewording like "Examples of how the user
+    /// writes:" would still pass `testEmptyVoiceExamplesProduceNoHeader`
+    /// (negative-substring check on `Style examples`) but could shift how
+    /// the model interprets the section.
+    func testBuildPromptVoiceExamplesHeaderLiteral() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [], voiceExamples: ["yo"])
+        XCTAssertTrue(prompt.contains("Style examples from the user's prior messages:"),
+            "voice-examples header must read exactly `Style examples from the user's prior messages:` — got prompt: \(prompt)")
+    }
+
+    /// Pin the voice-examples bullet format: each example is rendered on
+    /// its own line as `- <example>`. The single-hyphen-space prefix marks
+    /// list items unambiguously to the LLM. Switching to "* " or "• " or
+    /// dropping the space would still pass the existing
+    /// `testMultipleVoiceExamplesAllAppearInPrompt` (substring contains)
+    /// but would change how the model parses the list boundary.
+    func testBuildPromptVoiceExamplesBulletPrefixIsHyphenSpace() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [],
+                                         voiceExamples: ["hey there", "no worries"])
+        XCTAssertTrue(prompt.contains("\n- hey there\n"),
+            "first voice example must render on its own line as `- hey there` — got prompt: \(prompt)")
+        XCTAssertTrue(prompt.contains("\n- no worries\n"),
+            "second voice example must render on its own line as `- no worries` — got prompt: \(prompt)")
+    }
 }
