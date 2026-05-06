@@ -2089,4 +2089,33 @@ final class InboxViewModelEditKeyTests: XCTestCase {
         let b = InboxViewModel.editKey(threadID: "t2", tone: .warm)
         XCTAssertNotEqual(a, b)
     }
+
+    /// Pin the literal `Sent to <name>` prefix of the success toast.
+    /// `testSendSuccessClearsConfirmationAndShowsToast` only checks that the
+    /// recipient name appears — a copy edit that swapped the verb (e.g.
+    /// `Delivered to Alice` or `Reply sent to Alice`) would still pass.
+    /// The exact prefix is part of the post-send affordance the keyboard-
+    /// first UX depends on; pin so designer-led tweaks land as a code-review
+    /// diff.
+    func testSendSuccessToastUsesSentToPrefix() async {
+        let thread = MessageThread(
+            id: "t-toast", channel: .imessage, name: "Alice Toast",
+            avatar: "A", preview: "hi", time: "now",
+            chatGUID: "iMessage;-;t-toast")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-toast")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "ok")
+        await vm.confirmSend()
+
+        XCTAssertEqual(vm.sendToast, "Sent to Alice Toast",
+            "success toast must read exactly `Sent to <recipient>` — drift in this prefix changes the post-send affordance the keyboard-first UX depends on")
+    }
 }
