@@ -2,6 +2,16 @@
 
 Prioritized, scoped task list maintained by the planner agent. The hourly worker picks the highest-priority open, non-ui-sensitive task and ships it.
 
+> **Operating mode (2026-05): single-agent autopilot.** The "planner"
+> and "hourly worker" roles described above are part of the legacy
+> 7-agent pipeline. Under the autopilot pivot, the single
+> `replyai-autopilot` fire (every 2h) handles both: it surveys this
+> file, picks the highest-priority `status: open, ui_sensitive: false,
+> claimed_by: null` task aligned with the channel-pivot strategy,
+> implements + tests + ships, and updates status. Tasks claimed by
+> autopilot use the prefix `claimed_by: autopilot-YYYY-MM-DD-HHMMSS`.
+> See `.automation/README.md` for the full pivot note.
+
 **Format per task:**
 
 ```
