@@ -214,7 +214,7 @@ Commits (newest first; run `git log` for detail):
 - `df72480` Build without Xcode — SPM + .app bundler
 
 ## What's still stubbed
-- **Global `⌘⇧R`**. Not wired. Needs Accessibility permission + either MASShortcut or `CGEventTapCreate` + `NSEvent.addGlobalMonitorForEvents`.
+- ~~**Global `⌘⇧R`**.~~ Resolved (REP-009). Shipped via `Sources/ReplyAI/Services/GlobalHotkey.swift` (Carbon `RegisterEventHotKey` rather than `NSEvent.addGlobalMonitorForEvents` — works without Accessibility permission). `ReplyAIApp` retains the `GlobalHotkey()` for the process lifetime; `ReplyAIWindowSummoner.summon()` brings the inbox forward via fast-path window-title match or notification fallback. Pinned by `GlobalHotkeyContractTests` (3 cases, 2 gated behind `RUN_APPKIT_TOUCHING_TESTS=1`). Surfaced through ObShortcutsView, ObDoneView, SetShortcutsView, SfcMenubarView copy.
 - ~~**UNNotification inline reply.**~~ Resolved: `InboxViewModel` observes `pendingNotificationReply` via `NotificationCoordinator` callback, looks up the thread by ID, calls `IMessageSender.send(text:toChatGUID:)`, then clears the pending state. Unknown thread IDs are logged and discarded without crash (REP-072, commit `bbedd1a`). Test coverage: 2 cases in `InboxViewModelTests.swift`.
 - **Slack / WhatsApp / Teams / Telegram**. `ChannelService` protocol exists. `SlackChannel` shipped (REP-233/234, commit `c001d7e`) and now sends/receives via `SlackHTTPClient` (REP-237/238, commit `e26e72a`); `LocalhostOAuthListener` (REP-230, `fbba843`) + `SlackOAuthFlow` (REP-272, `c975e51`) wire the auth flow; `SlackSocketClient` (REP-267, `7c62474`) handles Socket Mode receive. WhatsApp/Teams/Telegram remain stub channels that throw `authorizationDenied`.
 - ~~**AppleScript message-source fallback.**~~ Resolved: `AppleScriptMessageReader.recentChats()` (REP-236, commit `cf3d379`) and `messagesForChat()` (REP-240, commit `07f4b16`) — `IMessageChannel` falls through to AppleScript when FDA returns `authorizationDenied`. No FDA required; uses Automation permission.
@@ -246,12 +246,9 @@ Commits (newest first; run `git log` for detail):
 
 Pick in order. Each has a concrete starting point.
 
-### 1. Global `⌘⇧R`
+### 1. ~~Global `⌘⇧R`~~ — SHIPPED (REP-009)
 
-- Add `Sources/ReplyAI/GlobalHotkey.swift`. Use `NSEvent.addGlobalMonitorForEvents(matching: .keyDown)` (cheapest; triggers Accessibility permission prompt).
-- Hook in `ReplyAIApp.init()`, call `openWindow(id: "inbox")` when the modifier+key match.
-- `NSAccessibilityUsageDescription` needs adding to `Info.plist` + `project.yml`.
-- If Accessibility not granted, show a banner in the inbox.
+Implementation chose Carbon `RegisterEventHotKey` over `NSEvent.addGlobalMonitorForEvents`, sidestepping the Accessibility permission prompt entirely. See `Sources/ReplyAI/Services/GlobalHotkey.swift` and `ReplyAIWindowSummoner` (same file). Remaining polish: tighten the fallback notification path when no inbox window exists at hotkey-fire time (currently posts `replyAIRequestSummonInbox`; consumer is `RootView.task`).
 
 ### 2. Animation + a11y polish
 
