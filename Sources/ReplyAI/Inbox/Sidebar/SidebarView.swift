@@ -10,6 +10,11 @@ import SwiftUI
 struct SidebarView: View {
     @Bindable var model: InboxViewModel
 
+    /// Honor System Settings → Accessibility → Display → Reduce Motion.
+    /// Folder-switch and channel-filter `withAnimation` calls below gate
+    /// on this flag so a Reduce Motion user gets instant cuts.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Reserve vertical room for the macOS traffic lights that sit above us.
@@ -130,7 +135,7 @@ struct SidebarView: View {
     private func folderRow(_ folder: Folder) -> some View {
         let active = folder.id == model.activeFolder
         return Button {
-            withAnimation(Theme.Motion.std) { model.activeFolder = folder.id }
+            withAnimation(reduceMotion ? nil : Theme.Motion.std) { model.activeFolder = folder.id }
         } label: {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -165,7 +170,7 @@ struct SidebarView: View {
     private func channelRow(_ channel: Channel) -> some View {
         let active = model.activeChannelFilter == channel
         return Button {
-            withAnimation(Theme.Motion.std) {
+            withAnimation(reduceMotion ? nil : Theme.Motion.std) {
                 model.filterByChannel(active ? nil : channel)
             }
         } label: {
