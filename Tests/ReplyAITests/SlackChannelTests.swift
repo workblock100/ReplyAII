@@ -477,6 +477,119 @@ final class SlackChannelTests: XCTestCase {
                 "send fallback copy is what users see when Slack acks failure without a reason")
         }
     }
+
+    // MARK: - parseThreads — derived fields (chatGUID + avatar)
+
+    /// Pin that the Slack conversation id flows through to `MessageThread.chatGUID`
+    /// for every conversation type. ChatGUID is the routing key that the inbox
+    /// hands back to `SlackChannel.send(text:toThreadID:)` — drift here (e.g.
+    /// stripping a channel-id prefix or substituting the user id for DMs)
+    /// silently breaks send-from-inbox even when the row renders correctly.
+    func testRecentThreadsChatGUIDIsConversationID() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C100", "name": "general", "is_channel": true},
+                {"id": "D200", "is_im": true, "user_display_name": "Maya"},
+                {"id": "G300", "name": "growth-team"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 3)
+        XCTAssertEqual(threads[0].chatGUID, "C100",
+            "channel chatGUID must equal the Slack conversation id verbatim")
+        XCTAssertEqual(threads[1].chatGUID, "D200",
+            "DM chatGUID must equal the Slack conversation id, not the user id")
+        XCTAssertEqual(threads[2].chatGUID, "G300",
+            "fallback chatGUID must equal the Slack conversation id verbatim")
+    }
+
+    /// Pin avatar derivation: `String(display.prefix(1)).uppercased()` for every
+    /// thread, where `display` is the rendered `name`. The "#" channel prefix
+    /// flows into avatar as "#"; a DM display picks up the first letter of the
+    /// human name; the channel-id fallback picks up the first letter of the id
+    /// (e.g. "D" for a DM or "C" for a channel) — anything else would render
+    /// a blank circle in the sidebar.
+    func testRecentThreadsAvatarIsFirstCharOfDisplayName() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C100", "name": "general", "is_channel": true},
+                {"id": "D200", "is_im": true, "user_display_name": "maya chen"},
+                {"id": "D300", "is_im": true}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads[0].avatar, "#",
+            "channel avatar must equal `#` (first char of `#general`)")
+        XCTAssertEqual(threads[1].avatar, "M",
+            "DM avatar must equal first char of display name uppercased — `M` for `maya chen`")
+        XCTAssertEqual(threads[2].avatar, "D",
+            "fallback avatar must equal first char of channel id — `D` for `D300`")
+    }
+
+    /// Pin that messages with `files` non-empty surface `hasAttachment: true`
+    /// on the resulting `Message`. The inbox shows an attachment glyph when
+    /// this is true. A future refactor that drops the `files` decode (e.g.
+    /// because Slack added `attachments` v2) would silently lose the glyph.
+    func testMessagesWithFilesArrayMarksHasAttachment() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000010.0001", "user": "U999", "text": "see attached", "files": [{"id": "F1"}]},
+                {"ts": "1700000020.0001", "user": "U999", "text": "no attachment"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 2)
+        let withFile = msgs.first { $0.text == "see attached" }
+        let noFile   = msgs.first { $0.text == "no attachment" }
+        XCTAssertEqual(withFile?.hasAttachment, true,
+            "message with non-empty files array must have hasAttachment=true")
+        XCTAssertEqual(noFile?.hasAttachment, false,
+            "message without files key must have hasAttachment=false")
+    }
+
+    /// Pin that an empty `files: []` is treated the same as missing files —
+    /// no attachment. Slack sometimes sends an empty array for messages
+    /// that had attachments removed; ReplyAI must not show a misleading
+    /// glyph for those.
+    func testMessagesWithEmptyFilesArrayHasNoAttachment() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000010.0001", "user": "U999", "text": "msg", "files": []}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertEqual(msgs[0].hasAttachment, false,
+            "empty files array must produce hasAttachment=false; otherwise Slack's empty-array convention causes ghost-glyph rows")
+    }
 }
 
 // MARK: - Test doubles
