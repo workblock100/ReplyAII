@@ -195,6 +195,21 @@ final class FixturesTests: XCTestCase {
                        "sidebar channels must be unique — duplicates would render redundant icons")
     }
 
+    /// `Fixtures.sidebarChannels` must enumerate every `Channel.allCases`
+    /// case in the same order. The verbatim-array pin above catches edits
+    /// to the literal, but it would silently pass if a new Channel case
+    /// were added to the enum and someone forgot to update Fixtures —
+    /// the new channel just wouldn't render in the sidebar. Pinning the
+    /// equality with `Channel.allCases` forces the next channel addition
+    /// to either update Fixtures.sidebarChannels or to deliberately edit
+    /// this test (acknowledging the divergence).
+    func testSidebarChannelsMatchesChannelAllCases() {
+        XCTAssertEqual(
+            Fixtures.sidebarChannels, Channel.allCases,
+            "sidebarChannels must enumerate every Channel.allCases case in the same order — adding a Channel case requires updating Fixtures.sidebarChannels too"
+        )
+    }
+
     // MARK: - genericAcknowledgment per-tone copy pin
 
     /// `Fixtures.genericAcknowledgment(tone:)` is what the stub LLM returns
