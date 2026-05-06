@@ -13,7 +13,11 @@ struct AppInboxEmptyView: View {
                     .foregroundStyle(Theme.Color.fg)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 480)
-                Text("ReplyAI is watching all 5 channels. We'll surface the next thing when it arrives.")
+                // Channel count derives from Channel.allCases so adding a new
+                // case (e.g. Discord) doesn't leave this empty-state copy
+                // stale. The original literal "5" silently drifted when
+                // Telegram was added (now 6).
+                Text("ReplyAI is watching all \(Channel.allCases.count) channels. We'll surface the next thing when it arrives.")
                     .font(Theme.Font.sans(14))
                     .foregroundStyle(Theme.Color.fgMute)
                     .multilineTextAlignment(.center)
