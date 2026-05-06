@@ -466,6 +466,18 @@ final class ContactsResolverTests: XCTestCase {
         XCTAssertEqual(fake.lookupCallCount, callsAfterWarmup,
                        "warm cache must serve concurrent same-handle reads without extra store hits")
     }
+
+    /// Pin the default TTL to 1800s (30 min). Every existing test passes
+    /// `ttl: 1800` explicitly, so a regression that flipped the default
+    /// (e.g. to 60s for "fresher" results, or to 0 for "always re-query")
+    /// would not be caught by any test — the explicit-init path always
+    /// takes the test value. Pin the no-arg default so production behavior
+    /// (the value users actually run with) stays under test.
+    func testContactsResolverDefaultTTLIs1800Seconds() {
+        let resolver = ContactsResolver(store: FakeContactStore())
+        XCTAssertEqual(resolver.ttl, 1800,
+            "default TTL must remain 1800s (30 min) — drift to 0 produces a thundering herd of CNContactStore queries; drift to a much larger value silently delays new-contact resolution")
+    }
 }
 
 // MARK: - Test double
