@@ -268,4 +268,95 @@ final class DraftStoreTests: XCTestCase {
             "non-stale entries must remain in the listing")
     }
 
+    // MARK: - Filename sanitization defense-in-depth
+
+    /// Pin that the on-disk filename actually drops the `/` and `:`
+    /// characters in real chat GUIDs (`iMessage;-;+15551234567` is fine,
+    /// but `iMessage:+;chat12345/extra` would otherwise create a
+    /// subdirectory and fail to write). The existing round-trip test
+    /// passes if write+read sanitize the same way, even if the disk
+    /// filename were broken — this test verifies the disk side directly
+    /// via `listStoredDraftIDs()` so a future change to the sanitizer
+    /// (e.g. switching to URL-percent-encoding) shows up here as a
+    /// deliberate filename-shape change.
+    func testSanitizedFilenameContainsNoPathSeparators() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let tricky = "iMessage:+;chat12345/extra"
+        store.write(threadID: tricky, text: "x")
+
+        let stored = store.listStoredDraftIDs()
+        XCTAssertEqual(stored.count, 1)
+        let onDisk = stored[0]
+        XCTAssertFalse(onDisk.contains("/"),
+            "on-disk filename stem must not contain `/` — would create a subdirectory")
+        XCTAssertFalse(onDisk.contains(":"),
+            "on-disk filename stem must not contain `:` — Finder reserved separator")
+    }
+
+    /// Pin that a path-traversal-style threadID writes inside the drafts
+    /// directory rather than escaping it. The sanitizer turns `/` into
+    /// `_`, so `../../etc/passwd` becomes a single innocuous filename
+    /// stem `.._.._etc_passwd`. Without this defense a malicious or
+    /// accidental threadID could land outside `draftsDirectory`,
+    /// corrupting unrelated user data. This is a defense-in-depth pin —
+    /// production threadIDs are chat GUIDs, not user input — but the
+    /// invariant is cheap to enforce in tests so a future refactor that
+    /// drops the sanitizer surfaces here.
+    func testTraversalStyleThreadIDStaysInsideDraftsDirectory() throws {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        let traversal = "../../etc/passwd"
+        store.write(threadID: traversal, text: "x")
+
+        // Round-trip succeeds — the file is reachable by the same threadID.
+        XCTAssertEqual(store.read(threadID: traversal), "x")
+
+        // Nothing leaked outside the drafts directory: the parent of tmpDir
+        // must not now contain an `etc/` subdirectory or a `passwd` file.
+        let parent = tmpDir.deletingLastPathComponent()
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: parent.appendingPathComponent("etc").path),
+            "no `etc/` directory should exist beside the drafts directory after a traversal-style threadID write")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: parent.appendingPathComponent("passwd").path),
+            "no `passwd` file should exist beside the drafts directory")
+
+        // Enumerate the drafts directory directly (without the hidden-file
+        // filter that listStoredDraftIDs applies) so we can pin that the
+        // single file actually written has no `/` in its on-disk name.
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: tmpDir, includingPropertiesForKeys: nil
+        )
+        let mdFiles = entries.filter { $0.pathExtension == "md" }
+        XCTAssertEqual(mdFiles.count, 1,
+            "exactly one .md file must land in the drafts directory")
+        XCTAssertFalse(mdFiles[0].lastPathComponent.contains("/"),
+            "the on-disk filename must not preserve any path separators from the input")
+    }
+
+    /// Pin a known limitation of `listStoredDraftIDs()`: when a threadID
+    /// starts with a literal `.`, the on-disk filename is hidden (POSIX
+    /// dot-prefix convention) and the enumerator's `skipsHiddenFiles`
+    /// option silently drops it from the listing — even though
+    /// `read()`/`delete()` for that threadID still work correctly. This
+    /// is the surface that `testTraversalStyleThreadIDStaysInsideDraftsDirectory`
+    /// trips over for `../../...` inputs (sanitized prefix is `..`). Pin
+    /// the behavior here so a future change to the enumerator (e.g.
+    /// dropping the hidden-files skip) is a deliberate edit visible in
+    /// this test rather than a quiet surface change.
+    func testListStoredDraftIDsSkipsDotPrefixedFilenames() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: ".dotty", text: "hidden")
+        store.write(threadID: "visible", text: "shown")
+
+        // read() works for both — the round-trip path doesn't enumerate.
+        XCTAssertEqual(store.read(threadID: ".dotty"), "hidden")
+        XCTAssertEqual(store.read(threadID: "visible"), "shown")
+
+        // listStoredDraftIDs() drops the dot-prefixed entry due to
+        // FileManager's skipsHiddenFiles option.
+        let listed = store.listStoredDraftIDs()
+        XCTAssertEqual(listed, ["visible"],
+            "listStoredDraftIDs must currently drop dot-prefixed filenames; pin the behavior so a future enumerator change surfaces here")
+    }
+
 }
