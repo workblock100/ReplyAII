@@ -1986,6 +1986,68 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     }
 }
 
+// MARK: - copying() field-completeness pin
+
+/// `InboxViewModel.copying(_:pinned:)` is the single point where MessageThread
+/// values are duplicated with one field swapped (currently only `pinned`).
+/// The implementation lists every field by name — when MessageThread grows
+/// (e.g. a new `mutedUntil`, `lastMessageRowID`, etc.), forgetting to add
+/// the new field here silently drops it on every pin/unpin. Pin the
+/// field-by-field carry-through here so the omission surfaces in CI.
+@MainActor
+final class InboxViewModelCopyingTests: XCTestCase {
+
+    func testCopyingCarriesEveryFieldExceptPinned() {
+        // Build a source thread with every optional field populated to
+        // distinct, recognisable values. If `copying` drops any field,
+        // structural equality (synthesized by Hashable) will trip below.
+        let source = MessageThread(
+            id: "t-source-1",
+            channel: .slack,
+            name: "Maya Chen",
+            avatar: "MC",
+            preview: "see you at 3?",
+            time: "2:41 PM",
+            unread: 7,
+            pinned: false,
+            contextCount: 19,
+            contextSummary: "discussing Q3 roadmap",
+            chatGUID: "iMessage;-;+15555550100",
+            hasAttachment: true
+        )
+        let copied = InboxViewModel.copying(source, pinned: true)
+
+        // Pinned flips, every other field carries through verbatim.
+        XCTAssertTrue(copied.pinned, "copying must override pinned")
+        XCTAssertEqual(copied.id, source.id)
+        XCTAssertEqual(copied.channel, source.channel)
+        XCTAssertEqual(copied.name, source.name)
+        XCTAssertEqual(copied.avatar, source.avatar)
+        XCTAssertEqual(copied.preview, source.preview)
+        XCTAssertEqual(copied.time, source.time)
+        XCTAssertEqual(copied.unread, source.unread)
+        XCTAssertEqual(copied.contextCount, source.contextCount)
+        XCTAssertEqual(copied.contextSummary, source.contextSummary)
+        XCTAssertEqual(copied.chatGUID, source.chatGUID)
+        XCTAssertEqual(copied.hasAttachment, source.hasAttachment)
+    }
+
+    func testCopyingPinnedFalseFlipsBack() {
+        // The mirror direction — an already-pinned thread can be unpinned
+        // through copying without other field drift.
+        let source = MessageThread(
+            id: "t-source-2", channel: .imessage,
+            name: "Mom", avatar: "M",
+            preview: "dont forget", time: "1:08",
+            pinned: true, chatGUID: "iMessage;-;+15555550101"
+        )
+        let copied = InboxViewModel.copying(source, pinned: false)
+        XCTAssertFalse(copied.pinned, "copying must override pinned to false")
+        XCTAssertEqual(copied.chatGUID, source.chatGUID,
+            "chatGUID must round-trip — applyPinned relies on this for AppleScript send routing")
+    }
+}
+
 // MARK: - editKey format pin
 
 /// `InboxViewModel.editKey(threadID:tone:)` is the join key for the
