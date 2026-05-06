@@ -1985,3 +1985,46 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
                        "snooze load path must read 'pref.inbox.snoozedUntil' literally — renaming silently un-snoozes every shipped user's deferred threads")
     }
 }
+
+// MARK: - editKey format pin
+
+/// `InboxViewModel.editKey(threadID:tone:)` is the join key for the
+/// `userEdits` dictionary — every composer edit is keyed by this string.
+/// The format `<threadID>|<tone.rawValue>` lets a single thread carry
+/// distinct drafts per tone (warm/direct/playful) without colliding.
+/// A silent format change (swapping the `|` separator, lowercasing the
+/// tone, etc.) would orphan every in-memory edit and silently lose the
+/// user's draft when they switch tones — pin the literal so it surfaces
+/// as a deliberate change.
+@MainActor
+final class InboxViewModelEditKeyTests: XCTestCase {
+
+    func testEditKeyFormatIsThreadIDPipeToneRaw() {
+        XCTAssertEqual(InboxViewModel.editKey(threadID: "t1", tone: .warm),
+                       "t1|Warm",
+                       "editKey format is `<threadID>|<tone.rawValue>` — capital W, pipe separator")
+        XCTAssertEqual(InboxViewModel.editKey(threadID: "t-2", tone: .direct),
+                       "t-2|Direct")
+        XCTAssertEqual(InboxViewModel.editKey(threadID: "iMessage;-;+15551234567", tone: .playful),
+                       "iMessage;-;+15551234567|Playful",
+                       "real-shaped chat GUIDs round-trip — semicolons and `+` must not be sanitized")
+    }
+
+    func testEditKeyDistinguishesPerTone() {
+        // Same threadID, different tones → different keys. Otherwise
+        // tone-cycling in the composer would overwrite the prior tone's edit.
+        let warm    = InboxViewModel.editKey(threadID: "t1", tone: .warm)
+        let direct  = InboxViewModel.editKey(threadID: "t1", tone: .direct)
+        let playful = InboxViewModel.editKey(threadID: "t1", tone: .playful)
+        XCTAssertEqual(Set([warm, direct, playful]).count, 3,
+                       "every tone must produce a distinct edit key for the same thread")
+    }
+
+    func testEditKeyDistinguishesPerThread() {
+        // Same tone, different threads → different keys. Otherwise switching
+        // threads would inherit the prior thread's draft.
+        let a = InboxViewModel.editKey(threadID: "t1", tone: .warm)
+        let b = InboxViewModel.editKey(threadID: "t2", tone: .warm)
+        XCTAssertNotEqual(a, b)
+    }
+}
