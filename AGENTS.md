@@ -256,11 +256,9 @@ Implementation chose Carbon `RegisterEventHotKey` over `NSEvent.addGlobalMonitor
 - Relative-time chip in sidebar: add a `Timer.publish(every: 10)` republisher so `"live · 12s ago"` auto-ticks.
 - Reduced motion: read `@Environment(\.accessibilityReduceMotion)`, skip crossfades in `ComposerView.editableDraft` and tone-pill animations.
 
-### 3. Slack OAuth (first non-iMessage channel)
+### 3. ~~Slack OAuth~~ — SHIPPED (REP-010, REP-272, REP-273, REP-274)
 
-- New `Sources/ReplyAI/Channels/SlackChannel.swift`. Port the flow from `ob-channel-detail.jsx`: spin up an `NWListener` on `127.0.0.1:4242` during auth only, open the OAuth URL via `NSWorkspace.shared.open`, stop the listener on callback.
-- Store the token in Keychain (prefix `ReplyAI-`; factory reset clears by prefix — see `set-privacy`).
-- Subsequent `recentThreads` hits `conversations.list` + `conversations.history`; use Socket Mode for RTM.
+The end-to-end OAuth + send/receive surface has shipped. `Sources/ReplyAI/Channels/SlackChannel.swift` conforms to `ChannelService`; `SlackOAuthFlow` drives `LocalhostOAuthListener` on `127.0.0.1:4242` and exchanges via `oauth.v2.access`; `SlackTokenStore` persists `(token, workspaceName)` in Keychain; Settings → Channels (`SetChannelsView.swift`) renders the Connect/Disconnect UX. `SlackHTTPClient` covers `conversations.list` + `conversations.history`; `SlackSocketClient` handles Socket Mode receive. Remaining polish: multi-workspace (currently single-token) and Socket Mode error-state UI.
 
 ### 4. Better AttributedBodyDecoder
 
