@@ -2,6 +2,16 @@
 
 Source of truth for the three scheduled Claude agents. The cron entries in the Anthropic scheduled-tasks UI just point back at these prompts — editing them here is how you change the automation's behavior.
 
+> **Operating mode (2026-05): single-agent autopilot.** The per-role
+> `*.prompt` files below describe the legacy 7-agent pipeline. Today the
+> active scheduled task is `replyai-autopilot` only — its skill lives at
+> `~/.claude/scheduled-tasks/replyai-autopilot/SKILL.md` (not in this repo)
+> and consolidates the responsibilities of all the legacy prompts. Logs
+> from the autopilot land in `logs/autopilot-YYYY-MM-DD-HHMM.md` (one
+> consolidated log per fire) rather than per-agent. The legacy `*.prompt`
+> files are kept for reference and would be re-pointed at if Elijah
+> reactivates the multi-agent pipeline.
+
 ## Files
 
 | File | Owner | Read by |
