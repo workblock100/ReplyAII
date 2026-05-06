@@ -252,9 +252,9 @@ Implementation chose Carbon `RegisterEventHotKey` over `NSEvent.addGlobalMonitor
 
 ### 2. Animation + a11y polish
 
-- Thread-select bar: animate the `Rectangle().fill(isSelected ? accent : .clear)` with `withAnimation(Theme.Motion.std)` and `matchedGeometryEffect` across rows.
-- Relative-time chip in sidebar: add a `Timer.publish(every: 10)` republisher so `"live · 12s ago"` auto-ticks.
-- Reduced motion: read `@Environment(\.accessibilityReduceMotion)`, skip crossfades in `ComposerView.editableDraft` and tone-pill animations.
+- Thread-select bar: animate the `Rectangle().fill(isSelected ? accent : .clear)` with `withAnimation(Theme.Motion.std)` and `matchedGeometryEffect` across rows. **Still open** — REP-082 in BACKLOG.md.
+- ~~Relative-time chip in sidebar: add a `Timer.publish(every: 10)` republisher so `"live · 12s ago"` auto-ticks.~~ Resolved (REP-047): `SidebarView.syncChip` is wrapped in `TimelineView(.periodic(from: Date(), by: 10))` so the relative-time string auto-advances every 10 s without a republisher.
+- ~~Reduced motion: read `@Environment(\.accessibilityReduceMotion)`, skip crossfades in `ComposerView.editableDraft` and tone-pill animations.~~ Awaiting merge — REP-083 wip branch `wip/autopilot-polish-2026-05-06-141100-reducemotion` (4 commits) gates 13 `withAnimation` sites across PillToggle, TonePills, ThreadListView, InboxScreen, and SidebarView. `ComposerView.editableDraft` has no animation modifiers in current main (refactored out), so nothing left to gate there.
 
 ### 3. ~~Slack OAuth~~ — SHIPPED (REP-010, REP-272, REP-273, REP-274)
 
