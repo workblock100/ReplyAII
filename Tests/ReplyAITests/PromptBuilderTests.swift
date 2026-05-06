@@ -465,4 +465,53 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertLessThan(PromptBuilder.minHistoryReserve, PromptBuilder.historyCharBudget,
             "minHistoryReserve must stay below historyCharBudget — otherwise truncate(_:budget:) produces a negative cap")
     }
+
+    /// The trailing user-turn instruction is what tells the model to emit a
+    /// reply WITHOUT preamble ("Sure, here's…"). If the literal `"Reply
+    /// text only."` ever drifts, every draft starts including conversational
+    /// scaffolding the composer doesn't know how to strip — pin it so
+    /// changes are deliberate.
+    func testBuildPromptEndsWithReplyTextOnlyInstruction() {
+        let thread = MessageThread(id: "t-instr", channel: .imessage,
+                                   name: "Maya", avatar: "M",
+                                   preview: "", time: "")
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        XCTAssertTrue(prompt.contains("Reply text only."),
+            "user-turn instruction must contain `Reply text only.` literal — drift here changes every draft's preamble behavior")
+    }
+
+    /// The instruction line is the LAST line of the prompt — anything after
+    /// would dilute the "no preamble" signal. Pin the position so a refactor
+    /// that appends a footer (e.g. examples) doesn't push the instruction
+    /// into the middle where the model ignores it.
+    func testBuildPromptInstructionLineIsLast() {
+        let thread = MessageThread(id: "t-instr-last", channel: .slack,
+                                   name: "Maya", avatar: "M",
+                                   preview: "", time: "")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [])
+        let lines = prompt.split(separator: "\n", omittingEmptySubsequences: false)
+        // The very last line should be the instruction.
+        let lastLine = String(lines.last ?? "")
+        XCTAssertTrue(lastLine.contains("Reply text only."),
+            "instruction line must be the LAST line, not buried in the middle — got last line: '\(lastLine)'")
+    }
+
+    /// Tone is interpolated lowercased into the instruction (`.warm` → "warm",
+    /// `.direct` → "direct", etc.). Pin so a future tone case (e.g. `.terse`)
+    /// or a casing change is a deliberate edit rather than a quiet
+    /// instruction-line drift.
+    func testBuildPromptToneIsLowercasedInInstruction() {
+        let thread = MessageThread(id: "t-tone", channel: .imessage,
+                                   name: "Maya", avatar: "M",
+                                   preview: "", time: "")
+        let warm    = PromptBuilder.build(thread: thread, tone: .warm,    history: [])
+        let direct  = PromptBuilder.build(thread: thread, tone: .direct,  history: [])
+        let playful = PromptBuilder.build(thread: thread, tone: .playful, history: [])
+        XCTAssertTrue(warm.contains("a warm tone."),
+            "warm instruction must read `a warm tone.` (lowercase) — got prompt: \(warm)")
+        XCTAssertTrue(direct.contains("a direct tone."),
+            "direct instruction must read `a direct tone.` (lowercase)")
+        XCTAssertTrue(playful.contains("a playful tone."),
+            "playful instruction must read `a playful tone.` (lowercase)")
+    }
 }
