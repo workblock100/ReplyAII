@@ -888,6 +888,20 @@ final class StatsResetAndGuardTests: XCTestCase {
                        "non-positive counts must leave the counter at the prior value")
     }
 
+    /// Multiple positive calls must accumulate (`+=`), not overwrite (`=`).
+    /// The sibling guard test above only exercises one positive call before
+    /// the no-op cases, so a refactor of `state.withLock { $0.ruleLoadSkips
+    /// += count }` to `= count` would silently pass it. Pin the accumulation
+    /// contract directly so a future "simplification" can't regress it.
+    func testRecordRuleLoadSkipsAccumulatesAcrossPositiveCalls() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleLoadSkips(2)
+        stats.recordRuleLoadSkips(3)
+        stats.recordRuleLoadSkips(7)
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 12,
+                       "successive positive recordRuleLoadSkips calls must add to the running total, not overwrite it")
+    }
+
     // MARK: - Forward-compat decode of partial stats.json
 
     /// Pin that an on-disk stats.json missing some-but-not-all keys decodes
