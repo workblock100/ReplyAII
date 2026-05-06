@@ -116,4 +116,30 @@ final class LLMServiceTests: XCTestCase {
         XCTAssertEqual(assembled, expected,
                        "concatenated text chunks must equal the fixture seed exactly")
     }
+
+    /// Tab characters are NOT delimiters — the implementation only splits
+    /// on space (`" "`) and newline (`"\n"`). This is intentional: a tab
+    /// inside a code-formatted reply or pasted snippet should stay glued
+    /// to the surrounding word so the composer renders the tab as part of
+    /// one token. Pin the behavior here so a future "make whitespace
+    /// uniform" refactor surfaces as a deliberate edit rather than a
+    /// silent change to streaming chunk shape.
+    func testTokenizerKeepsTabsInsideTokens() {
+        XCTAssertEqual(StubLLMService.tokenize("a\tb"), ["a\tb"],
+            "tabs are not split delimiters — only space and newline are")
+        XCTAssertEqual(StubLLMService.tokenize("a\t\tb"), ["a\t\tb"],
+            "consecutive tabs must also stay glued to the surrounding tokens")
+    }
+
+    /// Single character with no whitespace must surface as one token —
+    /// not split on every char, not return an empty array. The implementation
+    /// has an `if !current.isEmpty { out.append(current) }` tail clause
+    /// that handles this case; pin it explicitly so a refactor that drops
+    /// the tail (e.g. only-on-delimiter-emit) shows up here.
+    func testTokenizerSingleCharWithoutDelimiterEmitsOneToken() {
+        XCTAssertEqual(StubLLMService.tokenize("a"), ["a"],
+            "single non-whitespace char must produce exactly one token")
+        XCTAssertEqual(StubLLMService.tokenize("hello"), ["hello"],
+            "single word with no delimiters must emit one token, not split per-char")
+    }
 }
