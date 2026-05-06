@@ -43,6 +43,11 @@ enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
         }
     }
 
+    /// Per-channel accent color rendered by `ChannelDot` (sidebar list rows,
+    /// thread badges, the inbox header chip). Resolves to the
+    /// `Theme.Color.channel*` token for the case so the theme owns the
+    /// hex values and a future light-mode swap or rebrand only edits
+    /// `Theme.swift`. Pinned by `ChannelTests.testDotColorMatchesThemeChannelToken`.
     var dotColor: Color {
         switch self {
         case .imessage: Theme.Color.channelIMessage
