@@ -2,6 +2,17 @@
 
 Autonomous work loop for ReplyAI. Three Claude agents run on cron in Anthropic sandboxes, clone this repo, do scoped work, and push back to `origin/main`. You don't touch it unless something goes wrong.
 
+> **Operating mode (2026-05): single-agent autopilot.** The 7-agent table below
+> documents the legacy pipeline design. As of the autopilot pivot, a single
+> `replyai-autopilot` fire (every 2 hours, ~50-min budget) does the work the
+> 7 agents below were each doing — drains the wip queue, ships P2 tasks,
+> reconciles BACKLOG, runs UX polish, adds test coverage, audits state, and
+> writes one consolidated fire log. The legacy table is preserved as
+> reference for the responsibilities each role used to own; in practice the
+> autopilot's `SKILL.md` priority menu (P1 wip drain → P9 misc) maps roughly
+> 1:1 onto the same surfaces. Don't re-add the multi-agent cron schedules
+> unless Elijah's token budget materially expands.
+
 ## The three agents
 
 | Agent | Cadence | Day throttle | Max runtime | Touches |
