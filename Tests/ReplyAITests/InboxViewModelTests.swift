@@ -2589,3 +2589,75 @@ final class InboxViewModelEffectiveDraftTests: XCTestCase {
             "clearEdit on an unrelated (threadID, tone) must not affect the existing edit")
     }
 }
+
+// MARK: - InboxViewModel.requestSend / cancelSend — staging guard
+
+/// `requestSend` stages a `SendConfirmation` that the composer renders as
+/// a "Send to <recipient>?" affirmation chip. The empty / whitespace-only
+/// guard is critical — without it, ⌘↵ on an empty composer would surface
+/// a "Send to <recipient>?" chip with nothing to send, then `confirmSend`
+/// would dispatch an empty body to Messages.app or Slack. Pin both paths.
+
+@MainActor
+final class InboxViewModelRequestCancelSendTests: XCTestCase {
+
+    private func vmWithThread() -> InboxViewModel {
+        let suite = "test.ReplyAI.requestSend.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let t = MessageThread(id: "rs1", channel: .imessage, name: "Alice",
+                              avatar: "A", preview: "p", time: "now")
+        let ch = BlockingMockChannel(); ch.blocking = false
+        let vm = InboxViewModel(
+            threads: [t],
+            imessage: ch,
+            contacts: fastContacts(),
+            defaults: d)
+        vm.selectThread("rs1")
+        return vm
+    }
+
+    func testRequestSendWithEmptyTextDoesNotStageConfirmation() {
+        let vm = vmWithThread()
+        vm.requestSend(text: "")
+        XCTAssertNil(vm.sendConfirmation,
+            "empty text must short-circuit before staging — otherwise ⌘↵ on an empty composer would prompt to send nothing")
+    }
+
+    func testRequestSendWithWhitespaceOnlyTextDoesNotStageConfirmation() {
+        let vm = vmWithThread()
+        vm.requestSend(text: "   \n  \t ")
+        XCTAssertNil(vm.sendConfirmation,
+            "whitespace-only text must short-circuit — same reason as the empty case, plus newlines/tabs from accidental Return")
+    }
+
+    func testRequestSendWithRealTextStagesConfirmationWithRecipientName() {
+        let vm = vmWithThread()
+        vm.requestSend(text: "hi Alice")
+        XCTAssertNotNil(vm.sendConfirmation,
+            "non-empty text must stage a confirmation")
+        XCTAssertEqual(vm.sendConfirmation?.recipient, "Alice",
+            "confirmation snapshot must capture the selected thread's display name at request-time")
+        XCTAssertEqual(vm.sendConfirmation?.threadID, "rs1",
+            "confirmation must capture the thread ID at request-time so subsequent thread switches don't reroute the send")
+    }
+
+    func testCancelSendClearsStagedConfirmation() {
+        let vm = vmWithThread()
+        vm.requestSend(text: "hi")
+        XCTAssertNotNil(vm.sendConfirmation)
+        vm.cancelSend()
+        XCTAssertNil(vm.sendConfirmation,
+            "cancelSend (⌘. or composer dismiss) must clear the staged confirmation")
+    }
+
+    func testCancelSendOnUnstagedIsNoOp() {
+        // Defensive: ⌘. is wired to call cancelSend regardless of state.
+        // Calling it when nothing is staged must not crash or perturb
+        // unrelated state.
+        let vm = vmWithThread()
+        XCTAssertNil(vm.sendConfirmation)
+        vm.cancelSend()
+        XCTAssertNil(vm.sendConfirmation,
+            "cancelSend with nothing staged must remain nil")
+    }
+}
