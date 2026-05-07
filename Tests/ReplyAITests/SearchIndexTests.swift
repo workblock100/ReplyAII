@@ -858,6 +858,43 @@ final class SearchIndexTests: XCTestCase {
                        "search must not over-truncate when result set is smaller than the cap")
     }
 
+    /// `limit: 0` is bound directly into a SQLite `LIMIT 0` clause,
+    /// which returns zero rows. Pin so a future "treat 0 as default 50"
+    /// shortcut doesn't silently flood the palette when a caller passes
+    /// a misconfigured value (e.g. zero from a slider that's been reset).
+    func testSearchLimitZeroReturnsNoResults() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...3 {
+            let t = MessageThread(id: "z-\(i)", channel: .imessage, name: "Z\(i)",
+                                  avatar: "Z", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "limitzeropin", time: "t")
+            ])
+        }
+        let results = await index.search("limitzeropin", limit: 0)
+        XCTAssertEqual(results.count, 0,
+            "limit: 0 must produce zero rows — SQLite's `LIMIT 0` semantic, not a default-50 fallback")
+    }
+
+    /// `limit: 1` returns exactly one row even when many match. The
+    /// rank-ordered SELECT means the highest-relevance hit comes back —
+    /// typically the most-recently-upserted match for a unique term in
+    /// this test's setup. Pin the LIMIT 1 contract so the palette can
+    /// rely on a "give me the single best match" call shape.
+    func testSearchLimitOneReturnsExactlyOneRow() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...10 {
+            let t = MessageThread(id: "one-\(i)", channel: .imessage, name: "One\(i)",
+                                  avatar: "O", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "limitonetokenpin", time: "t")
+            ])
+        }
+        let results = await index.search("limitonetokenpin", limit: 1)
+        XCTAssertEqual(results.count, 1,
+            "limit: 1 must return exactly one row even when 10 are indexed")
+    }
+
     // MARK: - REP-125: upsert replaces preview text (no ghost terms)
 
     func testUpsertReplacesOldPreviewTerms() async {
