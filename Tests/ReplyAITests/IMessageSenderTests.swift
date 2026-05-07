@@ -949,3 +949,66 @@ final class IMessageSenderCombinedEscapeTests: XCTestCase {
                       "messageTooLong copy must reference 4096 directly so the user sees the actual boundary; got: \(copy)")
     }
 }
+
+/// Pin the AppleScript template that `IMessageSender.sendRaw` emits. The
+/// template is what reaches Messages.app — drift in either the
+/// `tell application "Messages"` opener, the `chat id "<guid>"` reference,
+/// the `send "..." to targetChat` call, or the `end tell` closer would
+/// break sends silently (Messages would compile-error or address a
+/// different chat). Capture the source via `executeHook` and pin the
+/// substring contract.
+final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
+
+    func testAppleScriptSourceMatchesExpectedTemplate() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+
+        // Capture box — executeHook runs synchronously on the calling
+        // thread inside `sendRaw`, so a lock-free shared variable is fine
+        // here as long as we read after the send returns.
+        final class Captured: @unchecked Sendable {
+            var source: String = ""
+        }
+        let captured = Captured()
+        IMessageSender.executeHook = { src in captured.source = src }
+
+        let thread = MessageThread(
+            id: "+15551234567", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("hello", to: thread))
+
+        let src = captured.source
+        XCTAssertTrue(src.contains("tell application \"Messages\""),
+            "AppleScript must address Messages.app via `tell application \"Messages\"` — got: \(src)")
+        XCTAssertTrue(src.contains("end tell"),
+            "AppleScript must close the tell block — got: \(src)")
+        XCTAssertTrue(src.contains("chat id \"iMessage;-;+15551234567\""),
+            "AppleScript must reference the GUID via `chat id \"<guid>\"` — got: \(src)")
+        XCTAssertTrue(src.contains("send \"hello\" to targetChat"),
+            "AppleScript must send the (escaped) text to the resolved targetChat — got: \(src)")
+    }
+
+    /// Empty-text sends must still produce a structurally valid script.
+    /// The `send ""` form is legal AppleScript and Messages.app accepts
+    /// it (silently no-ops the send). Pin so a "guard against empty
+    /// text" refactor doesn't accidentally drop the send call entirely.
+    func testEmptyTextStillProducesValidSendBlock() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        final class Captured: @unchecked Sendable { var source: String = "" }
+        let captured = Captured()
+        IMessageSender.executeHook = { src in captured.source = src }
+
+        let thread = MessageThread(
+            id: "+15550009999", channel: .imessage, name: "Test",
+            avatar: "T", preview: "", time: "",
+            chatGUID: "iMessage;-;+15550009999"
+        )
+        XCTAssertNoThrow(try IMessageSender.send("", to: thread))
+
+        XCTAssertTrue(captured.source.contains("send \"\" to targetChat"),
+            "empty text must still emit a `send \"\" to targetChat` line — drift drops the send call entirely; got: \(captured.source)")
+    }
+}
