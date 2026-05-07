@@ -46,6 +46,35 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(IMessageSender.chatGUID(for: t), "SMS;-;+15551234567")
     }
 
+    /// Edge: thread with BOTH empty chatGUID AND empty id synthesizes
+    /// `"iMessage;-;"` which `validateChatGUID` rejects (parts[2] is
+    /// empty), so the send fails fast with `.invalidChatGUID` rather
+    /// than firing a malformed AppleScript at Messages.app. Same shape
+    /// as the legacy by-identifier empty-id pin — different code path.
+    func testChatGUIDForThreadWithBothFieldsEmpty() {
+        let t = MessageThread(
+            id: "", channel: .imessage, name: "?",
+            avatar: "?", preview: "", time: "",
+            chatGUID: nil
+        )
+        // Synthesis still runs (no defensive empty guard at this layer);
+        // the validation that catches the resulting empty parts[2] lives
+        // in sendRaw → validateChatGUID, which the next assertion exercises.
+        XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;-;",
+            "synthesis falls through verbatim — empty id appears as empty parts[2]")
+
+        // And the send path rejects it before AppleScript runs.
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        XCTAssertThrowsError(try IMessageSender.send("hi", to: t)) { err in
+            guard case IMessageSender.SendError.invalidChatGUID = err else {
+                return XCTFail("expected .invalidChatGUID, got \(err)")
+            }
+        }
+    }
+
     /// Pin: `chatGUID(for:)` synthesis falls back to the `iMessage`
     /// service prefix for every non-SMS channel. The synthesized
     /// string is intentionally still iMessage-shaped for Slack /
