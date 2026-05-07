@@ -1070,6 +1070,30 @@ final class InboxViewModelSendTests: XCTestCase {
 
     /// Failed send must NOT advance selectedThreadID — the user is staying
     /// put to fix the error.
+    /// Channels without a registered send path (whatsapp/telegram/teams in
+    /// v1) must fail through to `IMessageSender.SendError.unsupported` so
+    /// the user sees an error toast rather than a silent drop. Pins the
+    /// `default:` arm of confirmSend's per-channel switch.
+    func testSendOnUnsupportedChannelSurfacesErrorToastAndDoesNotAdvance() async {
+        let t1 = MessageThread(id: "wa-1", channel: .whatsapp, name: "Whatsapp Friend", avatar: "W", preview: "", time: "")
+        let t2 = MessageThread(id: "wa-2", channel: .whatsapp, name: "Bob", avatar: "B", preview: "", time: "")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("wa-1")
+
+        vm.requestSend(text: "Hi WhatsApp")
+        await vm.confirmSend()
+
+        XCTAssertNil(vm.sendConfirmation,
+                     "sendConfirmation is consumed at start of confirmSend regardless of outcome")
+        XCTAssertNotNil(vm.sendToast,
+                        "unsupported-channel send must surface a toast — silent drop would feel like the app froze")
+        XCTAssertEqual(vm.selectedThreadID, "wa-1",
+                       "unsupported-channel send must NOT advance selection — user is staying put with the error visible")
+    }
+
     func testSendFailureDoesNotAdvanceSelectedThreadID() async {
         let t1 = MessageThread(id: "fa-1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", chatGUID: "iMessage;-;fa-1")
         let t2 = MessageThread(id: "fa-2", channel: .imessage, name: "Bob", avatar: "B", preview: "", time: "", chatGUID: "iMessage;-;fa-2")
