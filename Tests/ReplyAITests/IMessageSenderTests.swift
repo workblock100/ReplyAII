@@ -492,6 +492,61 @@ final class IMessageSenderTests: XCTestCase {
         }
     }
 
+    /// Trailing-semicolon GUID: `"iMessage;-;"` splits with
+    /// `omittingEmptySubsequences: false` into three parts where the
+    /// final element is empty. The validator's `!parts[2].isEmpty`
+    /// guard rejects it. Pin so a future "trim trailing separators"
+    /// shortcut doesn't quietly accept a chat-id-less GUID that
+    /// AppleScript would then fail on with errAEEventNotHandled.
+    func testTrailingSemicolonGUIDFailsValidation() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;-;", for: .imessage),
+            "trailing-semicolon GUID has empty chat-id; must fail the !parts[2].isEmpty guard")
+    }
+
+    /// Empty middle separator: `"iMessage;;chat"` splits to three parts
+    /// where `parts[1] == ""` — neither "+" nor "-", so validation
+    /// fails. Pin because a future "tolerate any non-empty middle"
+    /// loosening would silently accept this corrupted shape and route
+    /// it to AppleScript with no useful error.
+    func testEmptyMiddleSeparatorFailsValidation() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;;+15551234567", for: .imessage),
+            "empty middle separator (`iMessage;;…`) must fail — only `+` or `-` are accepted there")
+    }
+
+    /// Invalid middle separator: `"iMessage;X;chat"` has the right
+    /// shape but `parts[1] == "X"`, not `+` or `-`. The validator's
+    /// strict `parts[1] == "+" || parts[1] == "-"` clause rejects it.
+    /// Pin the closed set against a future "any single character"
+    /// widening; chat.db only ever emits + or - here.
+    func testNonPlusOrMinusSeparatorFailsValidation() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;X;+15551234567", for: .imessage),
+            "middle separator must be exactly `+` or `-`; `X` is not a valid alternative")
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;~;+15551234567", for: .imessage),
+            "middle separator `~` must also fail — closed set of `+`/`-` only")
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;0;+15551234567", for: .imessage),
+            "digit `0` as middle separator must fail — closed set, not `\\d`")
+    }
+
+    /// Whitespace-padded middle separator like `"+ "` (plus + space).
+    /// `split` preserves the trailing space, so `parts[1] == "+ "`
+    /// (length 2) fails the literal `==` check. Pin so a future
+    /// relaxation that trims whitespace from the middle component
+    /// (well-meaning, chat.db never emits this) doesn't silently widen
+    /// the accepted set.
+    func testWhitespacePaddedMiddleSeparatorFailsValidation() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;+ ;chat1", for: .imessage),
+            "middle separator with trailing space (`+ `) must fail — no trim happens, literal == check")
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage; -;chat1", for: .imessage),
+            "middle separator with leading space (` -`) must also fail")
+    }
+
     /// Non-iMessage / non-SMS channels currently have no GUID write path —
     /// the validator's `default:` arm throws unconditionally so that a
     /// future caller who reuses GUID-based send routing for WhatsApp /
