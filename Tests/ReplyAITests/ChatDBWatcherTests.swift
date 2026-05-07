@@ -262,6 +262,21 @@ final class ChatDBWatcherTests: XCTestCase {
         watcher.stop()
     }
 
+    /// `ChatDBWatcher.restartBackoffCap` is the upper bound on the
+    /// exponential-backoff curve in `scheduleRestart()`. Drift up makes
+    /// recovery from a short-lived cancel feel slow — one minute is
+    /// already long enough for "Messages went offline" copy to surface
+    /// in the menu bar; drift down hammers `start()` after a sustained
+    /// outage and burns CPU on every retry. Cross-check the cap is ≥
+    /// defaultRestartDelay so the cap can't accidentally shrink below
+    /// the seed and short-circuit the entire backoff curve.
+    func testRestartBackoffCapIsSixtySeconds() {
+        XCTAssertEqual(ChatDBWatcher.restartBackoffCap, 60.0, accuracy: 1e-9,
+            "ChatDBWatcher.restartBackoffCap drift either stretches recovery after a brief cancel (too high) or hammers start() during a sustained outage (too low)")
+        XCTAssertGreaterThanOrEqual(ChatDBWatcher.restartBackoffCap, ChatDBWatcher.defaultRestartDelay,
+            "restartBackoffCap must stay ≥ defaultRestartDelay — otherwise the seed already exceeds the cap and the backoff curve is meaningless")
+    }
+
     /// Constructing with only the trailing closure must succeed (i.e.
     /// every init parameter besides `onChange` has a default). The
     /// production call site relies on this; if `paths` ever loses its

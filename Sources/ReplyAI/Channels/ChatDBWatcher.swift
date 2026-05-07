@@ -23,8 +23,18 @@ final class ChatDBWatcher: @unchecked Sendable {
 
     /// Initial delay before the first restart attempt after a DispatchSource
     /// cancellation (e.g. iCloud-driven `chat.db` move). Doubles on each
-    /// retry up to a 60 s cap — see `scheduleRestart()`.
+    /// retry up to `restartBackoffCap` — see `scheduleRestart()`.
     static let defaultRestartDelay: TimeInterval = 5.0
+
+    /// Upper bound on the exponential-backoff curve in `scheduleRestart()`.
+    /// At `defaultRestartDelay = 5.0`, the doubling sequence reaches 60 s on
+    /// attempt 4 (5, 10, 20, 40, 60, 60, …). Drift up makes recovery from a
+    /// short-lived cancel feel slow — one minute is already long enough for
+    /// a user to notice "Messages went offline" copy in the menu bar; drift
+    /// down hammers `start()` after a sustained outage and burns CPU on
+    /// every retry. Pinned by
+    /// `ChatDBWatcherTests.testRestartBackoffCapIsSixtySeconds`.
+    static let restartBackoffCap: TimeInterval = 60.0
 
     private let paths: [String]
     /// Package-internal so tests can pin the production default after a
@@ -131,7 +141,7 @@ final class ChatDBWatcher: @unchecked Sendable {
             n += 1
             return c
         }
-        let delay = min(restartDelay * pow(2.0, Double(count)), 60.0)
+        let delay = min(restartDelay * pow(2.0, Double(count)), Self.restartBackoffCap)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self, !self.stopped.withLock({ $0 }) else { return }
             self.sources.removeAll()
