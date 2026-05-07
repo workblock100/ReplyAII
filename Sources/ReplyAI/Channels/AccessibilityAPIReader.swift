@@ -80,7 +80,7 @@ final class AccessibilityAPIReader {
     init(
         pidProvider: @escaping () -> pid_t? = {
             NSRunningApplication
-                .runningApplications(withBundleIdentifier: "com.apple.MobileSMS")
+                .runningApplications(withBundleIdentifier: MessagesAppActivationObserver.messagesAppBundleID)
                 .first?.processIdentifier
         },
         elementFactory: any AXElementFactory = DefaultAXElementFactory(),

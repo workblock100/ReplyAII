@@ -283,4 +283,16 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         XCTAssertEqual(observer.debounce, MessagesAppActivationObserver.defaultDebounce,
             "the no-debounce-arg init must route through Self.defaultDebounce — otherwise the static constant becomes dead code while the literal 0.6 lives on in the init signature")
     }
+
+    /// Pin the Messages.app bundle ID — `com.apple.MobileSMS`. Apple's
+    /// publicly-documented identifier; a rename here would silently
+    /// break both this observer (no activation callbacks ever fire) and
+    /// the AccessibilityAPIReader's PID lookup (no AX tree ever
+    /// materializes). Both files now reference this single constant; pin
+    /// the literal so the cross-file invariant lands in code review.
+    func testMessagesAppBundleIDIsAppleMobileSMS() {
+        XCTAssertEqual(MessagesAppActivationObserver.messagesAppBundleID,
+                       "com.apple.MobileSMS",
+                       "drift here breaks both activation callbacks AND AccessibilityAPIReader PID lookup — the bundle ID is published by Apple and must match exactly")
+    }
 }

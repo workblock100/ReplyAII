@@ -10,6 +10,13 @@ import AppKit
 /// test coverage without real NSRunningApplication instances or
 /// NSWorkspace machinery.
 final class MessagesAppActivationObserver: @unchecked Sendable {
+    /// Bundle identifier of macOS Messages.app. Apple's published bundle
+    /// ID; renaming on Apple's side would be a breaking change for every
+    /// macOS automation in the wild. Hoisted here as the single source
+    /// of truth — `AccessibilityAPIReader` references this same constant
+    /// when it queries for the running Messages PID.
+    static let messagesAppBundleID = "com.apple.MobileSMS"
+
     /// Production debounce window. Drift here changes how many sync triggers
     /// fire when the user thumbs through Messages between conversations —
     /// 600ms coalesces rapid activations to one callback per visit.
@@ -64,7 +71,7 @@ final class MessagesAppActivationObserver: @unchecked Sendable {
             queue: nil
         ) { [weak self] notification in
             guard let self,
-                  self.bundleIDExtractor(notification) == "com.apple.MobileSMS" else { return }
+                  self.bundleIDExtractor(notification) == Self.messagesAppBundleID else { return }
             self.scheduleCallback()
         }
     }
