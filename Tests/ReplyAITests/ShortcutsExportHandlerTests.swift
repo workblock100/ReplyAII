@@ -219,6 +219,27 @@ final class ShortcutsExportHandlerTests: XCTestCase {
         XCTAssertEqual(exports[0].thread.avatar, "M")
     }
 
+    /// Pin the current behavior: empty `displayName` produces an empty
+    /// avatar (`String(displayName.prefix(1))` yields ""), unlike
+    /// `IMessageChannel.avatarInitial(for:)` which falls back to "?".
+    /// Pinned so an audit-pass that aligns Shortcuts with the iMessage
+    /// fallback is a deliberate change visible here, not a quiet drift.
+    /// Note: an empty displayName isn't malformed per the schema (only
+    /// `id` and `displayName` keys must be present; their values aren't
+    /// validated for non-emptiness), so this case can realistically
+    /// reach `toExport()`.
+    func testAvatarFromEmptyDisplayNameIsEmpty() throws {
+        let json = #"[ { "id": "x", "displayName": "", "channel": "imessage", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.avatar, "",
+            "empty displayName produces empty avatar — no '?' fallback like IMessageChannel.avatarInitial")
+        XCTAssertEqual(exports[0].thread.name, "",
+            "thread.name is the raw displayName, also empty here")
+    }
+
     func testPreviewFallsBackToLastMessageWhenMissing() throws {
         let json = """
         [
