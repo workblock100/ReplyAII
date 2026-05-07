@@ -97,6 +97,19 @@ final class StatsTests: XCTestCase {
 
     // MARK: - Persistence
 
+    /// `persist()` schedules the on-disk flush at `now + debounceWriteWindow`.
+    /// 2 seconds is the deliberate trade-off: short enough that a crash
+    /// shortly after a session loses ≤2s of counters; long enough that a
+    /// burst of rule fires + draft increments coalesces into one write
+    /// instead of thrashing app-support disk on every event. Drift in
+    /// either direction shifts that trade-off invisibly. Pin the literal
+    /// against the hoisted constant rather than reaching into the
+    /// inline arithmetic in `persist()`.
+    func testDebounceWriteWindowDefaultIsTwoSeconds() {
+        XCTAssertEqual(Stats.debounceWriteWindow, 2,
+                       "debounce window is shipped UX — see test rationale")
+    }
+
     func testStatsRoundTripThroughJSON() throws {
         let url = tempURL()
 

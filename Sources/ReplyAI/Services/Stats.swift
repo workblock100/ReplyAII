@@ -96,6 +96,16 @@ final class Stats: @unchecked Sendable {
     /// deterministic test overrides.
     var sessionDuration: TimeInterval { nowProvider().timeIntervalSince(sessionStartedAt) }
 
+    /// Window between the most recent counter increment and the on-disk
+    /// flush. Picked so a burst of rule fires + draft increments coalesces
+    /// into a single I/O call rather than thrashing app-support disk on
+    /// every event. Drift downward (e.g. 0.1) restores the thrash; drift
+    /// upward (e.g. 30) means a crash within ~half a minute of the last
+    /// counter bump silently loses that session's stats. Hoisted to a
+    /// constant so it's pinnable independently of the inline arithmetic
+    /// inside `persist()`.
+    static let debounceWriteWindow: TimeInterval = 2
+
     /// Serializes pending debounced writes. Two locks kept separate:
     /// `state` protects counter mutations; `writeLock` protects the
     /// pending DispatchWorkItem pointer so cancel/replace is race-free.
@@ -311,7 +321,7 @@ final class Stats: @unchecked Sendable {
         }
         pendingWrite = item
         writeLock.unlock()
-        Self.writeQueue.asyncAfter(deadline: .now() + 2, execute: item)
+        Self.writeQueue.asyncAfter(deadline: .now() + Self.debounceWriteWindow, execute: item)
     }
 
     /// Atomic write. Errors are swallowed — an observability failure
