@@ -391,6 +391,39 @@ final class StatsAcceptanceRateTests: XCTestCase {
         XCTAssertNotNil(stats.acceptanceRate(for: .warm), "warm should have data")
         XCTAssertNil(stats.acceptanceRate(for: .direct), "direct must remain nil with no data")
     }
+
+    /// Inverse of testAcceptanceRateZeroForNoSends: if a `recordDraftSent`
+    /// fires *without* a corresponding `recordDraftGenerated` (a logic
+    /// bug that would surface as e.g. a tone cycle clearing the generated
+    /// counter mid-stream), `acceptanceRate` must still return nil
+    /// because the denominator is zero — never crash with division-by-
+    /// zero or surface an out-of-range rate. The raw sent counter still
+    /// reflects the events so an audit can detect the divergence.
+    func testAcceptanceRateNilWhenSentWithoutGenerated() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftSent(tone: .warm)
+        stats.recordDraftSent(tone: .warm)
+        XCTAssertNil(stats.acceptanceRate(for: .warm),
+            "sends without any generated must return nil — denominator is zero, not a usable rate")
+        XCTAssertEqual(stats.snapshot().draftsSentByTone[Tone.warm.rawValue], 2,
+            "raw sent counter must still record both events — only the rate calculation guards against zero generated")
+    }
+
+    /// `recordDraftSent(tone:)` more times than `recordDraftGenerated(tone:)`
+    /// is also a logic bug (e.g. an idempotency miss), but the rate
+    /// calculation must keep functioning — it'll exceed 1.0 deliberately
+    /// rather than capping or reporting nil. Pin so a future "clamp to
+    /// [0,1]" tightening shows up here as a deliberate choice.
+    func testAcceptanceRateAllowsOverOneWhenSentExceedsGenerated() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordDraftGenerated(tone: .direct)
+        stats.recordDraftSent(tone: .direct)
+        stats.recordDraftSent(tone: .direct)
+        let rate = stats.acceptanceRate(for: .direct)
+        XCTAssertNotNil(rate)
+        XCTAssertEqual(rate!, 2.0, accuracy: 1e-9,
+            "sent > generated must surface as the raw ratio (2.0 here) rather than be clamped to 1.0 — the divergence is information for the audit log")
+    }
 }
 
 // MARK: - REP-160: Stats concurrent mixed-counter stress test
