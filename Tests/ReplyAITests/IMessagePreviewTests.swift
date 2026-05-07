@@ -328,4 +328,18 @@ final class IMessagePreviewTests: XCTestCase {
                        "🔗 example.com",
             "user-visible chip must show only the host; ports never round-trip into the sidebar")
     }
+
+    /// `IMessagePreview.linkPrefix` is the emoji prefix `displayString`
+    /// emits for single-URL bodies. Hoisted alongside `attachmentFallback`
+    /// and `nonTextFallback`; this pin proves the constant has the right
+    /// value. The existing host-rendering tests above lock the literal
+    /// `"🔗"` via inline assertions, which would silently agree with the
+    /// new constant if a refactor changed both source + tests; this pin
+    /// is the independent anchor against that scenario. Drift is user-
+    /// visible — every link-only message in the sidebar shows a
+    /// different glyph.
+    func testLinkPrefixIsLinkEmoji() {
+        XCTAssertEqual(IMessagePreview.linkPrefix, "🔗",
+            "IMessagePreview.linkPrefix ships verbatim to every link-only sidebar row — bump test + source together when changing the glyph")
+    }
 }

@@ -17,6 +17,16 @@ enum IMessagePreview {
     static let attachmentFallback = "📎 Attachment"
     static let nonTextFallback    = "[non-text message]"
 
+    /// Prefix used by `displayString` when a body collapses to a single
+    /// URL — the resulting preview is `linkPrefix + " " + host`. Hoisted
+    /// alongside `attachmentFallback`/`nonTextFallback` so all three
+    /// sidebar-preview presentation tokens live in one place. Drift here
+    /// silently changes how every link-only message renders in the
+    /// sidebar (and how `Stats` would categorize "link" rows if a future
+    /// counter splits them out). Pinned by
+    /// `IMessagePreviewTests.testLinkPrefixIsLinkEmoji`.
+    static let linkPrefix = "🔗"
+
     /// Object-replacement character. `AttributedBodyDecoder` surfaces
     /// this for attachment blobs; UIKit/AppKit use it for inline
     /// attachments in `NSAttributedString`.
@@ -42,7 +52,7 @@ enum IMessagePreview {
         // URL: exactly one token, parses as an absolute URL with a
         // host. Strip the scheme and path — the host is the signal.
         if let host = singleURLHost(in: trimmed) {
-            return "🔗 \(host)"
+            return "\(linkPrefix) \(host)"
         }
 
         return body
