@@ -667,6 +667,29 @@ final class IMessageSenderTests: XCTestCase {
                       "legacy SMS send must synthesize 1:1 GUID 'SMS;-;<id>'; got: \(script)")
     }
 
+    /// All-cases pin: every Channel except .imessage and .sms must throw
+    /// `.unsupported` from the legacy by-identifier overload. Catches a
+    /// future refactor that adds a new Channel case (e.g. .discord, .signal)
+    /// without updating the IMessageSender guard — the new channel would
+    /// silently fall through to AppleScript send-by-identifier semantics,
+    /// which only Messages.app understands.
+    func testLegacyByIdentifierUnsupportedForEveryNonAppleChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        for ch in Channel.allCases where ch != .imessage && ch != .sms {
+            XCTAssertThrowsError(
+                try IMessageSender.send("hi", toChatIdentifier: "anything", channel: ch),
+                "channel \(ch) must throw unsupported from legacy by-identifier path"
+            ) { err in
+                guard case IMessageSender.SendError.unsupported = err else {
+                    return XCTFail("channel \(ch) must throw .unsupported, got \(err)")
+                }
+            }
+        }
+    }
+
     /// Pin: the legacy by-identifier path correctly rejects an empty id.
     /// `send(text, toChatIdentifier: "", channel: .imessage)` synthesizes
     /// `"iMessage;-;"` which `isValidIMessageGUID` rejects (parts[2] is
