@@ -53,6 +53,49 @@ final class AppleScriptMessageReaderTests: XCTestCase {
                        "5551212")
     }
 
+    /// 11-digit non-US number (no leading "1") must NOT be reformatted as
+    /// "+1 (XXX) XXX-XXXX" — that would mangle a UK or AU number into a
+    /// false North American format. The implementation matches `where
+    /// digits.hasPrefix("1")` specifically; pin the non-1-prefix path so a
+    /// future "all 11-digit numbers" generalization shows up here as a
+    /// deliberate behavior change rather than a quiet user-data bug.
+    func testPrettyPhone11DigitsWithoutLeadingOnePassesThrough() {
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone("44207946001"),
+                       "44207946001",
+                       "UK-shaped 11-digit number must NOT be reformatted into US +1 layout")
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone("61286010001"),
+                       "61286010001",
+                       "AU-shaped 11-digit number must NOT be reformatted into US +1 layout")
+    }
+
+    /// 12+ digit numbers (international with country code in `+` form, no
+    /// `+` to strip) hit the default branch and pass through. Pin the
+    /// behavior so adding a new case (e.g. 12-digit UK with full country
+    /// code) is a deliberate edit visible in this test.
+    func testPrettyPhone12PlusDigitsPassesThrough() {
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone("442079460012"),
+                       "442079460012")
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone("9876543210123"),
+                       "9876543210123")
+    }
+
+    /// Empty input is a degenerate case but must not crash — the digit
+    /// filter produces an empty string with count 0, switch hits default,
+    /// returns "" unchanged. Pin so a future `dropFirst(1)` on an empty
+    /// digit string can't slip through and crash with a precondition.
+    func testPrettyPhoneEmptyStringPassesThrough() {
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone(""), "")
+    }
+
+    /// Letters mixed with digits: digit count is right but the input has a
+    /// `(`/space/`@` sentinel (or none of those — all letters/digits). The
+    /// guard prefers passing through anything with `(` already in it; "abc"
+    /// has no digits so digit count is 0, default branch, passes through.
+    func testPrettyPhoneAlphanumericPassesThrough() {
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone("abc"), "abc",
+            "non-numeric input falls to default branch and round-trips")
+    }
+
     // MARK: - recentChats parsing
 
     /// Canned-executor shorthand. `result` becomes the AppleScript stdout the
