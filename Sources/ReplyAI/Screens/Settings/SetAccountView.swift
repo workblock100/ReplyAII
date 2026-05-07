@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Account Settings pane. Currently a static prototype — fields render
+/// hardcoded "Jordan Song" demo values rather than reading from a real
+/// account model, because ReplyAI's first release is licensed per-Mac
+/// with no account system. When the cloud-sync work in REP-iCloud lands,
+/// this view becomes the entry point for sign-in / sign-out.
 struct SetAccountView: View {
     var body: some View {
         SettingsShell(active: .account) {

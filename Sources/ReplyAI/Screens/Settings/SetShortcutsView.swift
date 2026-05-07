@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Shortcuts Settings pane. The hardcoded `rows` array is the canonical
+/// reference for the keyboard-first promise — every shortcut in this
+/// list must also appear in the menu-bar Shortcuts submenu and in the
+/// composer's keyboard-hints footer. When adding a new global shortcut,
+/// update this list AND `AGENTS.md` so the documentation, the UI, and
+/// the menu structure stay in lockstep. (Rebinding is not yet wired —
+/// the description text currently says "click to rebind" as a forward-
+/// looking promise.)
 struct SetShortcutsView: View {
     private let rows: [(k: String, l: String)] = [
         ("⌘↵",    "Send current draft"),

@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Privacy Settings pane. The privacy story is the product's primary
+/// trust mechanism — the LLM runs on-device, message text never leaves
+/// the Mac, and the only outbound network calls are license checks and
+/// crash reports (both opt-out). The view binds three `@AppStorage`
+/// keys directly so toggles persist instantly without round-tripping
+/// through the view model — the user never wants to wonder whether a
+/// privacy toggle "took."
 struct SetPrivacyView: View {
     @AppStorage(PreferenceKey.crashReports)   private var crashReports   = PreferenceDefaults.crashReports
     @AppStorage(PreferenceKey.licenseUpdates) private var licenseUpdates = PreferenceDefaults.licenseUpdates

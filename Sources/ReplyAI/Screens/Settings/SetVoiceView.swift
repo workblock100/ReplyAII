@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Voice profile Settings pane. Currently a static prototype — the
+/// "fine-tuned on 2,014 messages" copy and the signal/strength cards
+/// render placeholder values. The real voice-fine-tuning pipeline is
+/// not shipped yet (depends on REP-VOICE chain). Keeping the prototype
+/// in tree so the navigation structure stays stable; once the pipeline
+/// lands, swap the static cards for live `VoiceProfile` reads.
 struct SetVoiceView: View {
     var body: some View {
         SettingsShell(active: .voice) {
