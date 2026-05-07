@@ -41,13 +41,24 @@ enum IMessageSender {
     /// we surface an error so the user sees a clear failure instead.
     static let maxMessageLength = 4096
 
+    /// Production default for `sendTimeout`. Hoisted to a `let` constant
+    /// so tests can pin the production cadence without round-tripping
+    /// through the mutable `sendTimeout` (which other tests temporarily
+    /// override and may not always restore in test-order edge cases).
+    static let defaultSendTimeout: TimeInterval = 10
+
     /// Maximum wall-clock seconds to wait for NSAppleScript.executeAndReturnError.
     /// Defaults to 10 s in production; inject a shorter value in tests.
-    nonisolated(unsafe) static var sendTimeout: TimeInterval = 10
+    nonisolated(unsafe) static var sendTimeout: TimeInterval = defaultSendTimeout
+
+    /// Production default for `retryDelay`. Hoisted to a `let` constant so
+    /// the production cadence can be pinned independently of the mutable
+    /// `retryDelay` (see `defaultSendTimeout` rationale).
+    static let defaultRetryDelay: TimeInterval = 0.5
 
     /// Delay between a -1708 failure and the retry attempt.
     /// Defaults to 0.5 s in production; set to 0.0 in tests to avoid slow paths.
-    nonisolated(unsafe) static var retryDelay: TimeInterval = 0.5
+    nonisolated(unsafe) static var retryDelay: TimeInterval = defaultRetryDelay
 
     /// Test-only hook: when non-nil, replaces the real NSAppleScript execution.
     /// Receives the compiled AppleScript source string; runs synchronously on a

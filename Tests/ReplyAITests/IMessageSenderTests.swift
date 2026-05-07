@@ -948,6 +948,38 @@ final class IMessageSenderCombinedEscapeTests: XCTestCase {
         XCTAssertTrue(copy.contains("4096"),
                       "messageTooLong copy must reference 4096 directly so the user sees the actual boundary; got: \(copy)")
     }
+
+    // MARK: - Production timing default contracts
+    //
+    // `sendTimeout` and `retryDelay` are mutable `static var`s so tests
+    // can override them. That same mutability means the runtime value
+    // can drift away from the production literal silently (a test that
+    // forgets to restore in tearDown leaks state into later tests; a
+    // future refactor that "tunes" the wait could land without anyone
+    // noticing). Pin against the immutable `defaultSendTimeout` /
+    // `defaultRetryDelay` constants — those are what the production
+    // initializer references, so they survive any test-mutation noise.
+
+    /// 10s is the AppleScript send budget. Drop it and Messages.app's
+    /// busy-with-iCloud-sync window starts producing spurious `.timedOut`
+    /// errors that look like Messages.app rejecting our chat — a real
+    /// production telemetry signal would get drowned in test-induced noise.
+    /// Raise it past ~15s and the user perceives the Send button as hung.
+    func testDefaultSendTimeoutIsTenSeconds() {
+        XCTAssertEqual(IMessageSender.defaultSendTimeout, 10,
+                       "production sendTimeout default is shipped UX — see test rationale")
+    }
+
+    /// 0.5s is the gap between a `-1708` AppleScript failure (Messages.app
+    /// hadn't finished compositing) and the retry. Drop to 0 and the
+    /// retry hits the same not-ready Messages.app surface; raise above
+    /// ~1s and the user sees a multi-second hang on every transient
+    /// failure. The retry path is what masks that flake from users —
+    /// tuning the delay is a real product call, pinned here.
+    func testDefaultRetryDelayIsHalfSecond() {
+        XCTAssertEqual(IMessageSender.defaultRetryDelay, 0.5,
+                       "production retryDelay default is shipped UX — see test rationale")
+    }
 }
 
 /// Pin the AppleScript template that `IMessageSender.sendRaw` emits. The
