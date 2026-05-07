@@ -184,15 +184,15 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         // empty handle into applyIncomingNotification and (because
         // `chatGUID.hasSuffix("")` is true for every string) match the
         // first thread by accident.
-        let rawSender = content.userInfo["sender"] as? String
+        let rawSender = content.userInfo[UNNotificationContentParser.UserInfoKey.sender] as? String
         let senderHandle = (rawSender?.isEmpty == false ? rawSender : nil) ?? content.title
         let preview = content.body
         // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
         // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
         // Empty strings on either key are filtered to nil so the present-but-empty
         // case can't bypass the senderHandle/name fallback (see handleIncomingNotification).
-        let rawIdentifier = content.userInfo["CKChatIdentifier"] as? String
-        let rawGUID = content.userInfo["CKChatGUID"] as? String
+        let rawIdentifier = content.userInfo[UNNotificationContentParser.UserInfoKey.ckChatIdentifier] as? String
+        let rawGUID = content.userInfo[UNNotificationContentParser.UserInfoKey.ckChatGUID] as? String
         let chatGUID = (rawIdentifier?.isEmpty == false ? rawIdentifier : nil)
             ?? (rawGUID?.isEmpty == false ? rawGUID : nil)
         Task { @MainActor in
