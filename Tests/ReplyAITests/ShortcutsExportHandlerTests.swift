@@ -240,6 +240,59 @@ final class ShortcutsExportHandlerTests: XCTestCase {
             "thread.name is the raw displayName, also empty here")
     }
 
+    /// Both `preview` AND `messages` missing — the parser cascades through
+    /// `preview ?? messages?.last?.text ?? ""` and lands on the empty string
+    /// rather than throwing. Justification: the JSON itself is structurally
+    /// valid (no required field is absent) and the inbox can render an empty
+    /// preview row, so failing the entire URL would be more surprising than
+    /// passing an empty thread through. Pin the empty-preview path so a
+    /// well-meaning future change ("threads without previews are useless,
+    /// throw instead") doesn't drop user-triggered exports on the floor.
+    func testEmptyPayloadWithNoPreviewAndNoMessagesProducesEmptyPreview() throws {
+        let json = """
+        [{ "id": "x", "displayName": "Maya", "channel": "imessage" }]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.preview, "",
+                       "missing preview AND missing messages must cascade to empty string, not throw")
+        XCTAssertEqual(exports[0].thread.time, "",
+                       "thread.time must also fall through to empty when no messages are available to source it from")
+        XCTAssertTrue(exports[0].messages.isEmpty)
+    }
+
+    /// `from` field that isn't "me" (any case) maps to `.them`. Specifically pin
+    /// "system" / arbitrary strings / empty string — without this, a future
+    /// schema change adding a "system" sender would silently land in `.them`
+    /// and look like a contact bubble. The current parser's "anything-not-me
+    /// is them" semantics are intentional (Shortcuts is single-author per
+    /// pull) and we want it to surface in CI if it changes.
+    func testFromFieldUnrecognizedValuesMapToThem() throws {
+        let json = """
+        [
+          { "id": "x", "displayName": "Maya", "channel": "imessage",
+            "messages": [
+              { "from": "system",  "text": "auto-reply" },
+              { "from": "",        "text": "blank from" },
+              { "from": "contact", "text": "labeled contact" }
+            ]
+          }
+        ]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].messages.count, 3)
+        for (i, m) in exports[0].messages.enumerated() {
+            XCTAssertEqual(m.from, .them,
+                           "unrecognized `from` value at index \(i) must default to .them, not silently appear as the user")
+        }
+    }
+
     func testPreviewFallsBackToLastMessageWhenMissing() throws {
         let json = """
         [
