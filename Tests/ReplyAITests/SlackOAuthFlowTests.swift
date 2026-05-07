@@ -128,6 +128,39 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertTrue(scope.contains("chat:write"), "scope must include chat:write, got: \(scope)")
     }
 
+    /// Exact-literal pin on the OAuth scope string. The existing
+    /// `testSlackOAuthOpensCorrectAuthURL` test only asserts that the
+    /// scope string `contains` the two expected scopes — it would still
+    /// pass if a refactor added `groups:read,im:read,im:write,…` to the
+    /// list. Pin the EXACT comma-separated value so a widening of the
+    /// scope set (which forces re-consent for every existing user, and
+    /// invalidates their currently stored token's capabilities) shows
+    /// up here as a deliberate test change rather than a silent release.
+    func testAuthURLScopeIsExactCommaSeparatedSet() {
+        let opener = MockURLOpener()
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: opener,
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "scope-pin-code") }
+        )
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "xoxb-pin"]
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        guard let url = opener.openedURL,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            XCTFail("URLOpener was not called with a valid URL")
+            return
+        }
+        let items = components.queryItems ?? []
+        let scope = items.first(where: { $0.name == "scope" })?.value ?? ""
+        XCTAssertEqual(scope, "channels:read,chat:write",
+            "scope literal is the exact, ordered set ReplyAI requests; widening it re-consents every existing user and invalidates their stored token's capabilities — the change should be deliberate, not silent")
+    }
+
     // MARK: - testSlackOAuthExchangesCodeForToken
 
     /// Listener delivers code → URLSession POST contains correct code, client_id, client_secret.
