@@ -295,4 +295,15 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         XCTAssertEqual(reader.conversationNames(), ["Real row"],
                        "only the exact AXRow role should match — adjacent role names are ignored")
     }
+
+    /// `AccessibilityAPIReader.conversationRowRole` is the AX role string
+    /// `collectNames` matches descendants against. Drift to `"AXListRow"`,
+    /// `"AXTableRow"`, etc. silently returns [] from `conversationNames()`
+    /// without throwing — the user sees an empty sidebar fallback while the
+    /// Accessibility grant remains valid. Pin the literal so a "let's
+    /// normalize role names" edit lands in code review.
+    func testConversationRowRoleConstantIsAXRow() {
+        XCTAssertEqual(AccessibilityAPIReader.conversationRowRole, "AXRow",
+                       "drift in conversationRowRole silently returns [] from conversationNames() — Messages.app sidebar rows always emit role 'AXRow'")
+    }
 }

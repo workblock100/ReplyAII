@@ -66,6 +66,16 @@ struct DefaultAXElementFactory: AXElementFactory {
 /// fully unit-testable without a running process or a real AX grant.
 final class AccessibilityAPIReader {
 
+    /// AX role identifier for sidebar conversation rows in Messages.app.
+    /// `collectNames` matches descendants whose `role` equals this exact
+    /// string; drift to e.g. `"AXListRow"` (which Messages.app does NOT
+    /// emit) silently returns [] without throwing — the user sees an empty
+    /// sidebar fallback while the Accessibility grant remains valid.
+    /// Apple's documented AX role for table-row-style sidebars is `AXRow`
+    /// and Messages.app has used it consistently since macOS 10.10.
+    /// Pinned by `AccessibilityAPIReaderTests.testConversationRowRoleConstantIsAXRow`.
+    static let conversationRowRole = "AXRow"
+
     /// Returns the PID for com.apple.MobileSMS, or nil if the process is not running.
     var pidProvider: () -> pid_t?
 
@@ -107,7 +117,7 @@ final class AccessibilityAPIReader {
     /// Messages.app sidebar rows carry their conversation name in kAXTitleAttribute.
     private func collectNames(from element: any AXElement) -> [String] {
         var names: [String] = []
-        if element.role == "AXRow", let title = element.title, !title.isEmpty {
+        if element.role == Self.conversationRowRole, let title = element.title, !title.isEmpty {
             names.append(title)
         }
         for child in element.children {
