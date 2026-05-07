@@ -221,6 +221,133 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
     }
 }
 
+// MARK: - InboxViewModel.applyRules(for:) direct contract (autopilot 2026-05-07)
+
+@MainActor
+final class InboxViewModelApplyRulesTests: XCTestCase {
+
+    private func tempRulesURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMApplyRulesTests-\(UUID())/rules.json")
+    }
+
+    private func makeVM(threads: [MessageThread], rules: RulesStore) -> InboxViewModel {
+        let suite = "test.ReplyAI.applyRules.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMApplyRulesTests-\(UUID().uuidString).json")
+        let noopChannel = BlockingMockChannel()
+        noopChannel.blocking = false
+        return InboxViewModel(
+            threads: threads, imessage: noopChannel,
+            contacts: fastContacts(), rules: rules,
+            defaults: defaults, threadsCacheURL: cacheURL
+        )
+    }
+
+    private func makeStore() throws -> RulesStore {
+        let url = tempRulesURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let store = RulesStore(fileURL: url)
+        store.resetToSeeds()
+        store.rules.forEach { store.remove($0.id) }
+        return store
+    }
+
+    func testApplyRulesPinActionPinsTargetThread() throws {
+        let store = try makeStore()
+        let thread = MessageThread(
+            id: "p1", channel: .imessage, name: "Carol Lee",
+            avatar: "C", preview: "", time: "", pinned: false)
+        let vm = makeVM(threads: [thread], rules: store)
+
+        try store.add(SmartRule(name: "pin carol", when: .senderIs("Carol Lee"), then: .pin))
+
+        vm.applyRules(for: thread)
+
+        XCTAssertTrue(vm.pinnedThreadIDs.contains("p1"),
+                      "applyRules must add the threadID to pinnedThreadIDs when a matching pin rule is present")
+    }
+
+    func testApplyRulesSetDefaultToneUpdatesActiveTone() throws {
+        let store = try makeStore()
+        let thread = MessageThread(
+            id: "t1", channel: .imessage, name: "Dana Park",
+            avatar: "D", preview: "", time: "")
+        let vm = makeVM(threads: [thread], rules: store)
+        vm.activeTone = .warm
+
+        try store.add(SmartRule(
+            name: "direct dana", when: .senderIs("Dana Park"), then: .setDefaultTone(.direct)))
+
+        vm.applyRules(for: thread)
+
+        XCTAssertEqual(vm.activeTone, .direct,
+                       "applyRules must update activeTone when a matching setDefaultTone rule is present (this is the contract that distinguishes applyRules from reEvaluateRulesForAllThreads — applyRules updates regardless of selectedThreadID)")
+    }
+
+    func testApplyRulesSetDefaultToneIsIdempotent() throws {
+        let store = try makeStore()
+        let thread = MessageThread(
+            id: "t1", channel: .imessage, name: "Erin Ko",
+            avatar: "E", preview: "", time: "")
+        let vm = makeVM(threads: [thread], rules: store)
+        vm.activeTone = .playful
+
+        try store.add(SmartRule(
+            name: "playful erin", when: .senderIs("Erin Ko"), then: .setDefaultTone(.playful)))
+
+        vm.applyRules(for: thread)
+
+        // Already playful — must remain playful, no oscillation.
+        XCTAssertEqual(vm.activeTone, .playful,
+                       "applyRules must be a no-op when the matching setDefaultTone matches the current activeTone")
+    }
+
+    func testApplyRulesArchiveActionIsNoOpInThisCallSite() throws {
+        let store = try makeStore()
+        let thread = MessageThread(
+            id: "a1", channel: .imessage, name: "Frank Rizzo",
+            avatar: "F", preview: "", time: "")
+        let vm = makeVM(threads: [thread], rules: store)
+
+        try store.add(SmartRule(
+            name: "archive frank", when: .senderIs("Frank Rizzo"), then: .archive))
+
+        vm.applyRules(for: thread)
+
+        // archive/markDone/silentlyIgnore intentionally fall to the
+        // `continue` branch in applyRules — they require the
+        // incoming-message pipeline to fire them, not the per-thread
+        // priming call. This pins that contract.
+        XCTAssertFalse(vm.archivedThreadIDs.contains("a1"),
+                       "applyRules must NOT archive in response to an archive rule — that branch falls through; archiving is dispatched by the incoming-message pipeline")
+        XCTAssertEqual(vm.threads.count, 1,
+                       "thread list must remain intact after applyRules with an archive rule")
+    }
+
+    func testApplyRulesNonMatchingRuleLeavesEverythingUnchanged() throws {
+        let store = try makeStore()
+        let thread = MessageThread(
+            id: "t1", channel: .imessage, name: "Grace Liu",
+            avatar: "G", preview: "", time: "", pinned: false)
+        let vm = makeVM(threads: [thread], rules: store)
+        vm.activeTone = .warm
+
+        // Rule targets a different sender.
+        try store.add(SmartRule(name: "pin someone-else",
+                                when: .senderIs("Someone Else"), then: .pin))
+
+        vm.applyRules(for: thread)
+
+        XCTAssertFalse(vm.pinnedThreadIDs.contains("t1"),
+                       "applyRules with a non-matching rule must not pin")
+        XCTAssertEqual(vm.activeTone, .warm,
+                       "applyRules with a non-matching rule must not change activeTone")
+    }
+}
+
 // MARK: - Notification reply consumption (REP-072)
 
 @MainActor
