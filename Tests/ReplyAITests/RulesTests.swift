@@ -2662,6 +2662,21 @@ final class ValidateRegexBoundaryCasesTests: XCTestCase {
                          "empty pattern passes validation (early-return) and must not throw")
     }
 
+    /// Sibling pin for the other regex predicate — `threadNameMatchesRegex`
+    /// shares the same evaluator pattern (`try? NSRegularExpression(pattern:)`,
+    /// short-circuit on nil) so empty-pattern behavior is identical: never
+    /// fires. Pin for symmetry with textMatchesRegex.
+    func testEmptyThreadNameMatchesRegexNeverFiresAtRuntime() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "body",
+            isUnread: true, unreadCount: 1, senderKnown: true,
+            chatIdentifier: "t1", hasAttachment: false, threadDisplayName: "Maya Lee"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.threadNameMatchesRegex(pattern: ""), in: ctx),
+            "empty threadNameMatchesRegex pattern returns false at runtime — same shape as textMatchesRegex")
+    }
+
     /// Companion to `testEmptyPatternAccepted`. Pin the actual runtime behavior:
     /// despite passing validation, an empty regex pattern never fires against
     /// any context. The historical doc-comment claimed "catch-all" semantics —
