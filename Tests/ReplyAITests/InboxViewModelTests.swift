@@ -2390,6 +2390,61 @@ final class InboxViewModelLoadMessagesTests: XCTestCase {
     }
 }
 
+// MARK: - InboxViewModel.chatDBAvailable per SyncStatus (autopilot 2026-05-07)
+
+@MainActor
+final class InboxViewModelChatDBAvailableTests: XCTestCase {
+
+    private func makeVM() -> InboxViewModel {
+        let suite = "test.ReplyAI.chatDBAvail.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMChatDBAvailTests-\(UUID().uuidString).json")
+        let ch = BlockingMockChannel(); ch.blocking = false
+        return InboxViewModel(
+            threads: [], imessage: ch,
+            contacts: fastContacts(),
+            defaults: defaults,
+            threadsCacheURL: cacheURL
+        )
+    }
+
+    func testChatDBAvailableFalseWhenIdle() {
+        let vm = makeVM()
+        vm.syncStatus = .idle
+        XCTAssertFalse(vm.chatDBAvailable,
+                       ".idle (showing fixtures, no sync attempted yet) must NOT be considered chat.db-available")
+    }
+
+    func testChatDBAvailableFalseWhenSyncing() {
+        let vm = makeVM()
+        vm.syncStatus = .syncing
+        XCTAssertFalse(vm.chatDBAvailable,
+                       ".syncing must NOT report chat.db as available — the in-flight sync hasn't proven a working DB yet, and applyIncomingNotification needs to fire (UNNotification fallback)")
+    }
+
+    func testChatDBAvailableTrueWhenLive() {
+        let vm = makeVM()
+        vm.syncStatus = .live(at: Date())
+        XCTAssertTrue(vm.chatDBAvailable,
+                      ".live(at:) is the only state that signals a working chat.db sync; UNNotification path must short-circuit")
+    }
+
+    func testChatDBAvailableFalseWhenDenied() {
+        let vm = makeVM()
+        vm.syncStatus = .denied(hint: "FDA needed")
+        XCTAssertFalse(vm.chatDBAvailable,
+                       ".denied must NOT be considered available — UNNotification fallback path must run for incoming notifications")
+    }
+
+    func testChatDBAvailableFalseWhenFailed() {
+        let vm = makeVM()
+        vm.syncStatus = .failed("query error")
+        XCTAssertFalse(vm.chatDBAvailable,
+                       ".failed must NOT be considered available — UNNotification fallback path must run")
+    }
+}
+
 // MARK: - REP-218: archive removes thread from SearchIndex
 
 @MainActor
