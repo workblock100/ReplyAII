@@ -35,7 +35,7 @@ struct AppPrototypeView: View {
             // surface an existing inbox window via AppKit; this fallback runs
             // only if no inbox window was open, in which case `openWindow`
             // (only callable from a View) creates one.
-            openWindow(id: "inbox")
+            openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
         }
     }
 
@@ -71,7 +71,7 @@ struct AppPrototypeView: View {
                 navButton(title: "‹ prev") { screen = ScreenInventory.previous(before: screen) }
                 navButton(title: "next ›") { screen = ScreenInventory.next(after: screen) }
                 Button {
-                    openWindow(id: "inbox")
+                    openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
                 } label: {
                     Text("Open inbox →")
                         .font(Theme.Font.sans(11, weight: .semibold))

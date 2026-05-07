@@ -46,7 +46,7 @@ struct ObDoneView: View {
             .padding(.top, 12)
         } cta: {
             PrimaryButton(title: "Open ReplyAI", icon: "arrow.right", height: 46, fontSize: 14) {
-                openWindow(id: "inbox")
+                openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
             }
         } secondary: {
             Text("⌘⇧R works from anywhere now.")

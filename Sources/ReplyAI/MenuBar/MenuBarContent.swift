@@ -65,7 +65,7 @@ struct MenuBarContent: View {
                 ForEach(waitingThreads) { t in
                     Button {
                         model.selectThread(t.id)
-                        openWindow(id: "inbox")
+                        openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
                     } label: {
                         threadRow(t)
                     }
@@ -106,7 +106,7 @@ struct MenuBarContent: View {
     private var footerActions: some View {
         HStack(spacing: 8) {
             Button {
-                openWindow(id: "inbox")
+                openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
             } label: {
                 Text("Open inbox")
                     .font(Theme.Font.sans(12, weight: .semibold))

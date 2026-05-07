@@ -114,6 +114,15 @@ enum ReplyAIWindowSummoner {
     /// `GlobalHotkeyContractTests.testInboxWindowTitleConstantIsInbox`.
     static let inboxWindowTitle = "Inbox"
 
+    /// Scene id used by `WindowGroup(_, id:)` in `ReplyAIApp` and every
+    /// `openWindow(id:)` call site (MenuBarContent, AppPrototypeView,
+    /// ObDoneView). Drift on the WindowGroup side leaves `openWindow`
+    /// callers spinning up a no-such-id scene (silent no-op); drift on
+    /// any caller routes that one button to a stale id (button no-ops
+    /// while the others continue to work). Pinned by
+    /// `GlobalHotkeyContractTests.testInboxWindowIDConstantIsInbox`.
+    static let inboxWindowID = "inbox"
+
     static func summon() {
         NSApp.activate(ignoringOtherApps: true)
         // Fast path: an existing inbox window? Surface it directly via AppKit

@@ -37,6 +37,20 @@ final class GlobalHotkeyContractTests: XCTestCase {
             "inboxWindowTitle drift desyncs the WindowGroup label and the AppKit fast-path lookup — every ⌘⇧R falls back to the slower notification path")
     }
 
+    /// `ReplyAIWindowSummoner.inboxWindowID` is the scene id used by
+    /// `WindowGroup(_, id:)` in ReplyAIApp and every `openWindow(id:)`
+    /// call site (MenuBarContent, AppPrototypeView, ObDoneView). Drift on
+    /// the WindowGroup side leaves `openWindow` callers spinning up a
+    /// no-such-id scene (silent no-op); drift on any caller routes that
+    /// one button to a stale id (button no-ops while the others continue
+    /// to work). Pin the literal so a "let's namespace it" edit lands
+    /// once with deliberate review.
+    @MainActor
+    func testInboxWindowIDConstantIsInbox() {
+        XCTAssertEqual(ReplyAIWindowSummoner.inboxWindowID, "inbox",
+            "inboxWindowID drift partially breaks SwiftUI scene routing — buttons routed through stale ids silently no-op while siblings continue to work")
+    }
+
     /// `ReplyAIWindowSummoner.summon()` falls back to posting the summon
     /// notification when no NSWindow with title "Inbox" exists. That fallback
     /// is the path SwiftUI uses to call `openWindow(id: "inbox")` and the

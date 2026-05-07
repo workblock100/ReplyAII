@@ -86,7 +86,7 @@ struct ReplyAIApp: App {
 
         // Secondary window: the real inbox, standalone. Opened by the
         // menu-bar "Open inbox" button and from palette shortcuts.
-        WindowGroup(ReplyAIWindowSummoner.inboxWindowTitle, id: "inbox") {
+        WindowGroup(ReplyAIWindowSummoner.inboxWindowTitle, id: ReplyAIWindowSummoner.inboxWindowID) {
             InboxScreen()
                 .environment(coordinator)
         }
