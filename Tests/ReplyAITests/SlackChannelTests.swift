@@ -327,6 +327,33 @@ final class SlackChannelTests: XCTestCase {
             "present-but-empty `user` is currently classified as .them — pin so a future tightening to .me is deliberate")
     }
 
+    /// Pin the empty-text round-trip: `text: ""` and `text: nil` both
+    /// produce `Message.text == ""`. Realistic case: a Slack file-share
+    /// or attachment-only post with no text body. Empty messages must
+    /// survive the parser and reach the inbox so the user sees a
+    /// "thread updated" signal even when there's no text to show.
+    /// Companion to PromptBuilder's empty-text retention pin.
+    func testMessagesWithEmptyOrMissingTextSurviveParsing() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000000.0003", "user": "U1", "text": ""},
+                {"ts": "1700000001.0001", "user": "U2"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 2, "both empty-text and missing-text messages survive parsing")
+        // Slack returns newest-first; parser reverses to oldest-first, so order is U1 then U2.
+        XCTAssertEqual(msgs.first?.text, "", "empty text round-trips as empty string")
+        XCTAssertEqual(msgs.last?.text, "", "missing text defaults to empty string via `?? \"\"`")
+    }
+
     // MARK: - Identity
 
     func testSlackChannelIdentifiesAsSlack() {
