@@ -142,4 +142,34 @@ final class LLMServiceTests: XCTestCase {
         XCTAssertEqual(StubLLMService.tokenize("hello"), ["hello"],
             "single word with no delimiters must emit one token, not split per-char")
     }
+
+    // MARK: - Production timing defaults
+    //
+    // `StubLLMService(tokenDelay:initialDelay:)` defaults control the
+    // demo composer's perceived "typing speed". Tests routinely override
+    // both to zero for deterministic timing, which means a regression
+    // that doubles either default (a copy-paste bug, an accidental
+    // unit-conversion error) would never surface in test output. Pin
+    // the production literals so a perceived-latency drift in demo
+    // mode (the only path StubLLMService runs in production) shows up
+    // here as a deliberate edit.
+
+    /// 180 ms cold-start "thinking" pause before the first token streams.
+    /// Faster looks fake; slower looks broken. Pin the literal.
+    func testInitialDelayDefaultIs180Ms() {
+        let svc = StubLLMService()
+        XCTAssertEqual(svc.initialDelay, 180_000_000,
+            "initialDelay default is the perceived 'thinking' beat before tokens stream — drift here changes demo-composer cadence")
+    }
+
+    /// 22–58 ms per-token jitter range. Both ends matter: 22 ms is the
+    /// floor that keeps tokens visible as separate words; 58 ms is the
+    /// ceiling that prevents the composer from feeling stalled.
+    func testTokenDelayDefaultIs22To58Ms() {
+        let svc = StubLLMService()
+        XCTAssertEqual(svc.tokenDelay.lowerBound, 22_000_000,
+            "tokenDelay lower bound — drift below ~22ms makes streaming look instant; above stalls perceived word emission")
+        XCTAssertEqual(svc.tokenDelay.upperBound, 58_000_000,
+            "tokenDelay upper bound — drift above ~58ms makes the composer feel slow")
+    }
 }
