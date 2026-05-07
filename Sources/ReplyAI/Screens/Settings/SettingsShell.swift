@@ -3,6 +3,11 @@ import SwiftUI
 /// Two-column shell shared by all six Settings screens.
 /// Left: 240px nav. Right: flexible content with 40px padding and its own scroll.
 struct SettingsShell<Content: View>: View {
+    /// One row in the left nav. Case order drives display order. Adding
+    /// a new pane requires a new case here, a label match below, AND a
+    /// route in the parent `SettingsView` — keeping all three local
+    /// means a missing pane fails to compile rather than rendering a
+    /// dead nav row.
     enum Tab: String, CaseIterable, Identifiable {
         case account, voice, channels, shortcuts, privacy, model
         var id: String { rawValue }
