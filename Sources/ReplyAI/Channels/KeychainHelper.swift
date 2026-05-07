@@ -12,6 +12,14 @@ import Security
 /// `keychainService` constant for the exact value (pinned by
 /// `ChannelStubKeychainContractTests`).
 struct KeychainHelper: Sendable {
+    /// Account-prefix every Keychain entry written by ReplyAI carries.
+    /// Lets factory-reset sweep all our entries via a prefix query
+    /// without iterating every service. Drift on this prefix orphans
+    /// every existing user's stored channel tokens — they appear as a
+    /// fresh "not connected" state with no migration path. Pinned by
+    /// `KeychainHelperTests` (literal `"ReplyAI-"` references).
+    static let accountPrefix = "ReplyAI-"
+
     let service: String
 
     init(service: String = "co.replyai.app") {
@@ -21,7 +29,7 @@ struct KeychainHelper: Sendable {
     /// Write (or overwrite) a string value for the given key.
     func set(value: String, for key: String) throws {
         let data = Data(value.utf8)
-        let prefixedKey = "ReplyAI-\(key)"
+        let prefixedKey = "\(KeychainHelper.accountPrefix)\(key)"
 
         // Attempt update of an existing item; add if absent.
         let baseQuery: [CFString: Any] = [
@@ -48,7 +56,7 @@ struct KeychainHelper: Sendable {
         let query: [CFString: Any] = [
             kSecClass:            kSecClassGenericPassword,
             kSecAttrService:      service,
-            kSecAttrAccount:      "ReplyAI-\(key)",
+            kSecAttrAccount:      "\(KeychainHelper.accountPrefix)\(key)",
             kSecMatchLimit:       kSecMatchLimitOne,
             kSecReturnData:       kCFBooleanTrue as Any
         ]
@@ -63,7 +71,7 @@ struct KeychainHelper: Sendable {
         let query: [CFString: Any] = [
             kSecClass:       kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: "ReplyAI-\(key)"
+            kSecAttrAccount: "\(KeychainHelper.accountPrefix)\(key)"
         ]
         SecItemDelete(query as CFDictionary)
     }

@@ -375,4 +375,17 @@ final class SlackTokenStoreTests: XCTestCase {
         XCTAssertEqual(result?.workspaceName, unicode,
             "Unicode in workspace names must round-trip verbatim through Keychain JSON")
     }
+
+    /// Pin the named-constant single-source-of-truth. Existing tests
+    /// pin the literal `"ReplyAI-"` prefix at three call sites
+    /// (set/get/delete) by direct kSecAttrAccount lookup. This pin
+    /// ties those three uses to a single named constant so a refactor
+    /// that bumped the prefix on two of three sites leaves the third
+    /// orphaning every existing user's stored token. The named
+    /// constant landing without the inline literals being updated
+    /// (or vice versa) would surface here.
+    func testAccountPrefixIsSingleSourceOfTruth() {
+        XCTAssertEqual(KeychainHelper.accountPrefix, "ReplyAI-",
+            "accountPrefix drift orphans every existing user's stored channel tokens — they appear `not connected` with no migration path")
+    }
 }
