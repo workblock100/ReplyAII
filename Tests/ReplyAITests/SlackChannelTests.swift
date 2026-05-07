@@ -868,6 +868,21 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertNil(msgs[0].deliveredAt,
             "deliveredAt must be nil when the timestamp can't be parsed — downstream sort logic depends on this")
     }
+
+    // MARK: - clamp constants
+
+    /// Pin the named clamp bounds. The behavior tests above already
+    /// pin the literals `200`/`1` via `recorder.lastGetParams?["limit"]`,
+    /// but they don't tie those literals to a single named constant.
+    /// A refactor that bumped `Self.maxAPILimit` to `500` and updated
+    /// the behavior fixtures in lockstep would slip past the literal-only
+    /// pins. The named-constant pin catches that combined edit.
+    func testSlackAPILimitConstantsArePinnedToProductionValues() {
+        XCTAssertEqual(SlackChannel.maxAPILimit, 200,
+            "Slack documents both conversations.list and conversations.history as `limit ≤ 200` — bumping requires a Slack API change, not a unilateral one")
+        XCTAssertEqual(SlackChannel.minAPILimit, 1,
+            "limit < 1 is undefined Slack-side; the clamp lower bound must stay at 1")
+    }
 }
 
 // MARK: - Test doubles

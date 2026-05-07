@@ -21,6 +21,21 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     let channel: Channel = .slack
     let displayName: String = "Slack"
 
+    /// Slack's documented limit for both `conversations.list` and
+    /// `conversations.history`. Sending `limit > 200` returns
+    /// `invalid_arguments` from Slack; sending `limit < 1` produces
+    /// either an error or unbounded results depending on the endpoint.
+    /// Both `recentThreads(limit:)` and `messages(forThreadID:limit:)`
+    /// clamp through `min(max(limit, 1), maxAPILimit)` — drift here
+    /// surfaces opaque API errors to users for what looks like a sane
+    /// request. Pinned by the existing clamp tests in `SlackChannelTests`
+    /// (literal `200`); this constant ties the two clamp sites to a
+    /// single named source so a future "let's bump to 500" lands once.
+    static let maxAPILimit: Int = 200
+    /// Lower bound on Slack API `limit` parameter — zero/negative values
+    /// produce undefined behavior server-side.
+    static let minAPILimit: Int = 1
+
     private let tokenStore: SlackTokenStore
     private let http: SlackHTTPClient
     private let oauthFlowFactory: SlackOAuthFlowFactory
@@ -61,7 +76,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             endpoint: "conversations.list",
             token: creds.token,
             params: [
-                "limit": String(min(max(limit, 1), 200)),
+                "limit": String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
                 // im   = direct messages
                 // mpim = multi-person group DMs
                 // public_channel + private_channel = workspace channels
@@ -81,7 +96,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             token: creds.token,
             params: [
                 "channel": id,
-                "limit": String(min(max(limit, 1), 200)),
+                "limit": String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
             ]
         )
         return try Self.parseMessages(data)
