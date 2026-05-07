@@ -37,6 +37,16 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     static let categoryID    = "REPLYAI_THREAD"
     static let replyActionID = "REPLY"
 
+    /// Presentation options returned to UN when a message notification arrives
+    /// while the app is foregrounded. `.banner` ensures the user still sees the
+    /// notification (without it, foregrounded notifications are silently
+    /// suppressed by macOS — confusing for users who expect ReplyAI to surface
+    /// every message). `.sound` plays the chime so focus-mode users still get
+    /// the audio cue. Hoisted to a constant so the bitmask is pinnable
+    /// independently of the inline arithmetic inside the nonisolated
+    /// `willPresent` callback (which has no public path for tests).
+    static let foregroundPresentationOptions: UNNotificationPresentationOptions = [.banner, .sound]
+
     /// Weak reference set by InboxScreen after InboxViewModel is alive.
     weak var inbox: InboxViewModel?
 
@@ -177,6 +187,6 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         Task { @MainActor in
             self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
         }
-        completionHandler([.banner, .sound])
+        completionHandler(Self.foregroundPresentationOptions)
     }
 }

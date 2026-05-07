@@ -197,6 +197,24 @@ final class NotificationCoordinatorTests: XCTestCase {
                        "requestPermissionIfNeeded must match setUp's option set; drift between the two paths produces a TCC dialog whose granted bitmask depends on which path ran first")
     }
 
+    // MARK: - foreground presentation options contract
+    //
+    // When a message notification arrives while the app is foregrounded,
+    // `willPresent` returns `[.banner, .sound]` so the user still sees
+    // and hears the alert. Without `.banner` macOS silently suppresses
+    // foregrounded notifications — a user who is checking the inbox would
+    // never see incoming messages from other channels, defeating the
+    // unified-inbox premise. Without `.sound`, focus-mode users miss the
+    // audio cue. The willPresent callback is `nonisolated` and takes a
+    // real UNNotification (which has no public init), so the bitmask is
+    // hoisted to a static constant the test can pin directly.
+
+    func testForegroundPresentationOptionsBitmaskIsBannerAndSound() {
+        let expected: UNNotificationPresentationOptions = [.banner, .sound]
+        XCTAssertEqual(NotificationCoordinator.foregroundPresentationOptions, expected,
+                       "foreground notification presentation must include .banner (visible alert) and .sound (audio cue) — see test rationale")
+    }
+
     // MARK: - edge cases
 
     func testHandleReplyIgnoresWrongActionIdentifier() {
