@@ -2661,3 +2661,51 @@ final class InboxViewModelRequestCancelSendTests: XCTestCase {
             "cancelSend with nothing staged must remain nil")
     }
 }
+
+// MARK: - InboxViewModel.messages(for:) — live vs fixture fallback
+
+/// `messages(for:)` is what the thread detail pane reads to populate
+/// `MessageBubble`s. Live messages from the channel win when present;
+/// otherwise the fixture fallback keeps the demo flow usable. Pin both
+/// branches.
+
+@MainActor
+final class InboxViewModelMessagesForThreadTests: XCTestCase {
+
+    private func freshVM(threads: [MessageThread] = []) -> InboxViewModel {
+        let suite = "test.ReplyAI.messagesFor.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let cacheURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("messages-for-\(UUID().uuidString).json")
+        return InboxViewModel(
+            threads: threads,
+            imessage: BlockingMockChannel(),
+            contacts: fastContacts(),
+            defaults: d,
+            threadsCacheURL: cacheURL)
+    }
+
+    func testReturnsLiveMessagesWhenPresent() {
+        let t = MessageThread(id: "live-t1", channel: .imessage, name: "L", avatar: "L",
+                              preview: "p", time: "now")
+        let vm = freshVM(threads: [t])
+        let liveMsg = Message(from: .them, text: "live message body", time: "now")
+        vm.liveMessages["live-t1"] = [liveMsg]
+        let result = vm.messages(for: t)
+        XCTAssertEqual(result.count, 1,
+            "with liveMessages set, the live array must be returned verbatim — fixture fallback must be skipped")
+        XCTAssertEqual(result.first?.text, "live message body",
+            "the live message body must round-trip through messages(for:)")
+    }
+
+    func testFallsBackToFixtureWhenLiveMessagesAbsent() {
+        let t = MessageThread(id: "fixture-t1", channel: .imessage, name: "F", avatar: "F",
+                              preview: "preview body", time: "now")
+        let vm = freshVM(threads: [t])
+        XCTAssertNil(vm.liveMessages[t.id],
+            "precondition: no live messages cached for this thread")
+        let result = vm.messages(for: t)
+        XCTAssertFalse(result.isEmpty,
+            "without liveMessages, the fixture fallback must populate the detail pane (otherwise the demo flow shows an empty thread)")
+    }
+}
