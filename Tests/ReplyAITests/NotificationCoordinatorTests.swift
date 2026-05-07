@@ -409,6 +409,38 @@ final class NotificationCoordinatorTests: XCTestCase {
             "thread preview must update when matched via CKChatGUID fallback")
     }
 
+    func testEmptyChatGUIDFallsBackToSenderHandleMatching() {
+        // Regression pin for the present-but-empty chatGUID bug: a malformed
+        // notification with `userInfo["CKChatIdentifier"] = ""` previously
+        // bypassed the senderHandle/name fallback in applyIncomingNotification
+        // and silently created a duplicate thread per notification. After the
+        // fix, handleIncomingNotification normalizes `Some("")` to nil so the
+        // existing thread is matched by name and updated in place.
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+        // Seed a thread with NO chatGUID — the realistic shape for a thread
+        // created from a previous notification before chat.db sync runs.
+        inbox.threads = [
+            MessageThread(id: "t-empty", channel: .imessage, name: "Carol",
+                          avatar: "C", preview: "previous", time: "11:00",
+                          chatGUID: nil)
+        ]
+
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "Carol",
+            preview: "newer",
+            chatGUID: ""   // present-but-empty — must NOT cause duplication
+        )
+
+        XCTAssertEqual(inbox.threads.count, 1,
+            "empty chatGUID must be normalized to nil so the senderHandle/name fallback runs")
+        XCTAssertEqual(inbox.threads.first?.preview, "newer",
+            "existing thread must be updated when matched by name fallback")
+    }
+
     // MARK: - REP-255: requestPermissionIfNeeded
 
     func testRequestPermissionCalledWhenUndetermined() async {

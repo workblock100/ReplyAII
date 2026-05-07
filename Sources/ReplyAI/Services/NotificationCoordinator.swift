@@ -121,8 +121,16 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         chatGUID: String? = nil
     ) {
         guard categoryID != Self.categoryID else { return }
+        // Normalize a present-but-empty chatGUID to nil. A malformed
+        // notification with `userInfo["CKChatIdentifier"] = ""` would
+        // otherwise bypass the senderHandle/name fallback in
+        // applyIncomingNotification — the chatGUID branch does an exact
+        // equality check that almost never matches `""`, which silently
+        // creates a duplicate thread per notification instead of refreshing
+        // the existing one. Same shape as the senderHandle empty-string fix.
+        let normalizedGUID = (chatGUID?.isEmpty == false) ? chatGUID : nil
         onIncomingMessage?(senderHandle, preview)
-        inbox?.applyIncomingNotification(senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
+        inbox?.applyIncomingNotification(senderHandle: senderHandle, preview: preview, chatGUID: normalizedGUID)
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -160,8 +168,12 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         let preview = content.body
         // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
         // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
-        let chatGUID = content.userInfo["CKChatIdentifier"] as? String
-            ?? content.userInfo["CKChatGUID"] as? String
+        // Empty strings on either key are filtered to nil so the present-but-empty
+        // case can't bypass the senderHandle/name fallback (see handleIncomingNotification).
+        let rawIdentifier = content.userInfo["CKChatIdentifier"] as? String
+        let rawGUID = content.userInfo["CKChatGUID"] as? String
+        let chatGUID = (rawIdentifier?.isEmpty == false ? rawIdentifier : nil)
+            ?? (rawGUID?.isEmpty == false ? rawGUID : nil)
         Task { @MainActor in
             self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
         }
