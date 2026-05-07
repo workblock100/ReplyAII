@@ -9,6 +9,15 @@ import Observation
 @Observable
 @MainActor
 final class InboxViewModel {
+    /// Per-thread message-load cap used by both the post-sync preload
+    /// (`syncFromIMessage` focus path) and the on-demand `loadMessages`
+    /// fetch. 40 is the smallest window that still covers a 30-day
+    /// active conversation without forcing a second fetch on most
+    /// threads, while keeping AppleScript / chat.db queries fast.
+    /// Drift down truncates context the prompt builder needs; drift up
+    /// makes thread-detail switches visibly slow on chatty threads.
+    static let perThreadMessageLoadLimit: Int = 40
+
     /// Lifecycle of one sync round-trip against the iMessage `chat.db`.
     /// Stored on the view model so the sidebar status pill, the FDA banner,
     /// and the inbox `viewState` derivation can all read the same source
@@ -734,7 +743,7 @@ final class InboxViewModel {
             // is populated without a second permission round-trip.
             if let focus = live.first(where: { $0.id == selectedThreadID }),
                liveMessages[focus.id] == nil,
-               let msgs = try? await imessage.messages(forThreadID: focus.id, limit: 40) {
+               let msgs = try? await imessage.messages(forThreadID: focus.id, limit: Self.perThreadMessageLoadLimit) {
                 liveMessages[focus.id] = msgs
             }
 
@@ -1153,7 +1162,7 @@ final class InboxViewModel {
     /// path leaves status as `.idle` while still serving real chat IDs.
     func loadMessages(for threadID: String) async {
         if liveMessages[threadID] != nil { return }
-        if let msgs = try? await imessage.messages(forThreadID: threadID, limit: 40) {
+        if let msgs = try? await imessage.messages(forThreadID: threadID, limit: Self.perThreadMessageLoadLimit) {
             await MainActor.run { liveMessages[threadID] = msgs }
         }
     }
