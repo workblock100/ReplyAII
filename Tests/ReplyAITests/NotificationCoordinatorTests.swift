@@ -12,6 +12,11 @@ private final class MockNotificationCenter: NotificationCenterProtocol, @uncheck
     private(set) var registeredCategories: Set<UNNotificationCategory> = []
     private(set) var authorizationRequestCount: Int = 0
     private(set) var setCategoriesCallCount: Int = 0
+    /// Records the most recent options bitmask passed to requestAuthorization.
+    /// Pinning the bitmask catches drift like silently dropping `.badge` —
+    /// which would orphan the menu-bar unread badge without any compile-
+    /// time signal.
+    private(set) var lastRequestedOptions: UNAuthorizationOptions = []
     var stubbedStatus: UNAuthorizationStatus = .notDetermined
     var authorizationGranted: Bool = true
     /// When set, requestAuthorization throws this error instead of returning.
@@ -25,6 +30,7 @@ private final class MockNotificationCenter: NotificationCenterProtocol, @uncheck
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
         lock.lock()
         authorizationRequestCount += 1
+        lastRequestedOptions = options
         let err = authorizationError
         let granted = authorizationGranted
         lock.unlock()
@@ -148,6 +154,47 @@ final class NotificationCoordinatorTests: XCTestCase {
             center.authorizationRequestCount, 0,
             "requestAuthorization must not be called when status is already .authorized"
         )
+    }
+
+    // MARK: - Authorization options bitmask contract
+    //
+    // Both `setUp()` and `requestPermissionIfNeeded()` request
+    // `[.alert, .badge, .sound]`. Each bit is load-bearing for a
+    // distinct user-visible feature; dropping one silently degrades
+    // that feature without any compile-time signal.
+    //   - .alert : the inline-reply notification banner itself
+    //   - .badge : the menu-bar unread count (REP-044) and Dock icon
+    //   - .sound : the chime that wakes the user from focus mode
+    // A refactor that "simplifies" the mask to `.alert` alone would
+    // pass tests that only check `requestAuthorization was called` —
+    // these pin the actual bits.
+
+    func testSetUpRequestsAlertBadgeAndSoundOptions() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .notDetermined
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.setUp()
+
+        XCTAssertEqual(center.authorizationRequestCount, 1,
+                       "precondition: setUp must request authorization once on .notDetermined")
+        let expected: UNAuthorizationOptions = [.alert, .badge, .sound]
+        XCTAssertEqual(center.lastRequestedOptions, expected,
+                       "setUp() must request alert+badge+sound; dropping any silently breaks a user-visible surface (banner, menu-bar badge, or chime)")
+    }
+
+    func testRequestPermissionIfNeededRequestsAlertBadgeAndSoundOptions() async {
+        let center = MockNotificationCenter()
+        center.stubbedStatus = .notDetermined
+        let coordinator = NotificationCoordinator(center: center)
+
+        await coordinator.requestPermissionIfNeeded()
+
+        XCTAssertEqual(center.authorizationRequestCount, 1,
+                       "precondition: requestPermissionIfNeeded must request once on .notDetermined")
+        let expected: UNAuthorizationOptions = [.alert, .badge, .sound]
+        XCTAssertEqual(center.lastRequestedOptions, expected,
+                       "requestPermissionIfNeeded must match setUp's option set; drift between the two paths produces a TCC dialog whose granted bitmask depends on which path ran first")
     }
 
     // MARK: - edge cases
