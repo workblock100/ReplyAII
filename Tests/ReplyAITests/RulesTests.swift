@@ -2766,6 +2766,74 @@ final class ThreadNameMatchesRegexTests: XCTestCase {
         let decoded = try JSONDecoder().decode(RulePredicate.self, from: data)
         XCTAssertEqual(decoded, original, "threadNameMatchesRegex must round-trip through JSON unchanged")
     }
+
+    // MARK: - validatePredicateRegexes recursion contract
+    //
+    // `validatePredicateRegexes` walks the predicate tree and validates
+    // every regex leaf — including ones nested inside `and`, `or`, `not`.
+    // The existing tests pass an unwrapped regex predicate, which only
+    // exercises the leaf cases of the switch. If a refactor accidentally
+    // dropped the recursion (e.g. converted the func to a `switch` that
+    // matched only the leaf cases and treated `.and`/`.or`/`.not` as
+    // `default → return`), every nested invalid regex would slip through
+    // validation, get persisted, and only fail at evaluation time — long
+    // after the user dismissed the rule editor. Pin recursion explicitly.
+
+    func testValidatePredicateRegexesRecursesIntoAndClauses() {
+        let rule = RulePredicate.and([
+            .senderIs("Alice"),
+            .textMatchesRegex("[unclosed"),  // invalid
+        ])
+        XCTAssertThrowsError(try SmartRule.validatePredicateRegexes(rule)) { err in
+            guard case RuleValidationError.invalidRegex(let p, _) = err else {
+                return XCTFail("expected invalidRegex propagated from inside .and, got \(err)")
+            }
+            XCTAssertEqual(p, "[unclosed",
+                "validator must surface the offending pattern even when buried in an .and clause")
+        }
+    }
+
+    func testValidatePredicateRegexesRecursesIntoOrClauses() {
+        let rule = RulePredicate.or([
+            .senderIs("Bob"),
+            .threadNameMatchesRegex(pattern: "(unclosed"),  // invalid
+        ])
+        XCTAssertThrowsError(try SmartRule.validatePredicateRegexes(rule)) { err in
+            guard case RuleValidationError.invalidRegex(let p, _) = err else {
+                return XCTFail("expected invalidRegex propagated from inside .or, got \(err)")
+            }
+            XCTAssertEqual(p, "(unclosed",
+                "validator must surface the offending pattern even when buried in an .or clause")
+        }
+    }
+
+    func testValidatePredicateRegexesRecursesIntoNotClauses() {
+        let rule = RulePredicate.not(.textMatchesRegex("?bad"))  // invalid: ? at start
+        XCTAssertThrowsError(try SmartRule.validatePredicateRegexes(rule)) { err in
+            guard case RuleValidationError.invalidRegex(let p, _) = err else {
+                return XCTFail("expected invalidRegex propagated from inside .not, got \(err)")
+            }
+            XCTAssertEqual(p, "?bad",
+                "validator must surface the offending pattern even when wrapped in a .not clause")
+        }
+    }
+
+    func testValidatePredicateRegexesRecursesIntoDeeplyNestedTree() {
+        // and(or(not(textMatchesRegex(invalid)))) — the recursive walker
+        // must dig four levels deep to surface the invalid pattern.
+        let rule = RulePredicate.and([
+            .or([
+                .not(.textMatchesRegex("[deeply-bad"))
+            ])
+        ])
+        XCTAssertThrowsError(try SmartRule.validatePredicateRegexes(rule)) { err in
+            guard case RuleValidationError.invalidRegex(let p, _) = err else {
+                return XCTFail("expected invalidRegex from deeply nested tree, got \(err)")
+            }
+            XCTAssertEqual(p, "[deeply-bad",
+                "validator must walk the full predicate tree, not just the top level")
+        }
+    }
 }
 
 // MARK: - REP-215: validateRegex boundary cases
