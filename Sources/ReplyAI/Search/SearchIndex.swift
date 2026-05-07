@@ -79,6 +79,9 @@ actor SearchIndex {
         defer { sqlite3_finalize(stmt) }
 
         for (threadID, messages) in messagesByThread {
+            // Skip empty thread IDs for the same reason `upsert` rejects them:
+            // the rows would be searchable orphans no thread can ever match.
+            guard !threadID.isEmpty else { continue }
             let threadName = namesByID[threadID] ?? threadID
             let channel    = channelsByID[threadID] ?? ""
             for m in messages {

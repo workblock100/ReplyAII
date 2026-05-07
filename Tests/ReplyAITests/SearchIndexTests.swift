@@ -435,6 +435,26 @@ final class SearchIndexTests: XCTestCase {
             "empty-threadID delete must leave the real thread's index intact")
     }
 
+    /// Pin: `rebuild` skips entries whose thread ID is empty. Same rationale
+    /// as the upsert guard — empty-id rows are searchable but unnavigable.
+    /// A degenerate caller (e.g. iMessageChannel returning `""` for a
+    /// missing chat_identifier) must NOT poison the index for valid
+    /// neighboring threads.
+    func testRebuildSkipsEmptyThreadIDEntries() async {
+        let index = SearchIndex()
+        let real = MessageThread(id: "ok", channel: .imessage, name: "OK",
+                                 avatar: "O", preview: "", time: "", unread: 0)
+        let messages: [String: [Message]] = [
+            "ok": [Message(from: .them, text: "alligator", time: "now")],
+            "":   [Message(from: .them, text: "should-not-index", time: "now")],
+        ]
+        await index.rebuild(from: messages, threads: [real])
+
+        let realHits = await index.search("alligator")
+        XCTAssertEqual(realHits.count, 1, "valid thread must still be indexed")
+        XCTAssertEqual(realHits.first?.threadID, "ok")
+    }
+
     // MARK: - BM25 ranking (REP-033)
 
     func testExactMatchRanksAbovePartialMatch() async {
