@@ -319,4 +319,158 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             "Slack rejected the connection: \(raw)"
         )
     }
+
+    // MARK: - HTTP acknowledgement (browser-visible response body)
+
+    /// On a successful callback the listener sends a literal HTTP/1.1 200 OK
+    /// response back to the browser. The body is exactly the two characters
+    /// `OK` so the user's tab shows something rather than rendering a blank
+    /// page or a "connection closed" error. Pin the response shape so a
+    /// future "improve the success page" effort can't accidentally ship a
+    /// content-length / body mismatch (which causes Chrome to show a
+    /// `ERR_CONTENT_LENGTH_MISMATCH` overlay instead of the friendly text).
+    func testSuccessResponseBodyIsExactlyOK() async throws {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 5)
+
+        let exp = expectation(description: "code extracted")
+        let readyExp = expectation(description: "listener ready")
+
+        listener.start(
+            completion: { _ in exp.fulfill() },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        guard let port = listener.actualPort else {
+            XCTFail("actualPort not set after ready"); return
+        }
+
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        conn.start(queue: .global())
+
+        let request = "GET /?code=responsebody HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        conn.send(content: Data(request.utf8), completion: .idempotent)
+
+        // Read the response back from the listener so we can assert on the
+        // exact literal it writes. The listener uses `.idempotent` send
+        // semantics so the bytes are flushed before connection cancel.
+        let responseExp = expectation(description: "received response bytes")
+        var receivedString = ""
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { data, _, _, _ in
+            if let data, let s = String(data: data, encoding: .utf8) {
+                receivedString = s
+            }
+            responseExp.fulfill()
+        }
+
+        await fulfillment(of: [exp, responseExp], timeout: 5)
+        conn.cancel()
+
+        // The wire format is: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK".
+        // A future change that rewrites the body to "Slack connected — close this tab"
+        // MUST update Content-Length too; pinning all three pieces forces them to
+        // travel together.
+        XCTAssertTrue(receivedString.hasPrefix("HTTP/1.1 200 OK"),
+            "first response line must be the canonical HTTP/1.1 200 OK status line, got: \(receivedString)")
+        XCTAssertTrue(receivedString.contains("Content-Length: 2"),
+            "Content-Length header must be exactly 2 to match the `OK` body, got: \(receivedString)")
+        XCTAssertTrue(receivedString.contains("Connection: close"),
+            "Connection: close header must be present so the browser doesn't keep the loopback socket open, got: \(receivedString)")
+        XCTAssertTrue(receivedString.hasSuffix("OK"),
+            "response body must end in the literal `OK`, got: \(receivedString)")
+    }
+
+    // MARK: - parser edge cases (request-side)
+
+    /// The handler reads up to 8192 bytes of the request and parses the
+    /// FIRST line by splitting on `\r\n`. A request whose first line is
+    /// only `GET` (no path, no version) splits into a single token; the
+    /// `parts.count >= 2` guard drops it. Pin the silent-drop behavior so
+    /// a future relaxation that calls `URL(string: "http://localhost")`
+    /// with a missing path doesn't ship — that path produces a URL with
+    /// no `queryItems`, so the silent-drop is the only sane outcome.
+    func testRequestLineWithOnlyMethodIsIgnored() async throws {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 0.4)
+
+        let exp = expectation(description: "completion fired (expected: timeout)")
+        let readyExp = expectation(description: "listener ready")
+        var receivedResult: Result<String, OAuthError>?
+
+        listener.start(
+            completion: { result in
+                receivedResult = result
+                exp.fulfill()
+            },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        guard let port = listener.actualPort else {
+            XCTFail("actualPort not set after ready"); return
+        }
+
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        conn.start(queue: .global())
+        // First line is "GET\r\n…" — only one whitespace-delimited token.
+        let request = "GET\r\nHost: localhost\r\n\r\n"
+        conn.send(content: Data(request.utf8), completion: .idempotent)
+
+        await fulfillment(of: [exp], timeout: 5)
+        conn.cancel()
+
+        guard case .failure(let err) = receivedResult else {
+            XCTFail("Expected timeout, got \(String(describing: receivedResult))"); return
+        }
+        XCTAssertEqual(err, .timeout,
+            "a request line with only a method must be silently dropped — only the timeout should fire")
+    }
+
+    /// A request whose `code` parameter appears multiple times (`?code=a&code=b`)
+    /// must use the FIRST occurrence — the parser uses `queryItems?.first(where:)`.
+    /// Pin this so a future swap to `last(where:)` (which would silently change
+    /// which code we exchange) shows up here rather than as a silent OAuth
+    /// regression that only fires when an attacker queries with a doctored URL.
+    func testFirstCodeQueryItemWinsWhenDuplicated() async throws {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 5)
+
+        let exp = expectation(description: "code extracted")
+        let readyExp = expectation(description: "listener ready")
+        var receivedCode: String?
+
+        listener.start(
+            completion: { result in
+                if case .success(let code) = result { receivedCode = code }
+                exp.fulfill()
+            },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        guard let port = listener.actualPort else {
+            XCTFail("actualPort not set after ready"); return
+        }
+
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        conn.start(queue: .global())
+        let request = "GET /?code=first&code=second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        conn.send(content: Data(request.utf8), completion: .idempotent)
+
+        await fulfillment(of: [exp], timeout: 5)
+        conn.cancel()
+
+        XCTAssertEqual(receivedCode, "first",
+            "duplicate `code` params must resolve to the first occurrence; a switch to `last` would silently change which auth code we exchange")
+    }
 }
