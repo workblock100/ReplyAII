@@ -895,6 +895,31 @@ final class SearchIndexTests: XCTestCase {
             "limit: 1 must return exactly one row even when 10 are indexed")
     }
 
+    /// `limit: -1` is a SQLite-quirk semantic — `LIMIT -1` means "no
+    /// limit" (returns all rows), not "zero rows" or "error". The
+    /// `Int32(limit)` bind in SearchIndex.search passes `-1` straight
+    /// through, so the call returns all matches instead of capping.
+    /// Pin this surprising-but-deterministic behavior so a refactor
+    /// that introduces caller-side validation (e.g. `max(0, limit)`)
+    /// surfaces here rather than silently changing a "no limit"
+    /// callsite into a "zero rows" callsite. Real-world relevance: a
+    /// `Sentinel(-1)` style "unbounded" callsite is a classic API
+    /// pattern users borrow from other databases that don't share
+    /// SQLite's negative-limit convention.
+    func testSearchLimitNegativeOneReturnsAllRows() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...12 {
+            let t = MessageThread(id: "neg-\(i)", channel: .imessage, name: "Neg\(i)",
+                                  avatar: "N", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "neglimittokenpin", time: "t")
+            ])
+        }
+        let results = await index.search("neglimittokenpin", limit: -1)
+        XCTAssertEqual(results.count, 12,
+            "limit: -1 binds as SQLite `LIMIT -1` → no limit; all 12 matching rows must come back. Future caller-side clamping should surface as a deliberate test edit.")
+    }
+
     // MARK: - REP-125: upsert replaces preview text (no ghost terms)
 
     func testUpsertReplacesOldPreviewTerms() async {
