@@ -186,6 +186,38 @@ actor SearchIndex {
     /// against drift independently of either `search` overload.
     static let defaultSearchLimit: Int = 50
 
+    /// FTS5 `snippet(...)` start marker — wraps each matched term in the
+    /// returned snippet so the ⌘K palette can highlight terms via
+    /// "split on `«` / `»`" rendering. Drift here breaks the palette's
+    /// match-highlight pass without throwing — search still returns
+    /// results, but no terms render as highlighted. Pinned by
+    /// `SearchIndexTests.testSnippetMarkersAreGuillemetsWithEllipsis`.
+    static let snippetStartMarker = "«"
+
+    /// FTS5 `snippet(...)` end marker. Same drift impact as the start
+    /// marker — palette highlight rendering silently degrades.
+    static let snippetEndMarker = "»"
+
+    /// FTS5 `snippet(...)` ellipsis marker — inserted in place of
+    /// truncated context on either side of the match. Drift here changes
+    /// the visible "…" cue users associate with truncated previews.
+    static let snippetEllipsis = "…"
+
+    /// FTS5 `snippet(...)` context-token count: how many tokens of
+    /// surrounding text appear on each side of the match. 8 keeps the
+    /// snippet roughly one line wide in the palette popover; raising it
+    /// pushes snippets to multi-line and overlaps with the existing
+    /// truncation rendering; lowering it shows a chip-sized fragment that
+    /// loses match context.
+    static let snippetTokenContext: Int = 8
+
+    /// FTS5 `snippet(...)` column index: which column of the FTS5 table
+    /// the snippet is built from. Column 3 is the `text` column in the
+    /// `messages_fts` schema (`thread_id, thread_name, sender, text, time, channel`).
+    /// Drift here points snippet generation at the wrong column — most
+    /// likely the sender or thread name, which produces useless previews.
+    static let snippetTextColumnIndex: Int = 3
+
     /// FTS5 match query. Empty input returns an empty array. The caller
     /// is expected to debounce UI input.
     func search(_ query: String, limit: Int = SearchIndex.defaultSearchLimit) -> [Result] {
@@ -207,7 +239,7 @@ actor SearchIndex {
         if channel != nil {
             sql = """
             SELECT thread_id, thread_name, sender, text, time,
-                   snippet(messages_fts, 3, '«', '»', '…', 8)
+                   snippet(messages_fts, \(SearchIndex.snippetTextColumnIndex), '\(SearchIndex.snippetStartMarker)', '\(SearchIndex.snippetEndMarker)', '\(SearchIndex.snippetEllipsis)', \(SearchIndex.snippetTokenContext))
             FROM messages_fts
             WHERE messages_fts MATCH ?1
             AND channel = ?2
@@ -217,7 +249,7 @@ actor SearchIndex {
         } else {
             sql = """
             SELECT thread_id, thread_name, sender, text, time,
-                   snippet(messages_fts, 3, '«', '»', '…', 8)
+                   snippet(messages_fts, \(SearchIndex.snippetTextColumnIndex), '\(SearchIndex.snippetStartMarker)', '\(SearchIndex.snippetEndMarker)', '\(SearchIndex.snippetEllipsis)', \(SearchIndex.snippetTokenContext))
             FROM messages_fts
             WHERE messages_fts MATCH ?1
             ORDER BY rank

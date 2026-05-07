@@ -1645,3 +1645,35 @@ final class SearchIndexProductionDatabaseURLTests: XCTestCase {
                       "search.db path must be absolute so behavior doesn't depend on the launching process's cwd")
     }
 }
+
+// MARK: - FTS5 snippet config — visible-string contract pin
+
+/// `SearchIndex.snippet*` constants are the FTS5 `snippet(...)` arguments
+/// embedded into both search SQL paths (channel-filtered + unfiltered).
+/// The palette renders match highlights by splitting on the start/end
+/// markers — drift on either silently breaks highlighting without
+/// failing search itself. The ellipsis is the visible truncation cue.
+/// Column index 3 is the `text` column in the `messages_fts` schema
+/// (`thread_id(0), thread_name(1), sender(2), text(3), time(4), channel(5)`);
+/// drift points snippet generation at the wrong column. Token count 8
+/// is the width that keeps snippets one line in the popover.
+final class SearchIndexSnippetConfigTests: XCTestCase {
+    func testSnippetMarkersAreGuillemetsWithEllipsis() {
+        XCTAssertEqual(SearchIndex.snippetStartMarker, "«",
+            "snippetStartMarker drift breaks the palette's term-highlight rendering — search still returns results, but no terms appear highlighted")
+        XCTAssertEqual(SearchIndex.snippetEndMarker, "»",
+            "snippetEndMarker drift breaks the palette's term-highlight rendering — same blast radius as the start marker")
+        XCTAssertEqual(SearchIndex.snippetEllipsis, "…",
+            "snippetEllipsis is the visible truncation cue users associate with omitted context")
+    }
+
+    func testSnippetTokenContextIsEightTokens() {
+        XCTAssertEqual(SearchIndex.snippetTokenContext, 8,
+            "snippetTokenContext drift either pushes snippets to multi-line (too high) or shows chip-sized fragments without context (too low)")
+    }
+
+    func testSnippetTextColumnIndexIsThree() {
+        XCTAssertEqual(SearchIndex.snippetTextColumnIndex, 3,
+            "snippetTextColumnIndex must remain the FTS5 column index of `text` in messages_fts (thread_id=0, thread_name=1, sender=2, text=3, time=4, channel=5) — drift produces snippets from the wrong column")
+    }
+}
