@@ -1874,6 +1874,65 @@ final class RulesTests: XCTestCase {
             XCTFail("decoded predicate has wrong case")
         }
     }
+
+    /// The comparator is strict-greater-than (`age > hours * 3600`), so a
+    /// message that's *exactly* 24 hours old must NOT match
+    /// `messageAgeOlderThan(hours: 24)`. Pin the boundary so a future
+    /// loosening to `>= ` (a common "off-by-one fix" mistake) doesn't
+    /// silently fire stale-thread rules one wall-clock hour earlier than
+    /// intended.
+    func testMessageAgeOlderThanExactBoundaryDoesNotMatch() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Boundary Bot", senderHandle: "b",
+            channel: .imessage, lastMessageText: "tick",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+        ctx.lastMessageDate = now.addingTimeInterval(-24 * 3600)
+        XCTAssertFalse(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "exactly-24h-old message must NOT match a `>24h` predicate; the comparator is strict >, not >=")
+    }
+
+    /// `hours: 0` is a degenerate "always match anything in the past"
+    /// shape — the comparator becomes `age > 0`, true for any
+    /// non-zero-age past message. Pin so a future "reject hours: 0 as
+    /// invalid" guard doesn't quietly turn a working rule into a no-op
+    /// when a user creates one via the rule editor.
+    func testMessageAgeOlderThanZeroHoursMatchesAnyPastMessage() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Zero Bot", senderHandle: "z",
+            channel: .imessage, lastMessageText: "tick",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+        // 1 second old is enough to satisfy `age > 0`.
+        ctx.lastMessageDate = now.addingTimeInterval(-1)
+        XCTAssertTrue(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 0), in: ctx, currentDate: now),
+            "hours: 0 with any past-dated message must match (comparator is strict > 0, satisfied by any positive age)")
+    }
+
+    /// Future-dated messages — pathological state where `lastMessageDate`
+    /// somehow lands in the future relative to `currentDate` (clock skew,
+    /// tampered chat.db, test fixture). `timeIntervalSince` returns a
+    /// negative number, which is never greater than any positive
+    /// threshold, so the predicate is false. Pin the implicit safety
+    /// (no negative-age underflow trigger) so a later refactor that
+    /// uses `abs()` or wraps signed math doesn't accidentally fire
+    /// stale-thread rules on future-dated rows.
+    func testMessageAgeOlderThanFutureDatedMessageDoesNotMatch() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Future Bot", senderHandle: "f",
+            channel: .imessage, lastMessageText: "tock",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+        ctx.lastMessageDate = now.addingTimeInterval(48 * 3600) // 48h in the future
+        XCTAssertFalse(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "a future-dated message must NOT match any `older than` predicate; negative timeIntervalSince fails the > comparison")
+    }
 }
 
 // MARK: - RulesStore concurrent add stress test (REP-120)
