@@ -7,6 +7,21 @@ final class FixturesTests: XCTestCase {
         XCTAssertEqual(Set(ids).count, ids.count, "thread IDs must be unique")
     }
 
+    /// `Fixtures.threads` IDs are referenced verbatim across the test suite
+    /// (`Fixtures.seedDraft(threadID: "t1", ...)`, `Fixtures.threadMessages["t3"]`,
+    /// the prototype gallery's screenshot inventory, and several
+    /// design-handoff snapshots). Pin both the count and the contiguous
+    /// `t1`..`t8` ID scheme so a fixture-shrink or ID rename surfaces as
+    /// a single test failure here, not as a wave of mysterious nil-draft
+    /// regressions across the rest of the suite.
+    func testThreadsIDSchemeIsContiguousT1ThroughT8() {
+        XCTAssertEqual(Fixtures.threads.count, 8,
+            "Fixtures.threads must contain exactly 8 demo threads — gallery + draft tests assume this count")
+        XCTAssertEqual(Fixtures.threads.map(\.id),
+                       ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"],
+                       "Fixtures.threads IDs must be `t1`..`t8` in order — every per-thread pin (seedDraft, threadMessages) keys off these literals")
+    }
+
     func testSeededDraftsExistForPrimaryThreads() {
         for tone in Tone.allCases {
             XCTAssertFalse(Fixtures.seedDraft(threadID: "t1", tone: tone).isEmpty)
