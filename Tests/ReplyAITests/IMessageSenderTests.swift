@@ -445,6 +445,31 @@ final class IMessageSenderTests: XCTestCase {
                              "GUID without semicolons must fail validation")
     }
 
+    /// `split(separator:";", maxSplits: 3, omittingEmptySubsequences: false)`
+    /// can return up to 4 parts. The validator's `parts.count == 3` check
+    /// must reject 4-part GUIDs (an extra `;<chunk>` slipped in by a
+    /// malformed AppleScript fixture or a future iMessage schema bump). Pin
+    /// so a future loosening to `>= 3` is a deliberate change.
+    func testExtraSeparatorThrowsInvalid() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("iMessage;-;+15551234567;extra", for: .imessage),
+            "4-part GUID (extra trailing `;<chunk>`) must fail the strict 3-part validator")
+    }
+
+    /// The prefix check (`parts[0] == "iMessage"`) is case-sensitive: lowercase
+    /// `"imessage"` or `"IMESSAGE"` must fail. iMessage's own AppleScript dictionary
+    /// emits camelCase verbatim, so a different case implies a corrupted source.
+    /// Pin so a future "lowercase normalize" refactor surfaces rather than silently
+    /// widening the accepted set.
+    func testIMessagePrefixIsCaseSensitive() {
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("imessage;-;+15551234567", for: .imessage),
+            "lowercase `imessage` prefix must fail — chat.db emits camelCase `iMessage` verbatim")
+        XCTAssertThrowsError(
+            try IMessageSender.validateChatGUID("IMESSAGE;-;+15551234567", for: .imessage),
+            "uppercase `IMESSAGE` prefix must fail")
+    }
+
     // MARK: - REP-162: cross-channel GUID validation
 
     func testSMSGUIDFormatRecognized() {
