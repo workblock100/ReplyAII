@@ -158,6 +158,44 @@ final class KeychainHelperTests: XCTestCase {
         try keychain.set(value: v, for: "token")
         XCTAssertEqual(keychain.get(key: "token"), v)
     }
+
+    /// Default `init()` resolves to the `"co.replyai.app"` service. SlackTokenStore
+    /// and every channel that calls `KeychainHelper()` without an explicit service
+    /// pivots on this default — renaming it (e.g. to `"co.replyai.legacy"`) would
+    /// silently orphan every existing user's tokens with no visible compile error,
+    /// because tokens written under the new service would simply not see the old
+    /// items. Pin the literal so a refactor surfaces as a code-review diff.
+    func testDefaultServiceLiteralIsPinned() throws {
+        let helper = KeychainHelper()
+        XCTAssertEqual(helper.service, "co.replyai.app",
+            "default Keychain service must remain `co.replyai.app` — renaming silently orphans every existing token")
+    }
+
+    /// `ReplyAI-` is the contract prefix every account key gets — `deleteAll(prefix:)`
+    /// in factory reset relies on it to scope the wipe to ReplyAI items only without
+    /// touching unrelated keychain entries in the same service. Renaming the prefix
+    /// (e.g. to `RA-`) without also updating the wipe sweep would leave new tokens
+    /// surviving factory reset. Pin via a round-trip + a direct `kSecAttrAccount`
+    /// lookup that asserts the prefix is exactly `ReplyAI-`.
+    func testKeychainAccountPrefixContract() throws {
+        try keychain.set(value: "prefix-test", for: "probe-key")
+        defer { keychain.delete(key: "probe-key") }
+
+        let lookupQuery: [CFString: Any] = [
+            kSecClass:            kSecClassGenericPassword,
+            kSecAttrService:      keychain.service,
+            kSecAttrAccount:      "ReplyAI-probe-key",
+            kSecMatchLimit:       kSecMatchLimitOne,
+            kSecReturnData:       kCFBooleanTrue as Any
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(lookupQuery as CFDictionary, &result)
+        XCTAssertEqual(status, errSecSuccess,
+            "lookup with the literal `ReplyAI-` prefix must hit the item — changing the prefix breaks deleteAll/factory-reset")
+
+        let data = try XCTUnwrap(result as? Data)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "prefix-test")
+    }
 }
 
 // MARK: - KeychainError.errorDescription
