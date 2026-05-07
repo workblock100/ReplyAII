@@ -398,6 +398,43 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertTrue(hits.isEmpty)
     }
 
+    /// Pin: empty thread.id is rejected on both `upsert` and `delete`.
+    /// Without the guard, `upsert` would insert orphan rows whose
+    /// `thread_id = ''` are searchable but unnavigable (the inbox keys
+    /// thread lookup by id and never has a thread with an empty id).
+    /// Verify that an "empty-id upsert" leaves the index clean and a
+    /// later `search` finds nothing.
+    func testUpsertWithEmptyThreadIDIsRejected() async {
+        let index = SearchIndex()
+        let bad = MessageThread(id: "", channel: .imessage, name: "Maya",
+                                avatar: "M", preview: "", time: "", unread: 0)
+        await index.upsert(thread: bad, messages: [
+            Message(from: .them, text: "would-be-orphan-text", time: "now")
+        ])
+        let hits = await index.search("would-be-orphan-text")
+        XCTAssertTrue(hits.isEmpty,
+            "empty thread.id must NOT produce searchable orphan rows in the index")
+    }
+
+    func testDeleteWithEmptyThreadIDIsNoOp() async {
+        // Symmetric guard with upsert. A delete with empty threadID would
+        // otherwise execute `WHERE thread_id = ''` against a clean index,
+        // which is a no-op by accident — but a malformed call is still
+        // a caller bug worth refusing fast.
+        let index = SearchIndex()
+        let thread = MessageThread(id: "real", channel: .imessage, name: "R",
+                                   avatar: "R", preview: "", time: "", unread: 0)
+        await index.upsert(thread: thread, messages: [
+            Message(from: .them, text: "kingfisher", time: "now")
+        ])
+
+        await index.delete(threadID: "")  // must not affect the real thread
+
+        let hits = await index.search("kingfisher")
+        XCTAssertEqual(hits.count, 1,
+            "empty-threadID delete must leave the real thread's index intact")
+    }
+
     // MARK: - BM25 ranking (REP-033)
 
     func testExactMatchRanksAbovePartialMatch() async {

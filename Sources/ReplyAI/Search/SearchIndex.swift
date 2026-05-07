@@ -109,8 +109,13 @@ actor SearchIndex {
 
     /// Remove all index rows for a thread. Called when a thread is archived
     /// so it no longer appears in search results.
+    /// Symmetric with `upsert` — empty threadID is rejected. The SQL would
+    /// otherwise execute `DELETE ... WHERE thread_id = ''`, which is a no-op
+    /// on a healthy index but masks caller-side bugs (the caller almost
+    /// certainly meant a real thread).
     func delete(threadID: String) {
         guard let db else { return }
+        guard !threadID.isEmpty else { return }
         var del: OpaquePointer?
         if sqlite3_prepare_v2(db, "DELETE FROM messages_fts WHERE thread_id = ?1;", -1, &del, nil) == SQLITE_OK {
             sqlite3_bind_text(del, 1, threadID, -1, Self.SQLITE_TRANSIENT)
@@ -124,8 +129,13 @@ actor SearchIndex {
     /// and re-running a full `rebuild` per fire is O(n) in the whole
     /// inbox. FTS5 has no `INSERT OR REPLACE` semantics keyed by an
     /// application column, so we delete + insert under one transaction.
+    /// No-op on an empty thread.id — would insert orphan rows whose
+    /// `thread_id = ''` is searchable but unnavigable, since the inbox
+    /// keys thread lookup by id and never has a thread with empty id.
+    /// Caller error; refuse rather than corrupt the index.
     func upsert(thread: MessageThread, messages: [Message]) {
         guard let db else { return }
+        guard !thread.id.isEmpty else { return }
         sqlite3_exec(db, "BEGIN", nil, nil, nil)
 
         var del: OpaquePointer?
