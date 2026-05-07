@@ -956,7 +956,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: 61e227e (2026-05-06-2210 autopilot fire)
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Inbox/ThreadList/ThreadRow.swift`, `Sources/ReplyAI/Inbox/ThreadList/ThreadListView.swift`
 - scope: From AGENTS.md priority queue #2: animate the selected-row accent `Rectangle().fill(isSelected ? accent : .clear)` using `withAnimation(Theme.Motion.std)` and `matchedGeometryEffect` so the highlight slides between rows rather than snapping. The `Namespace` lives in `ThreadListView`; the matched ID is the thread `id`. `ThreadRow` receives `isSelected: Bool` and `animationNamespace: Namespace.ID`. Reduced-motion guard: `ThreadListView` reads `@Environment(\.accessibilityReduceMotion)` and passes a flag to skip the `.matchedGeometryEffect` and use `.animation(nil)` instead. UI-sensitive → worker pushes to `wip/`. Human reviews animation timing and reduced-motion skip before merge.
@@ -967,7 +968,8 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: S
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: 64b8ce1 + 33ef4e7 + 2d91569 (2026-05-06-2210 autopilot fire — extended scope to SidebarView, InboxScreen, ThreadListView, TonePills as well; ComposerView had no animation modifiers in current main)
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Inbox/Composer/ComposerView.swift`, `Sources/ReplyAI/Components/PillToggle.swift`
 - scope: From AGENTS.md priority queue #2: read `@Environment(\.accessibilityReduceMotion)` in `ComposerView` and skip the `withAnimation` crossfade on `editableDraft` appear/disappear when true. Read the same in `PillToggle` (used for tone pills) and skip the spring animation on selection change when true. No logic changes — only the animation modifier is conditionalised. UI-sensitive → worker pushes to `wip/`. Human verifies under System Preferences > Accessibility > Reduce Motion.
