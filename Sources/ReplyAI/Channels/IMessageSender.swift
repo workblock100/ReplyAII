@@ -11,6 +11,11 @@ import AppKit
 /// back to synthesizing `iMessage;-;<handle>` from `chat_identifier` for
 /// legacy rows that somehow lack a guid.
 enum IMessageSender {
+    /// User-visible failure cases for the AppleScript send path. Each
+    /// `errorDescription` is the literal copy that surfaces in the inbox
+    /// error toast — keep them actionable ("Re-grant in System Settings →
+    /// …") rather than diagnostic. Adding a new case is a UI change
+    /// because the toast renders these strings directly.
     enum SendError: LocalizedError {
         case scriptFailure(String)
         case notAuthorized

@@ -138,6 +138,11 @@ struct IMessageChannel: ChannelService {
         }
         sqlite3_bind_int(stmt, 1, Int32(limit))
 
+        // Per-row staging shape — held while the SQLite cursor advances
+        // so the contact-name resolution (a separate Contacts framework
+        // call) can run after the chat.db read finishes. Decoupling the
+        // two phases keeps the SQLite worker thread off the Contacts
+        // daemon's XPC retry loop.
         struct Pending {
             let chatID: String
             let name: String
