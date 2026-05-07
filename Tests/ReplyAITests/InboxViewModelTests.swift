@@ -1476,6 +1476,87 @@ final class InboxViewModelChatGUIDDeduplicationTests: XCTestCase {
         XCTAssertEqual(vm.threads.count, 2,
             "nil chatGUID with non-matching senderHandle must create a new thread")
     }
+
+    // MARK: - chatDBAvailable gate + side-effects (autopilot 2026-05-07)
+
+    /// `applyIncomingNotification` must short-circuit when chat.db sync is
+    /// live — the FSEvents/chat.db pipeline already owns thread updates;
+    /// firing the notification path on top would double-count unread.
+    func testApplyIncomingNotificationShortCircuitsWhenChatDBLive() {
+        let guid = "iMessage;+;live-test"
+        let vm = makeVM(threads: [
+            MessageThread(id: "t-live", channel: .imessage, name: "Frank",
+                          avatar: "F", preview: "preexisting", time: "11:00",
+                          unread: 2, chatGUID: guid)
+        ])
+        vm.syncStatus = .live(at: Date())
+
+        vm.applyIncomingNotification(senderHandle: "+15551112222", preview: "ignored", chatGUID: guid)
+
+        XCTAssertEqual(vm.threads.first?.preview, "preexisting",
+                       "applyIncomingNotification must NOT mutate the thread when chat.db is .live")
+        XCTAssertEqual(vm.threads.first?.unread, 2,
+                       "applyIncomingNotification must NOT increment unread when chat.db is .live")
+        XCTAssertEqual(vm.threads.count, 1,
+                       "applyIncomingNotification must NOT create a new thread when chat.db is .live")
+    }
+
+    /// Updated thread must move to index 0 — the inbox is recency-sorted
+    /// and a fresh notification is the most recent activity.
+    func testApplyIncomingNotificationMovesUpdatedThreadToTop() {
+        let guid = "iMessage;+;reorder-test"
+        let vm = makeVM(threads: [
+            MessageThread(id: "t-other", channel: .imessage, name: "Alice",
+                          avatar: "A", preview: "first", time: "08:00"),
+            MessageThread(id: "t-target", channel: .imessage, name: "Bob",
+                          avatar: "B", preview: "older", time: "07:00",
+                          chatGUID: guid)
+        ])
+
+        vm.applyIncomingNotification(senderHandle: "+15553334444", preview: "newest", chatGUID: guid)
+
+        XCTAssertEqual(vm.threads.first?.id, "t-target",
+                       "the updated thread must be moved to index 0 after a notification")
+        XCTAssertEqual(vm.threads.first?.preview, "newest")
+    }
+
+    /// nil chatGUID + senderHandle that matches a thread by `name` (the
+    /// AppleScript-fallback path doesn't always carry a chatGUID, so the
+    /// heuristic uses display name) must update that thread, not create a
+    /// duplicate.
+    func testApplyIncomingNotificationMatchesByNameWhenGUIDNil() {
+        let vm = makeVM(threads: [
+            MessageThread(id: "t-by-name", channel: .imessage, name: "Carol",
+                          avatar: "C", preview: "earlier", time: "12:00",
+                          chatGUID: nil)
+        ])
+
+        vm.applyIncomingNotification(senderHandle: "Carol", preview: "fresh", chatGUID: nil)
+
+        XCTAssertEqual(vm.threads.count, 1,
+                       "senderHandle equal to thread.name must dedupe — no new thread created")
+        XCTAssertEqual(vm.threads.first?.preview, "fresh")
+        XCTAssertEqual(vm.threads.first?.unread, 1)
+    }
+
+    /// nil chatGUID + senderHandle whose digits are the chatGUID suffix
+    /// (e.g. notification carries phone number, thread carries
+    /// `iMessage;-;+15551234567`) must dedupe via the suffix heuristic.
+    func testApplyIncomingNotificationMatchesByChatGUIDSuffixWhenNotificationGUIDNil() {
+        let suffix = "+15551234567"
+        let vm = makeVM(threads: [
+            MessageThread(id: "t-suffix", channel: .imessage, name: "Phone Friend",
+                          avatar: "P", preview: "old", time: "13:00",
+                          chatGUID: "iMessage;-;\(suffix)")
+        ])
+
+        vm.applyIncomingNotification(senderHandle: suffix, preview: "newer", chatGUID: nil)
+
+        XCTAssertEqual(vm.threads.count, 1,
+                       "senderHandle matching the chatGUID suffix must dedupe — no new thread created")
+        XCTAssertEqual(vm.threads.first?.preview, "newer")
+        XCTAssertEqual(vm.threads.first?.unread, 1)
+    }
 }
 
 // MARK: - Messages app activation re-sync (REP-265)
