@@ -1901,11 +1901,16 @@ final class InboxViewModelBulkFilterTests: XCTestCase {
     private func makeVM(threads: [MessageThread]) -> InboxViewModel {
         let suite = "test.ReplyAI.bulkFilter.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
+        // Per-test cache URL so passing `threads: []` doesn't fall back to
+        // a stale disk-cached thread list from another test or a real run.
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMBulkFilterTests-\(UUID().uuidString).json")
         return InboxViewModel(
             threads: threads,
             imessage: BlockingMockChannel(),
             contacts: fastContacts(),
-            defaults: defaults
+            defaults: defaults,
+            threadsCacheURL: cacheURL
         )
     }
 
@@ -1985,6 +1990,87 @@ final class InboxViewModelBulkFilterTests: XCTestCase {
 
         XCTAssertEqual(vm.archivedThreadIDs, ["read-im", "read-wa"])
         XCTAssertEqual(vm.filteredThreads.map(\.id), ["unread-sl"])
+    }
+
+    // MARK: - Bulk action edge cases (autopilot 2026-05-07)
+
+    func testBulkMarkAllReadOnEmptyThreadsIsNoop() {
+        let vm = makeVM(threads: [])
+
+        vm.bulkMarkAllRead()
+
+        XCTAssertEqual(vm.threads.count, 0)
+        XCTAssertEqual(vm.totalUnreadCount, 0)
+    }
+
+    func testBulkMarkAllReadIsIdempotentOnAlreadyReadThreads() {
+        let threads = [
+            MessageThread(id: "im1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", unread: 0),
+            MessageThread(id: "sl1", channel: .slack, name: "Team", avatar: "T", preview: "", time: "", unread: 0)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.bulkMarkAllRead()
+        vm.bulkMarkAllRead()
+
+        XCTAssertTrue(vm.threads.allSatisfy { $0.unread == 0 })
+        XCTAssertEqual(vm.totalUnreadCount, 0)
+    }
+
+    func testBulkMarkAllReadAlsoTouchesArchivedThreads() {
+        let threads = [
+            MessageThread(id: "live", channel: .imessage, name: "Live", avatar: "L", preview: "", time: "", unread: 2),
+            MessageThread(id: "arch", channel: .slack, name: "Arch", avatar: "A", preview: "", time: "", unread: 5)
+        ]
+        let vm = makeVM(threads: threads)
+        vm.archive("arch")
+
+        vm.bulkMarkAllRead()
+
+        // Bulk mark iterates threads.map(\.id) with no archive filter — both
+        // archived and live threads must end up at unread = 0 so re-surfacing
+        // an archived thread later doesn't bring back a stale unread badge.
+        XCTAssertTrue(vm.threads.allSatisfy { $0.unread == 0 })
+    }
+
+    func testBulkArchiveReadOnEmptyThreadsIsNoop() {
+        let vm = makeVM(threads: [])
+
+        vm.bulkArchiveRead()
+
+        XCTAssertEqual(vm.archivedThreadIDs, [])
+        XCTAssertEqual(vm.filteredThreads.count, 0)
+    }
+
+    func testBulkArchiveReadSkipsAlreadyArchivedThreads() {
+        let threads = [
+            MessageThread(id: "read-already-archived", channel: .imessage, name: "Old", avatar: "O", preview: "", time: "", unread: 0),
+            MessageThread(id: "read-fresh", channel: .slack, name: "Fresh", avatar: "F", preview: "", time: "", unread: 0)
+        ]
+        let vm = makeVM(threads: threads)
+        vm.archive("read-already-archived")
+
+        vm.bulkArchiveRead()
+
+        // The pre-archived ID must remain (a single insertion, not duplicated)
+        // and the new read thread must also be archived.
+        XCTAssertEqual(vm.archivedThreadIDs, ["read-already-archived", "read-fresh"])
+    }
+
+    func testBulkArchiveReadDoesNotProtectPinnedReadThreads() {
+        let threads = [
+            MessageThread(id: "pinned-read", channel: .imessage, name: "Pinned", avatar: "P", preview: "", time: "", unread: 0, pinned: true),
+            MessageThread(id: "unread", channel: .slack, name: "Unread", avatar: "U", preview: "", time: "", unread: 1)
+        ]
+        let vm = makeVM(threads: threads)
+
+        vm.bulkArchiveRead()
+
+        // Pinned status doesn't shield a read thread from bulk-archive — the
+        // ⌘-shortcut user expects "everything I've read goes away" and bulk
+        // archive is the action, not pin-aware filtering.
+        XCTAssertTrue(vm.archivedThreadIDs.contains("pinned-read"))
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["unread"])
     }
 }
 
