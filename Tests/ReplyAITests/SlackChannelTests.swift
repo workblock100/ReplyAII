@@ -170,6 +170,24 @@ final class SlackChannelTests: XCTestCase {
                        "limit < 1 must be clamped to 1")
     }
 
+    /// Negative-limit symmetry counterpart to
+    /// `testMessagesClampsNegativeLimitToOne`. The clamp expression
+    /// (`min(max(limit, 1), 200)`) is symmetric across both endpoints,
+    /// so this branch must behave identically — pin it explicitly so a
+    /// future refactor that splits the two clamps can't diverge.
+    func testRecentThreadsClampsNegativeLimitToOne() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "channels": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.recentThreads(limit: -42)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "1",
+                       "negative limit must be clamped to 1, not forwarded as a negative integer")
+    }
+
     func testMessagesClampsLimitAbove200ToSlackMaximum() async throws {
         let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
         try store.set(token: "xoxb-test-token", workspaceName: "Acme")
