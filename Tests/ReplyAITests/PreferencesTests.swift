@@ -769,6 +769,23 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
         XCTAssertEqual(stored, [],
                        "writing an empty array must clear the list rather than retain prior values")
     }
+
+    /// Pin the current behavior: empty-string entries pass through the setter
+    /// unchanged and round-trip in storage. The setter only enforces the cap
+    /// (20 entries) and per-entry truncation (500 chars) — it does NOT filter
+    /// empty strings. PromptBuilder.voiceExamples paired this with rendering
+    /// empty bullets verbatim (pinned in PromptBuilderTests). Together they
+    /// document the surprising end-to-end behavior: a misconfigured Settings
+    /// → Voice picker that wrote `["", ""]` would store two empty strings AND
+    /// emit two empty `- ` bullets in every system prompt. Pinned so a future
+    /// "filter empties at the setter" hardening is a deliberate change visible
+    /// here rather than a quiet drift in prompt output.
+    func testVoiceExamplesEmptyEntriesAreNotFilteredAtSetter() {
+        defaults.setVoiceExampleMessages(["", "real entry", ""])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored, ["", "real entry", ""],
+                       "empty entries must round-trip — the setter does not filter them")
+    }
 }
 
 // MARK: - PreferenceKey literal-string contracts
