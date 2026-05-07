@@ -554,4 +554,103 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertEqual(capture.timeout, 120,
                        "listener timeout must remain 120s — shorter starves users who read carefully, longer leaves the loopback open after abandonment")
     }
+
+    /// `OAuthError.tokenExchangeFailed(msg).errorDescription` is what users
+    /// see verbatim in Settings → Channels when Slack returns ok:true but
+    /// no access_token. The msg literal is constructed inside
+    /// `SlackOAuthFlow.exchangeCode` and surfaced via the LocalizedError
+    /// bridge ("Slack rejected the connection: <msg>"). Pin the exact
+    /// string so a refactor that "improves" the wording (e.g. dropping
+    /// the protocol details) lands as a deliberate code-review change
+    /// rather than a silent UX regression.
+    func testTokenExchangeMissingAccessTokenSurfacesPinnedMessage() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true] // no access_token
+
+        let exp = expectation(description: "authorize completes")
+        var captured: OAuthError?
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { result in
+            if case .failure(let err) = result { captured = err }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        guard case .tokenExchangeFailed(let msg) = captured else {
+            XCTFail("Expected tokenExchangeFailed, got \(String(describing: captured))")
+            return
+        }
+        XCTAssertEqual(msg, "response missing ok=true or access_token",
+            "the inner msg literal is part of the user-visible OAuthError.errorDescription — pin against silent rephrasing")
+        XCTAssertEqual(captured?.errorDescription,
+            "Slack rejected the connection: response missing ok=true or access_token",
+            "full LocalizedError surface must be the exact string the Settings banner renders")
+    }
+
+    /// Symmetric pin for the `{"ok":true,"access_token":""}` branch.
+    /// The empty-token short-circuit lives in the same `guard` block as
+    /// the missing-key path and produces the same `tokenExchangeFailed`
+    /// message — guaranteeing a future refactor that splits the two
+    /// branches keeps both arms surfacing the same user-visible copy.
+    func testTokenExchangeEmptyAccessTokenSurfacesPinnedMessage() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": ""]
+
+        let exp = expectation(description: "authorize completes")
+        var captured: OAuthError?
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { result in
+            if case .failure(let err) = result { captured = err }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        guard case .tokenExchangeFailed(let msg) = captured else {
+            XCTFail("Expected tokenExchangeFailed, got \(String(describing: captured))")
+            return
+        }
+        XCTAssertEqual(msg, "response missing ok=true or access_token",
+            "the empty-token branch must produce the SAME message as the missing-key branch — splitting them risks divergent UX copy")
+    }
+
+    /// `{"ok":false}` (Slack rejects the code outright) carries no inner
+    /// message string from the source — `exchangeCode` falls into the
+    /// same guard as the missing-access_token case and produces
+    /// `tokenExchangeFailed("response missing ok=true or access_token")`.
+    /// That's intentional but easy to miss: the implementation reuses one
+    /// guard for three distinct failure modes (no ok, ok:false, no
+    /// token). Pin so a future refactor that splits the guards keeps
+    /// the user-visible copy aligned.
+    func testTokenExchangeOkFalseSurfacesSameMessage() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": false]
+
+        let exp = expectation(description: "authorize completes")
+        var captured: OAuthError?
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { result in
+            if case .failure(let err) = result { captured = err }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        guard case .tokenExchangeFailed(let msg) = captured else {
+            XCTFail("Expected tokenExchangeFailed, got \(String(describing: captured))")
+            return
+        }
+        XCTAssertEqual(msg, "response missing ok=true or access_token",
+            "ok:false reuses the same guard as missing-token; splitting the message would diverge copy across three failure modes")
+    }
 }
