@@ -1652,18 +1652,23 @@ final class IMessageChannelFormatRelativeTests: XCTestCase {
     }
 
     /// A timestamp from ~25 hours ago must land in the "Yesterday" bucket.
-    /// Using Date()-relative arithmetic keeps the assertion deterministic
-    /// independent of when the test runs (modulo daylight-saving edge
-    /// cases, where the timestamp may briefly land in "today" depending on
-    /// the wall clock — a 25-hour offset gives an hour of slack against
-    /// that edge). "Yesterday" is the only bucket whose output is
-    /// locale-stable enough to pin verbatim; today/this-week buckets
-    /// would produce DateFormatter-localized strings that vary by user.
+    /// "Yesterday" is the only bucket whose output is locale-stable enough
+    /// to pin verbatim; today/this-week buckets would produce
+    /// DateFormatter-localized strings that vary by user. Earlier the test
+    /// used `Date() - 25h`, but that wall-clock offset lands in
+    /// 2-days-ago when the runner happens to fire between 00:00 and 01:00
+    /// local time (autopilot fire 2026-05-07 00:23 hit this), so we now
+    /// compute "yesterday at noon" via Calendar — which is guaranteed to
+    /// fall inside `isDateInYesterday(_:)`'s window regardless of when the
+    /// test runs.
     func testFormatRelativeYesterdayBucketReturnsYesterdayLiteral() {
-        let twentyFiveHoursAgo = Date().addingTimeInterval(-25 * 3600)
-        let appleDate = Int64(twentyFiveHoursAgo.timeIntervalSinceReferenceDate)
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        // Yesterday-at-noon: 12 hours before start-of-today.
+        let yesterdayNoon = cal.date(byAdding: .hour, value: -12, to: startOfToday)!
+        let appleDate = Int64(yesterdayNoon.timeIntervalSinceReferenceDate)
         XCTAssertEqual(IMessageChannel.formatRelative(appleDate: appleDate), "Yesterday",
-                       "a timestamp from 25 hours ago must land in the Yesterday bucket — drift here would silently relabel every yesterday-thread as MMM d")
+                       "yesterday-at-noon must land in the Yesterday bucket — drift here would silently relabel every yesterday-thread as MMM d")
     }
 
     /// A timestamp from "now" must land in the "today" bucket and produce
