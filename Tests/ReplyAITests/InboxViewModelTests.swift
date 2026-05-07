@@ -1808,6 +1808,90 @@ final class InboxViewModelChatDBPivotFallbackTests: XCTestCase {
         XCTAssertEqual(vm.viewState, .empty(.noPermissions),
             "with demoModeActive=false and FDA denied, surface .empty(.noPermissions) — never .error")
     }
+
+    // Recovery: a user who flips FDA from denied → granted at runtime, or
+    // whose chat.db lock clears because Messages.app released it, must be
+    // able to re-sync without a relaunch. The pivot's silent-fallback
+    // intentionally leaves `syncStatus = .idle` (not `.failed`) precisely
+    // so a subsequent sync isn't blocked by stale guard state. Pin that
+    // here — flipping the channel from failing to succeeding on the
+    // second sync replaces the empty / demo state with live data.
+
+    private final class RecoveringChannel: ChannelService, @unchecked Sendable {
+        // _failNext starts true; flips to false after the first call yields
+        // its error. Subsequent calls return the configured live threads.
+        private let lock = NSLock()
+        private var _callCount = 0
+        private let liveThreads: [MessageThread]
+        init(liveThreads: [MessageThread]) { self.liveThreads = liveThreads }
+
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            lock.lock(); defer { lock.unlock() }
+            _callCount += 1
+            if _callCount == 1 {
+                throw ChannelError.databaseError(code: 5, message: "database is locked")
+            }
+            return liveThreads
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    func testRecoveryFromDatabaseLockedReplacesEmptyWithLiveThreads() async {
+        let suite = "test.ReplyAI.recovery.noDemo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(false, forKey: PreferenceKey.demoModeActive)
+        let live = [
+            MessageThread(id: "rec-1", channel: .imessage, name: "Alice",
+                          avatar: "AL", preview: "hi", time: "now"),
+        ]
+        let vm = InboxViewModel(
+            imessage: RecoveringChannel(liveThreads: live),
+            contacts: fastContacts(),
+            defaults: d)
+
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .empty(.noPermissions),
+            "first sync: chat.db locked → silent-fallback to empty .noPermissions")
+        XCTAssertEqual(vm.syncStatus, .idle,
+            "first sync: pivot-ignored error must leave syncStatus .idle so a retry isn't blocked")
+
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .populated,
+            "second sync: chat.db unlocked → live threads must replace the empty state")
+        XCTAssertEqual(vm.threads.first?.id, "rec-1",
+            "second sync: the live thread from the channel must be present")
+        if case .live = vm.syncStatus {
+            // pass
+        } else {
+            XCTFail("second sync: syncStatus must transition to .live after recovery; got \(vm.syncStatus)")
+        }
+    }
+
+    func testRecoveryFromDatabaseLockedReplacesDemoFixturesWithLiveThreads() async {
+        let suite = "test.ReplyAI.recovery.demo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(true, forKey: PreferenceKey.demoModeActive)
+        let live = [
+            MessageThread(id: "rec-2", channel: .imessage, name: "Bob",
+                          avatar: "BO", preview: "yo", time: "now"),
+        ]
+        let vm = InboxViewModel(
+            imessage: RecoveringChannel(liveThreads: live),
+            contacts: fastContacts(),
+            defaults: d)
+
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .demo,
+            "first sync with demoModeActive=true: chat.db locked → fixtures populate the inbox")
+        XCTAssertFalse(vm.threads.isEmpty,
+            "first sync demo path: fixtures must populate threads so the app is usable")
+
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .populated,
+            "second sync: chat.db unlocked → demo fixtures must yield to live data")
+        XCTAssertEqual(vm.threads.first?.id, "rec-2",
+            "second sync demo path: the live thread must replace the demo fixtures")
+    }
 }
 
 // MARK: - Bulk thread actions and channel filtering
