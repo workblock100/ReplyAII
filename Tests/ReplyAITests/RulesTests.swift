@@ -2129,6 +2129,52 @@ final class TimeOfDayPredicateTests: XCTestCase {
         XCTAssertEqual(json["start_hour"] as? Int, 22)
         XCTAssertEqual(json["end_hour"] as? Int, 6)
     }
+
+    /// `startHour == endHour` is a degenerate single-hour window. The
+    /// implementation hits the `startHour <= endHour` branch with both
+    /// equal, so the test reduces to `hour >= 14 && hour <= 14` — only
+    /// hour 14 matches. Pin both the match and the bracketing non-match
+    /// because a future "use < instead of <=" tightening would silently
+    /// turn every single-hour rule into a no-op.
+    func testTimeOfDaySingleHourWindowMatchesOnlyThatHour() {
+        let ctx = makeCtx()
+        let predicate = RulePredicate.timeOfDay(startHour: 14, endHour: 14)
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 14)),
+            "hour 14 must match a 14–14 single-hour window")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 13)),
+            "hour 13 must NOT match a 14–14 single-hour window")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 15)),
+            "hour 15 must NOT match a 14–14 single-hour window")
+    }
+
+    /// Single-hour window at hour 0 (midnight). Edge case: hour values bottom
+    /// out at 0, and a 0–0 window must match exactly midnight. Catches a
+    /// future refactor that special-cases the overnight branch and
+    /// accidentally consumes the 0-start case.
+    func testTimeOfDayMidnightSingleHourMatchesHourZero() {
+        let ctx = makeCtx()
+        let predicate = RulePredicate.timeOfDay(startHour: 0, endHour: 0)
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 0)),
+            "hour 0 must match a 0–0 single-hour window")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 23)),
+            "hour 23 must NOT match a 0–0 single-hour window")
+    }
+
+    /// Overnight window with `endHour == 0` (e.g. 22–0) is a niche but valid
+    /// shape — "match between 22:00 and midnight." The wrap-around branch
+    /// fires (startHour > endHour: 22 > 0). Hours 22, 23, 0 match; 1, 12 don't.
+    func testTimeOfDayOvernightEndingAtMidnightMatches() {
+        let ctx = makeCtx()
+        let predicate = RulePredicate.timeOfDay(startHour: 22, endHour: 0)
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 22)))
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 23)))
+        XCTAssertTrue(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 0)),
+            "midnight must match a 22–0 overnight window — endHour boundary is inclusive")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 1)),
+            "hour 1 must NOT match a 22–0 overnight window — it ends at midnight")
+        XCTAssertFalse(RuleEvaluator.matches(predicate, in: ctx, currentDate: date(hour: 12)),
+            "hour 12 must NOT match a 22–0 overnight window")
+    }
 }
 
 // MARK: - Export round-trip covers all predicate kinds (REP-133)
