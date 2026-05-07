@@ -409,4 +409,42 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertEqual(receivedCode, "first",
             "duplicate `code` params must resolve to the first occurrence; a switch to `last` would silently change which auth code we exchange")
     }
+
+    // MARK: - testOkResponseTemplateIsExactLiteral
+
+    /// Pins the exact HTTP/1.1 ack we send back to the browser tab after
+    /// extracting the OAuth code. Three properties matter:
+    ///   1. Status line `HTTP/1.1 200 OK\r\n` — anything else and the
+    ///      browser may render Slack's "page unreachable" instead of
+    ///      "you can close this tab," which is exactly the moment the
+    ///      user is most anxious about whether the auth worked.
+    ///   2. `Content-Length: 2\r\n` matching the literal "OK" body byte
+    ///      count — drift here causes some browsers to hang waiting for
+    ///      more bytes before closing the connection (Chrome 1xx behavior
+    ///      observed during dev), which delays the "all done" signal.
+    ///   3. `Connection: close\r\n` — we want the browser to close the
+    ///      socket immediately so subsequent listener restarts can
+    ///      reuse the port. Without it, keep-alive can wedge a TIME_WAIT
+    ///      that bites a back-to-back retry.
+    /// Asserting against the package-level `okResponseTemplate` is the
+    /// safe alternative to a loopback roundtrip — see AGENTS.md gotcha.
+    func testOkResponseTemplateIsExactLiteral() {
+        XCTAssertEqual(
+            LocalhostOAuthListener.okResponseTemplate,
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
+            "OAuth ack template is part of the user-visible contract — see test rationale"
+        )
+
+        // Sanity: the Content-Length value must match the literal body byte
+        // count. Catches a refactor that changes "OK" to "Done." but
+        // forgets to bump the header.
+        let template = LocalhostOAuthListener.okResponseTemplate
+        let parts = template.components(separatedBy: "\r\n\r\n")
+        XCTAssertEqual(parts.count, 2,
+                       "must split into exactly headers + body around \\r\\n\\r\\n")
+        let body = parts[1]
+        let bodyBytes = body.utf8.count
+        XCTAssertTrue(template.contains("Content-Length: \(bodyBytes)\r\n"),
+                       "Content-Length header must match body byte count (\(bodyBytes))")
+    }
 }

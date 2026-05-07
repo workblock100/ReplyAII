@@ -6,6 +6,13 @@ import Network
 /// extracts the `code` query parameter, then shuts down.
 /// No Slack-specific logic lives here — this is generic OAuth plumbing.
 final class LocalhostOAuthListener: @unchecked Sendable {
+    /// HTTP response sent to the browser tab after a successful code capture.
+    /// Exposed `internal static` so tests can pin the exact bytes without a
+    /// loopback roundtrip — that pattern is timing-flaky on the in-process
+    /// listener (see AGENTS.md "Loopback HTTP roundtrip tests" gotcha).
+    /// Content-Length must match the body byte count: "OK" = 2.
+    static let okResponseTemplate = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
+
     private let preferredPort: UInt16
     private let timeout: TimeInterval
 
@@ -140,8 +147,7 @@ final class LocalhostOAuthListener: @unchecked Sendable {
             else { return }
 
             // Acknowledge to the browser before finishing.
-            let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
-            connection.send(content: Data(response.utf8), completion: .idempotent)
+            connection.send(content: Data(Self.okResponseTemplate.utf8), completion: .idempotent)
 
             self?.finish(with: .success(code))
         }
