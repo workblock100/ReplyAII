@@ -666,6 +666,28 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertTrue(script.contains("SMS;-;+15551234567"),
                       "legacy SMS send must synthesize 1:1 GUID 'SMS;-;<id>'; got: \(script)")
     }
+
+    /// Pin: the legacy by-identifier path correctly rejects an empty id.
+    /// `send(text, toChatIdentifier: "", channel: .imessage)` synthesizes
+    /// `"iMessage;-;"` which `isValidIMessageGUID` rejects (parts[2] is
+    /// empty), so SendError.invalidChatGUID fires before AppleScript runs.
+    /// Pinned because an empty id reaching AppleScript would surface as an
+    /// opaque errOSAScriptError rather than ReplyAI's own actionable copy.
+    func testLegacyByIdentifierWithEmptyIDThrowsInvalidChatGUID() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        XCTAssertThrowsError(
+            try IMessageSender.send("hi", toChatIdentifier: "", channel: .imessage)
+        ) { err in
+            guard case IMessageSender.SendError.invalidChatGUID(let guid) = err else {
+                return XCTFail("expected .invalidChatGUID, got \(err)")
+            }
+            XCTAssertEqual(guid, "iMessage;-;",
+                "synthesized GUID surfaces in the error so logs identify the bad input")
+        }
+    }
 }
 
 // MARK: - REP-174: escapeForAppleScriptLiteral completeness
