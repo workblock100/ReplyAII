@@ -520,9 +520,22 @@ final class SlackOAuthFlowTests: XCTestCase {
 
         XCTAssertEqual(
             MockURLProtocol.capturedRequests.first?.url?.absoluteString,
-            "https://slack.com/api/oauth.v2.access",
-            "token-exchange URL is part of the OAuth contract — see test rationale"
+            SlackOAuthFlow.tokenExchangeURL,
+            "token-exchange URL must route through SlackOAuthFlow.tokenExchangeURL — drift means the constant became dead code while the call site froze a stale literal"
         )
+        // Pin the literal value of the constant itself.
+        XCTAssertEqual(SlackOAuthFlow.tokenExchangeURL,
+                       "https://slack.com/api/oauth.v2.access",
+            "Slack's API surface answers different things at different hosts — drift here surfaces as a generic tokenExchangeFailed with no UI feedback identifying the host as the cause")
+    }
+
+    /// Pin the literal value of `SlackOAuthFlow.authorizationURL`.
+    /// Drift to e.g. `https://api.slack.com/oauth/v2/authorize` is a
+    /// Slack-shaped but wrong host that silently breaks the entire flow.
+    func testAuthorizationURLLiteralIsSlackOAuthV2Authorize() {
+        XCTAssertEqual(SlackOAuthFlow.authorizationURL,
+                       "https://slack.com/oauth/v2/authorize",
+            "SlackOAuthFlow.authorizationURL drift breaks the OAuth flow at the auth-URL leg — Slack-shaped but wrong hosts silently 404 or 401")
     }
 
     /// Token-exchange body includes the redirect_uri so Slack can validate it

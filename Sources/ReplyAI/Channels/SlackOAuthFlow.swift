@@ -68,6 +68,23 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
     /// cluster.
     static let scope = "channels:read,chat:write"
 
+    /// Slack's OAuth2 authorization URL. Hoisted from the inline literal
+    /// so the auth-URL leg has a single source of truth. Drift to e.g.
+    /// `https://api.slack.com/oauth/v2/authorize` (a Slack-shaped but
+    /// wrong host) silently breaks the flow — Slack answers different
+    /// things at different hosts. Pinned by
+    /// `SlackOAuthFlowTests.testAuthorizationURLLiteralIsSlackOAuthV2Authorize`.
+    static let authorizationURL = "https://slack.com/oauth/v2/authorize"
+
+    /// Slack's `oauth.v2.access` token-exchange endpoint. Hoisted from
+    /// the inline literal so the token-exchange POST routes through a
+    /// named constant. Drift here lands the form-body POST at a wrong
+    /// host (Slack's API surface answers different things at different
+    /// hosts), which surfaces as a generic `tokenExchangeFailed` with
+    /// no UI feedback identifying the host as the cause.
+    /// Pinned by `SlackOAuthFlowTests.testTokenExchangeURLIsExactSlackAPIEndpoint`.
+    static let tokenExchangeURL = "https://slack.com/api/oauth.v2.access"
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -129,7 +146,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
             },
             onReady: { [weak self] in
                 guard let self else { return }
-                var components = URLComponents(string: "https://slack.com/oauth/v2/authorize")!
+                var components = URLComponents(string: SlackOAuthFlow.authorizationURL)!
                 components.queryItems = [
                     URLQueryItem(name: "client_id", value: clientID),
                     URLQueryItem(name: "scope", value: SlackOAuthFlow.scope),
@@ -149,7 +166,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         clientSecret: String,
         completion: @escaping (Result<Void, OAuthError>) -> Void
     ) {
-        guard let endpointURL = URL(string: "https://slack.com/api/oauth.v2.access") else {
+        guard let endpointURL = URL(string: SlackOAuthFlow.tokenExchangeURL) else {
             completion(.failure(.tokenExchangeFailed("invalid endpoint URL")))
             return
         }
