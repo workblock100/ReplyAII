@@ -51,15 +51,24 @@ final class ContactsResolver: @unchecked Sendable {
         var access: Access = .unknown
     }
 
+    /// Production cache window for resolved contact names. 30 minutes
+    /// trades off freshness vs. number of CNContactStore queries — a
+    /// chatty inbox would otherwise re-resolve every handle on every
+    /// thread-list refresh. Drift below ~5 minutes thrashes the
+    /// system-wide Contacts cache; drift above ~hours means a contact
+    /// renamed in the user's address book takes too long to surface
+    /// in ReplyAI. Pinned independently of the inline init default.
+    static let defaultTTL: TimeInterval = 1800
+
     private let store: ContactsStoring
     /// How long a cached name remains fresh before the store is re-queried.
-    /// Default 1800 s (30 min). Zero means always re-query (useful in tests).
+    /// Default `defaultTTL` (30 min). Zero means always re-query (useful in tests).
     let ttl: TimeInterval
     private let locked = Locked<ResolverState>(ResolverState())
     private let notificationCenter: NotificationCenter
     private var notificationObserver: NSObjectProtocol?
 
-    init(store: ContactsStoring? = nil, ttl: TimeInterval = 1800,
+    init(store: ContactsStoring? = nil, ttl: TimeInterval = ContactsResolver.defaultTTL,
          notificationCenter: NotificationCenter = .default) {
         self.store = store ?? CNContactStoreBackedStoring()
         self.ttl = ttl
