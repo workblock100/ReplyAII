@@ -163,6 +163,20 @@ final class PromptBuilderTests: XCTestCase {
             "loop breaks on first over-budget message; older smaller messages are NOT recovered after the break")
     }
 
+    /// Edge case: empty-text messages all survive truncation under any
+    /// non-negative budget, because `chars=0` never trips the strict-greater
+    /// `total + chars > budget` break. Pinned because empty messages can
+    /// realistically appear in history (chat.db rows with cleared text,
+    /// attachment-only messages where AttributedBodyDecoder returned ""),
+    /// and a future "filter empties at truncate" hardening would change the
+    /// shape of every prompt that contains attachment-only messages.
+    func testTruncateRetainsEmptyTextMessagesUnderPositiveBudget() {
+        let empties = (1...5).map { _ in makeMessage("") }
+        let result = PromptBuilder.truncate(empties, budget: 100)
+        XCTAssertEqual(result.count, 5,
+            "every empty-text message survives a positive budget — chars=0 never trips the > break")
+    }
+
     // MARK: - Tone system instruction tests (REP-112)
 
     func testEachToneProducesNonEmptySystemInstruction() {
