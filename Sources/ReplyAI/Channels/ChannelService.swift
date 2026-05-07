@@ -19,16 +19,41 @@ protocol ChannelService: Sendable {
     func newIncomingMessages(forThreadID id: String, sinceRowID: Int64) async throws -> [Message]
 }
 
+/// Default page sizes shared across every `ChannelService` adapter and used by
+/// the no-arg convenience overloads on the protocol. Swift protocols can't
+/// host static-let storage themselves, so the defaults live in this enum and
+/// the convenience overloads + tests both reference them. Pinned by
+/// `ChannelServiceTests.testDefault*Limit`.
+enum ChannelServiceDefaults {
+    /// Sidebar fetch size for the no-arg `recentThreads()` convenience.
+    /// Drift up wastes per-channel API budget on threads the user can't see
+    /// (the inbox sidebar tops out around 50 visible rows on the default
+    /// window size); drift down gives every newly-added channel a smaller
+    /// window than the chat.db path, so swapping channels feels like
+    /// "where did my older threads go?".
+    static let recentThreadsLimit: Int = 50
+
+    /// Per-thread message cap for the no-arg `messages(forThreadID:)`
+    /// convenience. 20 is the documented `PromptBuilder` working budget
+    /// for context — drift up oversubscribes the LLM context window;
+    /// drift down silently shrinks the prompt's available history and
+    /// makes drafts feel less personalized for active conversations.
+    static let messagesLimit: Int = 20
+}
+
 extension ChannelService {
-    /// Convenience overload: fetch at most 50 threads (the default page size).
+    /// Convenience overload: fetch at most `ChannelServiceDefaults.recentThreadsLimit`
+    /// threads (50 by default). Routes through the constant so a single
+    /// edit there changes every adapter's default page size.
     func recentThreads() async throws -> [MessageThread] {
-        try await recentThreads(limit: 50)
+        try await recentThreads(limit: ChannelServiceDefaults.recentThreadsLimit)
     }
 
-    /// Convenience overload: fetch the 20 most recent messages (the default per-thread cap).
-    /// Callers that need more for context-building should pass an explicit limit.
+    /// Convenience overload: fetch the `ChannelServiceDefaults.messagesLimit`
+    /// most recent messages (20 by default). Callers that need more for
+    /// context-building should pass an explicit limit.
     func messages(forThreadID id: String) async throws -> [Message] {
-        try await messages(forThreadID: id, limit: 20)
+        try await messages(forThreadID: id, limit: ChannelServiceDefaults.messagesLimit)
     }
 
     /// Default shim so existing mocks/stubs don't have to implement the

@@ -14,15 +14,36 @@ final class ChannelServiceTests: XCTestCase {
     func testRecentThreadsDefaultsToFifty() async throws {
         let spy = SpyChannelService()
         _ = try await spy.recentThreads()
-        XCTAssertEqual(spy.lastRecentThreadsLimit, 50,
-            "recentThreads() with no arg must call through with limit=50 — every adapter relies on the default")
+        XCTAssertEqual(spy.lastRecentThreadsLimit, ChannelServiceDefaults.recentThreadsLimit,
+            "recentThreads() with no arg must route through ChannelServiceDefaults.recentThreadsLimit — drift means the constant became dead code while the convenience overload froze a stale literal")
     }
 
     func testMessagesDefaultsToTwenty() async throws {
         let spy = SpyChannelService()
         _ = try await spy.messages(forThreadID: "T1")
-        XCTAssertEqual(spy.lastMessagesLimit, 20,
-            "messages(forThreadID:) with no limit must call through with limit=20 — context-builders that need more pass an explicit value")
+        XCTAssertEqual(spy.lastMessagesLimit, ChannelServiceDefaults.messagesLimit,
+            "messages(forThreadID:) with no limit must route through ChannelServiceDefaults.messagesLimit — drift means context-builders silently get a different history window than the chat.db path")
+    }
+
+    /// Pin the literal value of `ChannelServiceDefaults.recentThreadsLimit`
+    /// itself. The routing test above only proves the convenience overload
+    /// goes through the constant; this test proves the constant has the
+    /// right value. Drift up wastes per-channel API budget on threads the
+    /// user can't see; drift down gives every adapter a smaller window
+    /// than the chat.db path, so swapping channels feels like older
+    /// threads have vanished.
+    func testRecentThreadsLimitDefaultLiteralIsFifty() {
+        XCTAssertEqual(ChannelServiceDefaults.recentThreadsLimit, 50,
+            "ChannelServiceDefaults.recentThreadsLimit drift either oversubscribes API budget (too high) or shrinks the visible inbox (too low)")
+    }
+
+    /// Pin the literal value of `ChannelServiceDefaults.messagesLimit`
+    /// itself. 20 is the documented PromptBuilder working budget — drift
+    /// up oversubscribes the LLM context window; drift down silently
+    /// shrinks prompt history and makes drafts feel less personalized.
+    func testMessagesLimitDefaultLiteralIsTwenty() {
+        XCTAssertEqual(ChannelServiceDefaults.messagesLimit, 20,
+            "ChannelServiceDefaults.messagesLimit drift either oversubscribes the LLM context window (too high) or shrinks prompt history below the PromptBuilder budget (too low)")
     }
 
     func testRecentThreadsExplicitLimitIsForwarded() async throws {
