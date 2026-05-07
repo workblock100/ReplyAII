@@ -228,9 +228,16 @@ extension SmartRule {
     /// Validates that a regex pattern compiles. Throws `RuleValidationError.invalidRegex`
     /// with the offending pattern and NSRegularExpression's own error message so the
     /// caller can surface both to the user.
+    /// **Note**: an empty pattern passes validation here, but `RuleEvaluator.matches`
+    /// treats `.textMatchesRegex("")` as "matches NOTHING" (because
+    /// `NSRegularExpression(pattern: "")` itself throws, and the evaluator's
+    /// `guard let regex = try? ... else { return false }` short-circuits).
+    /// In practice an empty-regex rule never fires — pinned by
+    /// `testEmptyTextMatchesRegexNeverFiresAtRuntime`.
     static func validateRegex(_ pattern: String) throws {
-        // Empty pattern is intentionally valid — it matches everything (catch-all rule).
-        // NSRegularExpression rejects "" even though ICU semantics allow it.
+        // Empty pattern passes validation but never fires at runtime — see note above.
+        // `NSRegularExpression(pattern: "")` itself throws, so we early-return rather
+        // than surface that error during validation.
         guard !pattern.isEmpty else { return }
         do {
             _ = try NSRegularExpression(pattern: pattern)

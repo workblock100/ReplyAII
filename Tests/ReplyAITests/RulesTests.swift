@@ -2651,10 +2651,40 @@ final class ThreadNameMatchesRegexTests: XCTestCase {
 
 final class ValidateRegexBoundaryCasesTests: XCTestCase {
 
-    // An empty pattern matches everything — valid by design for "catch-all" rules.
+    // An empty pattern is accepted by the validator (early-returns without compiling).
+    // Despite the historical comment claiming "matches everything", in practice
+    // `RuleEvaluator.matches(.textMatchesRegex(""), ...)` returns false at runtime
+    // because `NSRegularExpression(pattern: "")` itself throws and the evaluator's
+    // `guard let regex = try? ... else { return false }` short-circuits.
+    // See companion test: testEmptyTextMatchesRegexNeverFiresAtRuntime.
     func testEmptyPatternAccepted() {
         XCTAssertNoThrow(try SmartRule.validateRegex(""),
-                         "empty pattern is valid ICU regex (matches everything) and must not throw")
+                         "empty pattern passes validation (early-return) and must not throw")
+    }
+
+    /// Companion to `testEmptyPatternAccepted`. Pin the actual runtime behavior:
+    /// despite passing validation, an empty regex pattern never fires against
+    /// any context. The historical doc-comment claimed "catch-all" semantics —
+    /// this test makes the real behavior visible and prevents a refactor that
+    /// "fixes" the validator from surprising-but-load-bearing rule semantics.
+    func testEmptyTextMatchesRegexNeverFiresAtRuntime() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "any body",
+            isUnread: true, unreadCount: 1, senderKnown: true,
+            chatIdentifier: "t1", hasAttachment: false, threadDisplayName: "Alice"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.textMatchesRegex(""), in: ctx),
+            "empty regex pattern returns false at runtime — NSRegularExpression rejects empty input")
+
+        let emptyBodyCtx = RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "",
+            isUnread: true, unreadCount: 1, senderKnown: true,
+            chatIdentifier: "t1", hasAttachment: false, threadDisplayName: "Alice"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.textMatchesRegex(""), in: emptyBodyCtx),
+            "empty regex + empty body still returns false — no special-case path")
     }
 
     // Python named-group syntax (?P<name>...) is not part of ICU regex.
