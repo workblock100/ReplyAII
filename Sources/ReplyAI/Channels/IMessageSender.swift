@@ -46,6 +46,19 @@ enum IMessageSender {
     /// Maps to `SendError.notAuthorized` for the reconnect-CTA UI path.
     static let tccDeniedErrorCode = -1743
 
+    /// AppleScript service identifier for iMessage chat GUIDs (the first
+    /// `;`-separated segment of `iMessage;-;+15551234567`). Used by the
+    /// 1:1 GUID synthesis path AND by `isValidIMessageGUID`. Drift breaks
+    /// both: synthesis emits a GUID Messages.app rejects, and validation
+    /// rejects every legitimate iMessage GUID. Pinned by
+    /// `IMessageSenderTests.testServiceIDLiteralsAreIMessageAndSMS`.
+    static let iMessageServiceID = "iMessage"
+
+    /// AppleScript service identifier for SMS-relay chat GUIDs (the first
+    /// `;`-separated segment of `SMS;-;+15551234567`). Same drift impact
+    /// as `iMessageServiceID` but on the SMS-relay path.
+    static let smsServiceID = "SMS"
+
     /// `errAEEventNotHandled` — transient. Messages.app accepted the
     /// AppleScript but couldn't dispatch the event (commonly during
     /// startup or iCloud sync). Triggers the `retryDelay` retry path.
@@ -97,7 +110,7 @@ enum IMessageSender {
         guard channel == .imessage || channel == .sms else {
             throw SendError.unsupported
         }
-        let service = channel == .sms ? "SMS" : "iMessage"
+        let service = channel == .sms ? Self.smsServiceID : Self.iMessageServiceID
         try sendRaw(text, chatGUID: "\(service);-;\(id)", channel: channel)
     }
 
@@ -110,7 +123,7 @@ enum IMessageSender {
     /// GUID to address).
     static func chatGUID(for thread: MessageThread) -> String {
         if let guid = thread.chatGUID, !guid.isEmpty { return guid }
-        let service = thread.channel == .sms ? "SMS" : "iMessage"
+        let service = thread.channel == .sms ? Self.smsServiceID : Self.iMessageServiceID
         return "\(service);-;\(thread.id)"
     }
 
@@ -211,7 +224,7 @@ enum IMessageSender {
     private static func isValidIMessageGUID(_ guid: String) -> Bool {
         let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return false }
-        guard parts[0] == "iMessage" else { return false }
+        guard parts[0] == Substring(Self.iMessageServiceID) else { return false }
         guard parts[1] == "+" || parts[1] == "-" else { return false }
         return !parts[2].isEmpty
     }
@@ -219,7 +232,7 @@ enum IMessageSender {
     private static func isValidSMSGUID(_ guid: String) -> Bool {
         let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return false }
-        guard parts[0] == "SMS" else { return false }
+        guard parts[0] == Substring(Self.smsServiceID) else { return false }
         guard parts[1] == "+" || parts[1] == "-" else { return false }
         return !parts[2].isEmpty
     }

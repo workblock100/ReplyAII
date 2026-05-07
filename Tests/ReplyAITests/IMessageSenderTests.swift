@@ -1043,4 +1043,19 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
         XCTAssertTrue(captured.source.contains("send \"\" to targetChat"),
             "empty text must still emit a `send \"\" to targetChat` line — drift drops the send call entirely; got: \(captured.source)")
     }
+
+    /// `IMessageSender.iMessageServiceID` and `smsServiceID` are the AppleScript
+    /// service-identifier strings used by both the 1:1 GUID synthesis path
+    /// (`chatGUID(for:)` and the `toChatIdentifier` overload) AND the GUID
+    /// validators (`isValidIMessageGUID`, `isValidSMSGUID`). Drift on either
+    /// is double-edged: synthesis emits a GUID Messages.app rejects, and
+    /// validation rejects every legitimate GUID. The literals previously
+    /// lived inline at four call sites — pinning the constants here surfaces
+    /// "let's normalize to lowercase" or "let's add MMS" in code review.
+    func testServiceIDLiteralsAreIMessageAndSMS() {
+        XCTAssertEqual(IMessageSender.iMessageServiceID, "iMessage",
+            "iMessageServiceID drift breaks the synthesized 1:1 GUID format AND the GUID validator simultaneously")
+        XCTAssertEqual(IMessageSender.smsServiceID, "SMS",
+            "smsServiceID drift breaks the synthesized SMS-relay GUID format AND the SMS GUID validator simultaneously")
+    }
 }
