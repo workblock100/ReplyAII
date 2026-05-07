@@ -1758,6 +1758,56 @@ final class InboxViewModelChatDBPivotFallbackTests: XCTestCase {
             XCTFail("non-chat.db ChannelError (.unavailable) must still surface as .failed; got \(vm.syncStatus)")
         }
     }
+
+    // The class comment promises silent-fallback for `permissionDenied` too —
+    // that's the FDA-denial case from `IMessageChannel`. The catch block in
+    // `syncFromIMessage` routes `.permissionDenied` into the same pivot-ignored
+    // bucket as `.databaseError` and `.databaseCorrupted`. Pin that here so a
+    // refactor that re-classifies `.permissionDenied` as a regular error
+    // (which would re-introduce the audit's "● error · database is locked"
+    // pill on a fresh-install Mac with no FDA grant) fails loudly.
+
+    private final class PermissionDeniedChannel: ChannelService, @unchecked Sendable {
+        func recentThreads(limit: Int) async throws -> [MessageThread] {
+            throw ChannelError.permissionDenied(hint: "Grant Full Disk Access in System Settings.")
+        }
+        func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
+    }
+
+    func testPermissionDeniedDoesNotSurfaceErrorPill() async {
+        let vm = InboxViewModel(
+            imessage: PermissionDeniedChannel(),
+            contacts: fastContacts())
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.syncStatus, .idle,
+            "FDA-denied permissionDenied must silent-fallback per pivot — sidebar must not show an error pill")
+    }
+
+    func testPermissionDeniedFallsBackToDemoWhenDemoModeOn() async {
+        let suite = "test.ReplyAI.pivotPermDenied.demo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(true, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: PermissionDeniedChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .demo,
+            "with demoModeActive=true and FDA denied, fall back to demo fixtures so the app is still useful")
+    }
+
+    func testPermissionDeniedFallsBackToEmptyNoPermissionsWhenDemoModeOff() async {
+        let suite = "test.ReplyAI.pivotPermDenied.noDemo.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.set(false, forKey: PreferenceKey.demoModeActive)
+        let vm = InboxViewModel(
+            imessage: PermissionDeniedChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+        await vm.syncFromIMessage()
+        XCTAssertEqual(vm.viewState, .empty(.noPermissions),
+            "with demoModeActive=false and FDA denied, surface .empty(.noPermissions) — never .error")
+    }
 }
 
 // MARK: - Bulk thread actions and channel filtering
