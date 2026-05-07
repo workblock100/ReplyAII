@@ -22,6 +22,21 @@ final class GlobalHotkeyContractTests: XCTestCase {
         )
     }
 
+    /// `ReplyAIWindowSummoner.inboxWindowTitle` is the title both
+    /// `WindowGroup("Inbox", id: "inbox")` in ReplyAIApp and the AppKit
+    /// fast-path window lookup in `summon()` route through. Drift on
+    /// either side silently degrades `⌘⇧R` from the fast `makeKey` path
+    /// to the slower `openWindow` notification-fallback path on every
+    /// summon — a one-frame stutter users notice over time. The AppKit-
+    /// touching fast-path test is gated behind `RUN_APPKIT_TOUCHING_TESTS`;
+    /// this pin is unconditional so the constant value is locked even in
+    /// the headless run.
+    @MainActor
+    func testInboxWindowTitleConstantIsInbox() {
+        XCTAssertEqual(ReplyAIWindowSummoner.inboxWindowTitle, "Inbox",
+            "inboxWindowTitle drift desyncs the WindowGroup label and the AppKit fast-path lookup — every ⌘⇧R falls back to the slower notification path")
+    }
+
     /// `ReplyAIWindowSummoner.summon()` falls back to posting the summon
     /// notification when no NSWindow with title "Inbox" exists. That fallback
     /// is the path SwiftUI uses to call `openWindow(id: "inbox")` and the

@@ -105,13 +105,22 @@ final class GlobalHotkey: @unchecked Sendable {
 /// focus the inbox window, simulating "open the composer from anywhere."
 @MainActor
 enum ReplyAIWindowSummoner {
+    /// Title used by `WindowGroup("Inbox", id: "inbox")` in `ReplyAIApp`.
+    /// SwiftUI titles each scene window after the localized name passed to
+    /// `WindowGroup`, so the AppKit fast-path match below uses this exact
+    /// string. The summoner and the scene declaration must stay in sync —
+    /// drift on either side silently degrades `⌘⇧R` to the slower
+    /// notification-fallback path on every summon. Pinned by
+    /// `GlobalHotkeyContractTests.testInboxWindowTitleConstantIsInbox`.
+    static let inboxWindowTitle = "Inbox"
+
     static func summon() {
         NSApp.activate(ignoringOtherApps: true)
         // Fast path: an existing inbox window? Surface it directly via AppKit
         // so we don't need a SwiftUI View in scope. SwiftUI's WindowGroup
         // titles its windows after the localized name we passed
         // (`WindowGroup("Inbox", id: "inbox")`), so a title match is reliable.
-        if let inbox = NSApp.windows.first(where: { $0.title == "Inbox" }) {
+        if let inbox = NSApp.windows.first(where: { $0.title == ReplyAIWindowSummoner.inboxWindowTitle }) {
             inbox.makeKeyAndOrderFront(nil)
             return
         }
