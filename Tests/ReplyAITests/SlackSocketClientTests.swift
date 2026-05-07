@@ -424,13 +424,25 @@ final class SlackSocketClientTests: XCTestCase {
             connectionURL: URL(string: "wss://test.slack.example/link")!,
             factory: MockWebSocketTaskFactory()
         )
-        XCTAssertEqual(factoryClient.reconnectDelay, 5.0,
-                       "factory init default reconnectDelay must stay at 5.0s — see test rationale")
+        XCTAssertEqual(factoryClient.reconnectDelay, SlackSocketClient.defaultReconnectDelay,
+                       "factory init default reconnectDelay must route through Self.defaultReconnectDelay — drift means a future refactor of the constant left the init signature stale")
 
         let convenienceClient = SlackSocketClient(
             connectionURL: URL(string: "wss://test.slack.example/link")!
         )
-        XCTAssertEqual(convenienceClient.reconnectDelay, 5.0,
-                       "convenience init default reconnectDelay must stay at 5.0s — see test rationale")
+        XCTAssertEqual(convenienceClient.reconnectDelay, SlackSocketClient.defaultReconnectDelay,
+                       "convenience init default reconnectDelay must route through Self.defaultReconnectDelay — drift means a future refactor of the constant left the URLSession-shim signature stale")
+    }
+
+    /// Pin the literal value of `defaultReconnectDelay` itself. The default-
+    /// equality test above only proves the inits *route through* the
+    /// constant; this test proves the constant has the right value. Both
+    /// matter — the inits could correctly route through a constant whose
+    /// value silently drifted to 1.0 (gateway hammering) or 60.0 (perceived
+    /// outages between fires of a real disconnect). 5 s is the documented
+    /// Slack Socket Mode sample value and the deliberate balance point.
+    func testDefaultReconnectDelayLiteralIsFiveSeconds() {
+        XCTAssertEqual(SlackSocketClient.defaultReconnectDelay, 5.0,
+                       "SlackSocketClient.defaultReconnectDelay drift either hammers Slack's gateway (too low → rate-limit penalties) or stretches perceived outages (too high → menu-bar shows offline copy through brief flaps)")
     }
 }

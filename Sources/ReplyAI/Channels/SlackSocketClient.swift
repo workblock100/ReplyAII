@@ -45,6 +45,16 @@ final class SlackSocketClient: @unchecked Sendable {
 
     static let maxReconnects = 3
 
+    /// Wait this long between an abnormal close and the next reconnect
+    /// attempt. Lower values hammer Slack's gateway and risk being throttled
+    /// after a flap; higher values delay recovery enough that users notice
+    /// "Slack is offline" copy in the menu bar between fires of a real
+    /// outage. 5 s is the value Slack's own RTM/Socket Mode samples document
+    /// — drift here changes both the perceived recovery latency and the
+    /// production reconnect-storm shape. Pinned by
+    /// `SlackSocketClientTests.testDefaultReconnectDelayIsFiveSeconds`.
+    static let defaultReconnectDelay: TimeInterval = 5.0
+
     private let connectionURL: URL
     private let factory: any WebSocketTaskFactory
     // Internal so tests can inject 0 to skip sleep.
@@ -59,7 +69,7 @@ final class SlackSocketClient: @unchecked Sendable {
     init(
         connectionURL: URL,
         factory: any WebSocketTaskFactory,
-        reconnectDelay: TimeInterval = 5.0
+        reconnectDelay: TimeInterval = SlackSocketClient.defaultReconnectDelay
     ) {
         self.connectionURL = connectionURL
         self.factory = factory
@@ -70,7 +80,7 @@ final class SlackSocketClient: @unchecked Sendable {
     convenience init(
         connectionURL: URL,
         urlSession: URLSession = .shared,
-        reconnectDelay: TimeInterval = 5.0
+        reconnectDelay: TimeInterval = SlackSocketClient.defaultReconnectDelay
     ) {
         self.init(
             connectionURL: connectionURL,
