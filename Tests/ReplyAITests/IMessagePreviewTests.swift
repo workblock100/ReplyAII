@@ -261,4 +261,71 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertEqual(IMessagePreview.displayString(from: body), body,
             "plain-text pass-through must preserve embedded tabs verbatim")
     }
+
+    // MARK: - URL component handling pins (singleURLHost edges)
+
+    /// URLs with an explicit port — the host extraction must NOT include
+    /// the `:port` suffix, since `URL.host` parses that into a separate
+    /// `port` component. Pin so a refactor that switches to
+    /// `url.absoluteString.dropFirst(scheme.count)` style parsing
+    /// (which would include the port) surfaces here.
+    func testSingleURLHostStripsExplicitPort() {
+        let body = "https://example.com:8080/api"
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: body), "example.com",
+            "URL.host returns the host without the port; pin so refactors don't accidentally include `:8080` in the sidebar label")
+    }
+
+    /// URLs with userinfo (username:password@host). `URL.host` returns
+    /// just the host portion, dropping the credentials. Pin so a
+    /// refactor that accidentally exposes user@example.com in a sidebar
+    /// preview surfaces here. Real-world: chat.db can contain pasted
+    /// admin / VPN URLs that include creds.
+    func testSingleURLHostStripsUserinfo() {
+        let body = "https://user:pass@example.com/dashboard"
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: body), "example.com",
+            "URL.host omits userinfo; sidebar must never leak `user:pass@` to the visible preview")
+    }
+
+    /// `www.` prefix stripping is applied AFTER lowercasing the full
+    /// host, so `WWW.API.EXAMPLE.COM` → `api.example.com`. Pin the
+    /// double behavior (lowercase + prefix strip composed) since
+    /// reordering them would silently break uppercase-www inputs.
+    func testSingleURLHostStripsWwwAfterLowercasing() {
+        let body = "https://WWW.API.EXAMPLE.COM/v1"
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: body), "api.example.com",
+            "lowercase first, then strip `www.` — order matters; uppercase WWW. must still be detected and removed")
+    }
+
+    /// Subdomain immediately after a stripped `www.` is preserved.
+    /// `www.api.example.com` → `api.example.com`, NOT `example.com`.
+    /// Pin because a future change that interpreted the strip as
+    /// "remove the leftmost label always" would silently shorten
+    /// every subdomain URL the user pastes.
+    func testSingleURLHostPreservesSubdomainAfterWwwStrip() {
+        let body = "https://www.api.example.com/v1"
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: body), "api.example.com",
+            "stripping `www.` removes only the literal four-char prefix; deeper subdomains must remain")
+    }
+
+    /// `https://www.<one-char>.com/` — the host is `www.x.com`, length
+    /// 9, so the `count > 4` guard passes and the prefix is stripped
+    /// to `x.com`. Pin the boundary (4 chars after `www.` for "x.com"
+    /// = 5 chars total post-strip) so a refactor that tightens the
+    /// guard to `count > 8` doesn't quietly stop stripping short hosts.
+    func testSingleURLHostStripsWwwForShortHost() {
+        let body = "https://www.x.com/"
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: body), "x.com",
+            "host is `www.x.com` (9 chars), passes the count > 4 guard, strips to `x.com`")
+    }
+
+    /// `displayString` round-trips a URL through the full pipeline (not
+    /// just `singleURLHost`), so a port-bearing URL must produce
+    /// `🔗 example.com` — no port in the chip. Anchors the pin against
+    /// the user-visible string, in case the rendering layer ever
+    /// re-introduces port information for "display fidelity."
+    func testDisplayStringWithPortShowsBareHost() {
+        XCTAssertEqual(IMessagePreview.displayString(from: "https://example.com:8443/x"),
+                       "🔗 example.com",
+            "user-visible chip must show only the host; ports never round-trip into the sidebar")
+    }
 }
