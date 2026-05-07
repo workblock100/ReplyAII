@@ -222,6 +222,53 @@ final class SlackChannelTests: XCTestCase {
                        "negative limit must be clamped to 1, not forwarded as -1")
     }
 
+    /// `unread_count` is optional in Slack's `conversations.list` payload —
+    /// channels without unreads omit the key entirely. The parser must
+    /// surface that as `MessageThread.unread = 0`, not crash on a missing
+    /// key. Existing happy-path tests always include `unread_count`, so
+    /// the `?? 0` fallback isn't directly exercised.
+    func testRecentThreadsMissingUnreadCountDefaultsToZero() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C100", "name": "general", "is_channel": true}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertEqual(threads[0].unread, 0,
+            "missing unread_count key must default to 0 — drift to nil/-1 would render as a phantom badge in the sidebar")
+    }
+
+    /// Explicit JSON `null` for unread_count must also default to 0. This
+    /// is a separate code path from "missing key" — the JSONDecoder
+    /// produces `Optional<Int>.none` for both, but a future refactor that
+    /// switches to a non-optional decode with a custom strategy could
+    /// regress one without the other. Pin both.
+    func testRecentThreadsNullUnreadCountDefaultsToZero() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C100", "name": "general", "is_channel": true, "unread_count": null}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads[0].unread, 0,
+            "explicit null unread_count must default to 0 — same as missing-key")
+    }
+
     // MARK: - conversations.list `types` + `exclude_archived` contract
 
     /// The `types` parameter on `conversations.list` is what gates which Slack
