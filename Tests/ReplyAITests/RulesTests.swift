@@ -1252,6 +1252,68 @@ final class RulesTests: XCTestCase {
                       ".senderUnknown must fire on email handles after REP-016 fix")
     }
 
+    // MARK: - RuleContext.from edge cases (additional REP-016 boundary pins)
+
+    /// Empty thread name is a degenerate input that today maps to
+    /// `senderKnown: true` (the implementation's `!isEmail && !isPhonelike`
+    /// expression evaluates to `true` when both halves are false). The
+    /// classification doesn't have a clear product answer either way —
+    /// pinning it here makes the current behavior explicit so a future
+    /// change ("empty name should be unknown") shows up as a deliberate
+    /// edit rather than a silent flip.
+    func testSenderKnownEmptyNameTreatedAsKnown() {
+        let ctx = RuleContext.from(thread: makeThread(name: ""))
+        XCTAssertTrue(ctx.senderKnown,
+            "empty name maps to senderKnown=true today (neither @-shaped nor phone-shaped); pin to surface any deliberate flip in review")
+    }
+
+    /// Whitespace-only name passes the `allSatisfy { phoneCharset.contains($0) }`
+    /// check (space is in the charset) and classifies as unknown — same bucket
+    /// as a phone number. Pin so the phone-charset's space membership doesn't
+    /// drift in a future "tighten the charset" refactor.
+    func testSenderKnownWhitespaceOnlyNameClassifiedAsPhonelike() {
+        let ctx = RuleContext.from(thread: makeThread(name: "   "))
+        XCTAssertFalse(ctx.senderKnown,
+            "whitespace-only name passes the phonelike charset check (space ∈ charset) → unknown; remove space from the charset and this flips")
+    }
+
+    /// A name that begins with `+` but contains letters (e.g. "+Marketing"
+    /// list-name from a corporate alias) takes the `hasPrefix("+")` short-
+    /// circuit and lands in the unknown bucket. This is the "false negative"
+    /// edge case for senderKnown — pin so a future "+ prefix only counts
+    /// when the rest is all digits" refinement shows up here as a
+    /// deliberate change rather than a silent loosening.
+    func testSenderKnownNonPhonePlusPrefixedNameClassifiedAsPhonelike() {
+        let ctx = RuleContext.from(thread: makeThread(name: "+Marketing"))
+        XCTAssertFalse(ctx.senderKnown,
+            "any leading + currently triggers the phonelike short-circuit; pin so refinements to limit `+` prefix to digit-only handles surface as a deliberate edit")
+    }
+
+    /// `RuleContext.from` should pass channel through verbatim — pinning
+    /// it here guards against a refactor that recomputes channel from
+    /// thread.id or similar. The rule engine's `.channelIs(...)` predicate
+    /// reads `ctx.channel` directly.
+    func testFromThreadCarriesChannelVerbatim() {
+        for ch in Channel.allCases {
+            let thread = MessageThread(id: "x", channel: ch, name: "Maya",
+                                       avatar: "M", preview: "hi", time: "now")
+            let ctx = RuleContext.from(thread: thread)
+            XCTAssertEqual(ctx.channel, ch,
+                "from(thread:) must pass thread.channel through verbatim for \(ch)")
+        }
+    }
+
+    /// `from(thread:)` defaults `messageCount` to 0 — the caller-side
+    /// build path that loads full message history overrides this. Pin
+    /// the default so the `messageCount(atLeast:)` predicate doesn't
+    /// silently misfire on context built without history (e.g. notification-
+    /// only threads where we haven't loaded chat.db yet).
+    func testFromThreadDefaultsMessageCountToZero() {
+        let ctx = RuleContext.from(thread: makeThread(name: "Maya"))
+        XCTAssertEqual(ctx.messageCount, 0,
+            "context built from a thread alone has no message history loaded — messageCount must default to 0 so messageCount(atLeast: 1) does not match")
+    }
+
     // MARK: - RulesStore: malformed-rule skipping (REP-024)
 
     private func tempRulesURL() -> URL {
