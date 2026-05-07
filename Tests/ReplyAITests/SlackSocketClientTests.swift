@@ -406,4 +406,31 @@ final class SlackSocketClientTests: XCTestCase {
         XCTAssertEqual(SlackSocketClient.maxReconnects, 3,
                        "Slack Socket Mode reconnect budget is part of the durability contract — changing it shifts user-visible message-loss behavior")
     }
+
+    // MARK: - reconnectDelay default literal contract
+
+    /// Both inits default `reconnectDelay` to 5.0 seconds. Pin the literal so
+    /// a quiet edit that "tunes" the retry cadence fails here. 5s is a
+    /// deliberate balance: short enough that recovery from a brief Socket
+    /// Mode outage is sub-perceptible (most users miss <10s blips), long
+    /// enough that we don't hammer Slack's WSS endpoint during a sustained
+    /// outage and earn rate-limit penalties. Changing this changes both
+    /// user-visible latency-after-close and our standing with Slack — it's a
+    /// product-and-vendor call, not a casual tuning knob. The factory init
+    /// covers production paths; the convenience init covers the URLSession
+    /// shim — both must match.
+    func testReconnectDelayDefaultIsFiveSeconds() {
+        let factoryClient = SlackSocketClient(
+            connectionURL: URL(string: "wss://test.slack.example/link")!,
+            factory: MockWebSocketTaskFactory()
+        )
+        XCTAssertEqual(factoryClient.reconnectDelay, 5.0,
+                       "factory init default reconnectDelay must stay at 5.0s — see test rationale")
+
+        let convenienceClient = SlackSocketClient(
+            connectionURL: URL(string: "wss://test.slack.example/link")!
+        )
+        XCTAssertEqual(convenienceClient.reconnectDelay, 5.0,
+                       "convenience init default reconnectDelay must stay at 5.0s — see test rationale")
+    }
 }
