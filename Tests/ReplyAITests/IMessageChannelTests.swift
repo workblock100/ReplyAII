@@ -164,6 +164,18 @@ final class IMessageChannelTests: XCTestCase {
         let body = try XCTUnwrap(messages.first?.text)
         XCTAssertFalse(body.isEmpty, "body must be non-empty — expected [deleted] placeholder")
         XCTAssertEqual(body, "[deleted]", "both-NULL row must use the [deleted] placeholder")
+        XCTAssertEqual(body, IMessageChannel.deletedMessagePlaceholder,
+                       "behavior must equal the hoisted placeholder constant — keeps the two `return` sites and the literal asserted here in sync")
+    }
+
+    /// Pin the literal value of the placeholder. The two `return` sites
+    /// in IMessageChannel both reference `Self.deletedMessagePlaceholder`,
+    /// so changing the constant changes what users see in every deleted-
+    /// message slot at once. Pin so a rename ("[deleted]" → "(removed)" /
+    /// "—" / etc.) lands as a deliberate UX call.
+    func testDeletedMessagePlaceholderIsExactLiteral() {
+        XCTAssertEqual(IMessageChannel.deletedMessagePlaceholder, "[deleted]",
+                       "deleted-message placeholder is shipped UX — see test rationale")
     }
 
     func testMessagesQueryNullTextFallsBackToAttributedBodyDecoder() async throws {

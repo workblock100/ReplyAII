@@ -21,6 +21,14 @@ struct IMessageChannel: ChannelService {
         (NSString(string: "~/Library/Messages/chat.db").expandingTildeInPath as String)
     }()
 
+    /// User-visible body when both `text` and `attributedBody` are NULL —
+    /// deleted message, unsent draft, or unsupported iMessage extension
+    /// (Handoff, Digital Touch). Surfaces verbatim into the thread view,
+    /// so renaming this string changes what the user sees in the deleted-
+    /// message slot. Hoisted to a constant so the two `return` sites stay
+    /// in sync and the literal can be pinned independently.
+    static let deletedMessagePlaceholder = "[deleted]"
+
     /// Optional name-resolver that translates phone/email handles to
     /// contact names. Injected from the ViewModel so we don't couple
     /// channel code to Contacts framework directly.
@@ -287,7 +295,7 @@ struct IMessageChannel: ChannelService {
                 }
                 // Both text and attributedBody are NULL — deleted message, unsent
                 // draft, or unsupported iMessage extension (Handoff, Digital Touch).
-                return "[deleted]"
+                return Self.deletedMessagePlaceholder
             }()
 
             let fromMe      = sqlite3_column_int(stmt, 3) != 0
@@ -351,7 +359,7 @@ struct IMessageChannel: ChannelService {
                     if let rich = AttributedBodyDecoder.extractText(from: Data(bytes: raw, count: len)),
                        !rich.isEmpty { return rich }
                 }
-                return "[deleted]"
+                return Self.deletedMessagePlaceholder
             }()
 
             let date = sqlite3_column_int64(stmt, 3)
