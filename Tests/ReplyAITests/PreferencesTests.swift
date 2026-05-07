@@ -750,6 +750,19 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
                        "exactly 20 entries must survive the cap unchanged")
     }
 
+    /// Pin the voice-cap and per-entry-length constants as named values.
+    /// The above tests use the literals `20` and `500` directly, which
+    /// catches drift on either side but doesn't catch a refactor that
+    /// renamed the underlying constants in a future "voice profile v2".
+    /// Tie the constant pins to the literal pins so a single edit can't
+    /// silently desync them.
+    func testVoiceExampleConstantsArePinnedToProductionValues() {
+        XCTAssertEqual(PreferenceRange.maxVoiceExamples, 20,
+            "maxVoiceExamples drift changes voice-profile size for every shipped user — pin so the size/quality trade-off is a deliberate edit")
+        XCTAssertEqual(PreferenceRange.maxVoiceExampleLength, 500,
+            "maxVoiceExampleLength drift either silently clips legitimate examples (down) or balloons UserDefaults (up)")
+    }
+
     func testVoiceExampleAtFiveHundredCharsPassesUnchanged() {
         // Boundary: an entry of exactly 500 chars must NOT be truncated to
         // 499 — the threshold is `> 500`, not `>= 500`.

@@ -111,6 +111,20 @@ enum Preferences {
 /// on very large databases.
 enum PreferenceRange {
     static let threadLimit = 1...200
+
+    /// Maximum number of voice-example messages persisted under
+    /// `PreferenceKey.voiceExampleMessages`. The cap balances voice
+    /// quality (more examples → better matching) against UserDefaults
+    /// payload size (a single AppStorage write blocks the main
+    /// run-loop) and prompt-builder budget (each example burns chars
+    /// against `PromptBuilder.historyCharBudget`). Drift here changes
+    /// every shipped user's voice-profile size.
+    static let maxVoiceExamples = 20
+
+    /// Maximum chars per individual voice-example message before
+    /// `setVoiceExampleMessages(_:)` truncates. Drift up balloons
+    /// UserDefaults; drift down silently clips legitimate examples.
+    static let maxVoiceExampleLength = 500
 }
 
 extension UserDefaults {
@@ -150,12 +164,18 @@ extension UserDefaults {
         stringArray(forKey: PreferenceKey.voiceExampleMessages) ?? []
     }
 
-    /// Stores voice example messages with enforcement: list capped at 20 entries,
-    /// each entry truncated to 500 chars. Enforced at write time.
+    /// Stores voice example messages with enforcement: list capped at
+    /// `PreferenceRange.maxVoiceExamples` entries, each entry truncated
+    /// to `PreferenceRange.maxVoiceExampleLength` chars. Enforced at
+    /// write time.
     func setVoiceExampleMessages(_ messages: [String]) {
         let sanitized = messages
-            .prefix(20)
-            .map { $0.count > 500 ? String($0.prefix(500)) : $0 }
+            .prefix(PreferenceRange.maxVoiceExamples)
+            .map {
+                $0.count > PreferenceRange.maxVoiceExampleLength
+                    ? String($0.prefix(PreferenceRange.maxVoiceExampleLength))
+                    : $0
+            }
         set(Array(sanitized), forKey: PreferenceKey.voiceExampleMessages)
     }
 
