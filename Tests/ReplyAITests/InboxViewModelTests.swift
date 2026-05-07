@@ -1004,6 +1004,88 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
                        "search must respect the active channel filter — Slack 'Alice Slack' must NOT appear when channel filter is .imessage")
     }
 
+    // MARK: - Derived counts: folderLabel / needsYouCount / handledCount (autopilot 2026-05-07)
+
+    /// `folderLabel` exposes the active folder's display string for the
+    /// inbox header. Backed by `folders.first(where: { $0.id == activeFolder })?.label`.
+    func testFolderLabelReflectsActiveFolderLabel() {
+        let d = makeIsolatedDefaults(suffix: ".fl1")
+        let t = MessageThread(id: "fl-t", channel: .imessage, name: "X", avatar: "X", preview: "", time: "")
+        let custom = [
+            Folder(id: .all,      label: "AllFolder",      count: 0),
+            Folder(id: .priority, label: "PriorityFolder", count: 0),
+            Folder(id: .awaiting, label: "AwaitingFolder", count: 0),
+            Folder(id: .snoozed,  label: "SnoozedFolder",  count: 0),
+            Folder(id: .done,     label: "DoneFolder",     count: 0),
+        ]
+        let vm = InboxViewModel(threads: [t], folders: custom,
+                                contacts: fastContacts(), defaults: d)
+
+        vm.activeFolder = .priority
+        XCTAssertEqual(vm.folderLabel, "PriorityFolder",
+                       "folderLabel must resolve through `folders` by activeFolder.id")
+
+        vm.activeFolder = .done
+        XCTAssertEqual(vm.folderLabel, "DoneFolder")
+    }
+
+    /// `folderLabel` falls back to "Inbox" when the active folder isn't
+    /// in the folder list (e.g. a future Folder.Kind enum case ships
+    /// before the Folder array is updated).
+    func testFolderLabelFallsBackToInboxWhenActiveFolderMissing() {
+        let d = makeIsolatedDefaults(suffix: ".fl2")
+        let t = MessageThread(id: "fl-t2", channel: .imessage, name: "X", avatar: "X", preview: "", time: "")
+        // Folders intentionally exclude .priority — when activeFolder is set
+        // to .priority, the lookup returns nil and folderLabel falls back.
+        let partial = [
+            Folder(id: .all,      label: "All",      count: 0),
+            Folder(id: .awaiting, label: "Awaiting", count: 0),
+        ]
+        let vm = InboxViewModel(threads: [t], folders: partial,
+                                contacts: fastContacts(), defaults: d)
+
+        vm.activeFolder = .priority
+        XCTAssertEqual(vm.folderLabel, "Inbox",
+                       "folderLabel must fall back to literal 'Inbox' when activeFolder isn't represented in `folders`")
+    }
+
+    /// `needsYouCount` counts unread threads in the *filtered* thread list
+    /// — so archive and snooze hide threads from this badge too.
+    func testNeedsYouCountReflectsUnreadFilteredThreads() {
+        let d = makeIsolatedDefaults(suffix: ".ny1")
+        let unread1 = MessageThread(id: "ny-1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", unread: 3)
+        let unread2 = MessageThread(id: "ny-2", channel: .slack,    name: "Bob",   avatar: "B", preview: "", time: "", unread: 1)
+        let read    = MessageThread(id: "ny-3", channel: .imessage, name: "Carol", avatar: "C", preview: "", time: "", unread: 0)
+        let vm = InboxViewModel(threads: [unread1, unread2, read],
+                                contacts: fastContacts(), defaults: d)
+
+        XCTAssertEqual(vm.needsYouCount, 2,
+                       "needsYouCount counts threads with unread > 0 — not the sum of unread (so 3 + 1 + 0 != 4, it's 2 threads)")
+
+        // Archiving an unread thread drops it from the filtered list.
+        vm.archive("ny-1")
+        XCTAssertEqual(vm.needsYouCount, 1,
+                       "archiving an unread thread must drop it from needsYouCount")
+    }
+
+    /// `handledCount` is the complement of `needsYouCount` within
+    /// filteredThreads — threads with unread == 0 that aren't filtered
+    /// out.
+    func testHandledCountIsComplementOfNeedsYouCountWithinFilteredThreads() {
+        let d = makeIsolatedDefaults(suffix: ".hc1")
+        let read1 = MessageThread(id: "hc-1", channel: .imessage, name: "A", avatar: "A", preview: "", time: "", unread: 0)
+        let read2 = MessageThread(id: "hc-2", channel: .slack,    name: "B", avatar: "B", preview: "", time: "", unread: 0)
+        let unread = MessageThread(id: "hc-3", channel: .slack,   name: "C", avatar: "C", preview: "", time: "", unread: 2)
+        let vm = InboxViewModel(threads: [read1, read2, unread],
+                                contacts: fastContacts(), defaults: d)
+
+        XCTAssertEqual(vm.needsYouCount, 1)
+        XCTAssertEqual(vm.handledCount, 2,
+                       "handledCount must equal filteredThreads.count - needsYouCount")
+        XCTAssertEqual(vm.needsYouCount + vm.handledCount, vm.filteredThreads.count,
+                       "needsYouCount + handledCount must always sum to filteredThreads.count")
+    }
+
     /// Unsnoozing a thread that was never snoozed must be a no-op (the
     /// keyboard shortcut may fire defensively without checking state
     /// first).
