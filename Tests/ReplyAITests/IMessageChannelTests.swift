@@ -204,6 +204,32 @@ final class IMessageChannelTests: XCTestCase {
                        "display_name should win over participant handle for group threads")
     }
 
+    /// chat.guid column with the empty string (NULL would have COALESCE'd
+    /// to '' as well — same effect) must produce `MessageThread.chatGUID
+    /// = nil`, NOT `Some("")`. The guard at `chatGUID: guid.isEmpty ?
+    /// nil : guid` filters present-but-empty values to nil so downstream
+    /// IMessageSender.chatGUID(for:) falls back to the synthesized 1:1
+    /// form. Pin against a future "pass through whatever the column said"
+    /// refactor that would re-introduce the AGENTS.md gotcha #243
+    /// `Some("")` bug class on every empty-guid chat — IMessageSender
+    /// would then validate `""` (failing) instead of synthesizing a
+    /// usable iMessage;-;<id> string.
+    func testEmptyChatGUIDColumnFiltersToNil() async throws {
+        try buildSchema()
+        try insertChat(
+            rowid: 1, identifier: "+15555550199",
+            display: "Empty Guid", service: "iMessage",
+            guid: ""  // explicitly empty — COALESCE on NULL lands here too
+        )
+        try insertMessage(rowid: 50, chatRowID: 1, text: "noguid", fromMe: false, date: 700_000_000)
+
+        let channel = IMessageChannel(dbPathOverride: dbURL.path)
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertNil(threads[0].chatGUID,
+            "empty guid column must filter to nil, NOT pass through as Some(\"\"); IMessageSender then synthesizes a 1:1 GUID instead of validating an empty string and failing")
+    }
+
     // MARK: - REP-020 reaction + delivery-receipt filtering
 
     func testReactionRowExcludedFromPreview() async throws {
