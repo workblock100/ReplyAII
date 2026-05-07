@@ -50,6 +50,38 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(stats.snapshot().messagesIndexed, 0)
     }
 
+    /// Parallel guard pin for the per-channel counter — `incrementIndexed`
+    /// also no-ops on `count <= 0`. Pinned because the per-channel breakdown
+    /// is what feeds the planner-style "which channel drives index growth"
+    /// observability; a refactor that dropped the guard would let a
+    /// degenerate caller (e.g. SearchIndex.upsert with an empty batch)
+    /// pollute the per-channel buckets with zero-count entries.
+    func testIncrementIndexedIgnoresNonPositive() {
+        let stats = Stats(fileURL: tempURL())
+        stats.incrementIndexed(channel: .imessage, count: 0)
+        stats.incrementIndexed(channel: .slack, count: -3)
+        XCTAssertNil(stats.snapshot().messagesIndexedByChannel[Channel.imessage.rawValue],
+            "count=0 must not insert a zero-value bucket for the channel")
+        XCTAssertNil(stats.snapshot().messagesIndexedByChannel[Channel.slack.rawValue],
+            "negative count must not insert a bucket either")
+        XCTAssertEqual(stats.snapshot().messagesIndexed, 0,
+            "the aggregate counter is untouched by per-channel non-positive calls")
+    }
+
+    /// Parallel guard pin for `recordRuleLoadSkips` — also no-ops on
+    /// `count <= 0`. Pinned because rules.json load is one of the few
+    /// paths that calls this counter, and a guard regression would
+    /// confuse the planner's "ruleLoadSkips: 0" output with "we never
+    /// called it" by silently ticking the counter on every successful
+    /// load.
+    func testRecordRuleLoadSkipsIgnoresNonPositive() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleLoadSkips(0)
+        stats.recordRuleLoadSkips(-1)
+        XCTAssertEqual(stats.snapshot().ruleLoadSkips, 0,
+            "non-positive recordRuleLoadSkips must be a no-op")
+    }
+
     // MARK: - Persistence
 
     func testStatsRoundTripThroughJSON() throws {
