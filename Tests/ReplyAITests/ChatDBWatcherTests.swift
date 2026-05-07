@@ -232,6 +232,36 @@ final class ChatDBWatcherTests: XCTestCase {
         watcher.stop()
     }
 
+    /// `ChatDBWatcher.defaultDebounce` is the only knob between "feels live"
+    /// and "re-syncs 10x per inbound iMessage". A tighter default (say 0.3s)
+    /// would make a bulk iMessage import re-sync mid-flight, hammering
+    /// `chat.db` reads; a looser default (>1s) would make new messages
+    /// visibly slow to surface. The static pin guards both directions in
+    /// addition to enforcing that the no-arg init plumbs through the
+    /// constant rather than re-introducing a literal `0.6`.
+    func testDefaultDebounceIsSixHundredMilliseconds() {
+        XCTAssertEqual(ChatDBWatcher.defaultDebounce, 0.6,
+            "ChatDBWatcher.defaultDebounce drift changes how reactive the inbox feels for every shipped user — tighten and we re-sync mid-burst, loosen and new messages lag")
+
+        let watcher = ChatDBWatcher(paths: [], onChange: {})
+        XCTAssertEqual(watcher.debounce, ChatDBWatcher.defaultDebounce,
+            "the no-debounce-arg init must route through ChatDBWatcher.defaultDebounce — otherwise the static constant becomes dead code while the literal 0.6 lives on in the init signature")
+        watcher.stop()
+    }
+
+    /// Companion to the restart-delay pin: `defaultRestartDelay` should
+    /// match the production literal so the no-arg init matches the
+    /// `restartDelay` already pinned above.
+    func testDefaultRestartDelayConstantMatchesNoArgInit() {
+        XCTAssertEqual(ChatDBWatcher.defaultRestartDelay, 5.0,
+            "ChatDBWatcher.defaultRestartDelay is the seed of the exponential-backoff curve")
+
+        let watcher = ChatDBWatcher(paths: [], onChange: {})
+        XCTAssertEqual(watcher.restartDelay, ChatDBWatcher.defaultRestartDelay,
+            "no-restartDelay-arg init must route through the static constant; the existing `testDefaultRestartDelayMatchesProductionValue` only catches drift in the literal value")
+        watcher.stop()
+    }
+
     /// Constructing with only the trailing closure must succeed (i.e.
     /// every init parameter besides `onChange` has a default). The
     /// production call site relies on this; if `paths` ever loses its

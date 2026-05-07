@@ -15,8 +15,21 @@ import Foundation
 /// `restartDelay`, doubling each attempt up to 60 s. Call
 /// `stopWatching()` for intentional shutdown — that prevents restart.
 final class ChatDBWatcher: @unchecked Sendable {
+    /// Production debounce window. Coalesces the burst of WAL writes that
+    /// the Messages app emits per incoming iMessage into a single resync.
+    /// Drift below ~400ms re-sync-thrashes a bulk import; above ~1s makes
+    /// new messages feel slow to appear.
+    static let defaultDebounce: TimeInterval = 0.6
+
+    /// Initial delay before the first restart attempt after a DispatchSource
+    /// cancellation (e.g. iCloud-driven `chat.db` move). Doubles on each
+    /// retry up to a 60 s cap — see `scheduleRestart()`.
+    static let defaultRestartDelay: TimeInterval = 5.0
+
     private let paths: [String]
-    private let debounce: TimeInterval
+    /// Package-internal so tests can pin the production default after a
+    /// no-arg init (see `ChatDBWatcherTests.testDefaultDebounceIsSixHundredMilliseconds`).
+    let debounce: TimeInterval
     /// Initial delay before first restart attempt; doubles on each retry, capped at 60 s.
     let restartDelay: TimeInterval
     private let queue = DispatchQueue(label: "co.replyai.chatdb-watcher", qos: .utility)
@@ -36,8 +49,8 @@ final class ChatDBWatcher: @unchecked Sendable {
             (NSString(string: "~/Library/Messages/chat.db").expandingTildeInPath as String),
             (NSString(string: "~/Library/Messages/chat.db-wal").expandingTildeInPath as String),
         ],
-        debounce: TimeInterval = 0.6,
-        restartDelay: TimeInterval = 5.0,
+        debounce: TimeInterval = ChatDBWatcher.defaultDebounce,
+        restartDelay: TimeInterval = ChatDBWatcher.defaultRestartDelay,
         onChange: @escaping @Sendable () -> Void
     ) {
         self.paths = paths
