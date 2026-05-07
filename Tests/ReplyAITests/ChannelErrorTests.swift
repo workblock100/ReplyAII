@@ -84,6 +84,28 @@ final class ChannelErrorTests: XCTestCase {
         }
     }
 
+    /// Pin the verbatim-passthrough policy for cases with associated values:
+    /// `networkError("")`, `query("")`, `unavailable("")`, `databaseError(_, "")`,
+    /// and `permissionDenied(hint: "")` all surface their empty associated
+    /// string AS the error description. This is intentional — the cases are
+    /// "wrap whatever the lower layer reported," and silently injecting a
+    /// fallback like "Unknown error" would mask a malformed upstream call site.
+    /// Pinned so a future "make every error description non-empty" hardening
+    /// is a deliberate change visible here.
+    func testCasesWithEmptyAssociatedValueSurfaceEmptyDescription() {
+        let casesWithEmpty: [(ChannelError, String)] = [
+            (.networkError(""),                       "networkError"),
+            (.query(""),                              "query"),
+            (.unavailable(""),                        "unavailable"),
+            (.databaseError(code: 5, message: ""),    "databaseError"),
+            (.permissionDenied(hint: ""),             "permissionDenied"),
+        ]
+        for (err, label) in casesWithEmpty {
+            XCTAssertEqual(err.errorDescription, "",
+                "\(label) with empty associated value passes the empty string through verbatim — no fallback")
+        }
+    }
+
     // MARK: - Pattern-match stability for code paths that branch on case
 
     func testDatabaseErrorPreservesCodeForProgrammaticDispatch() {
