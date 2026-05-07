@@ -187,4 +187,42 @@ final class UNNotificationContentParserTests: XCTestCase {
         XCTAssertEqual(result?.preview, body,
                        "preview must equal content.body byte-for-byte — no trimming")
     }
+
+    /// `userInfo` arrives as `[AnyHashable: Any]` from the OS — keys we treat
+    /// as Strings (`CKSenderID`, `sender`, `CKChatIdentifier`, `CKChatGUID`)
+    /// can hold non-String values when the source notification is malformed
+    /// (e.g. a wrapper that posts NSNumber for a numeric handle, or NSNull).
+    /// The parser's `as? String` cast must safely fail and fall through the
+    /// resolution order, NOT crash and not surface the raw value via
+    /// `String(describing:)`. Pin both the sender-key cascade and the
+    /// chatGUID nil result for a non-String value.
+    func testNonStringSenderValuesFallThroughResolutionOrder() {
+        let content = makeContent(
+            title: "TitleFallback",
+            body: "msg",
+            userInfo: [
+                "CKSenderID": NSNumber(value: 15551234567),  // numeric handle, not String
+                "sender":     NSNull()                       // explicit null, not String
+            ]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertNotNil(result, "non-String sender values must not crash; cascade lands on title")
+        XCTAssertEqual(result?.senderHandle, "TitleFallback",
+            "non-String CKSenderID + non-String sender must fall through to content.title")
+    }
+
+    func testNonStringChatIdentifierProducesNilChatGUID() {
+        let content = makeContent(
+            title: "Alice",
+            body: "msg",
+            userInfo: [
+                "CKChatIdentifier": NSNumber(value: 42),  // not a String
+                "CKChatGUID":       NSNull()              // not a String
+            ]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertNotNil(result)
+        XCTAssertNil(result?.chatGUID,
+            "non-String chat identifiers must produce nil chatGUID, never `String(describing:)` of a number")
+    }
 }
