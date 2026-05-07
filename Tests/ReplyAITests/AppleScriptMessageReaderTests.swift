@@ -437,4 +437,109 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertEqual(msgs.map(\.text), ["a", "b", "c"],
             "rows must be returned in arrival order with the tail dropped, not the head")
     }
+
+    // MARK: - parse() edge cases (recentChats)
+
+    /// A row with `name||id||preview||extra` must keep `parts[2]` as the
+    /// preview and silently drop trailing fields. Pin so a future schema
+    /// expansion (e.g. adding a sender field) doesn't accidentally shift
+    /// preview parsing onto the wrong column.
+    func testRecentChatsIgnoresTrailingPipeFieldsAfterPreview() throws {
+        let raw = "Alice Smith||iMessage;-;+12014623980||hello there||EXTRA||MORE"
+        let reader = makeReader(returning: raw)
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertEqual(threads[0].preview, "hello there",
+            "preview must come from parts[2] only — trailing fields are dropped, not concatenated")
+    }
+
+    /// When the row leads with empty name (`||id||preview`), the parser
+    /// must fall back to deriving a name from the chatID rather than
+    /// emitting a thread with an empty `name` (which would render as a
+    /// blank sidebar row). Pin the fallback path.
+    func testRecentChatsBlankNameFallsBackToChatIDDerivedName() throws {
+        let raw = "||iMessage;-;+12014623980||hello"
+        let reader = makeReader(returning: raw)
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.count, 1,
+            "a row with blank name but a usable chatID must still yield exactly one thread")
+        XCTAssertFalse(threads[0].name.isEmpty,
+            "fallback derivation must produce a non-empty name so the sidebar row is readable")
+    }
+
+    /// Group-chat synthetic IDs (`chat1234567890`) without any participant
+    /// name should surface as the literal "Group chat" label, NOT the raw
+    /// chat key. Pin since the user-visible string was an explicit product
+    /// call (`AppleScriptMessageReader.formatHandleFromChatID`).
+    func testRecentChatsBlankNameAndGroupChatIDLabelsAsGroupChat() throws {
+        let raw = "||iMessage;+;chat1234567890||hello"
+        let reader = makeReader(returning: raw)
+        let threads = try reader.recentChats()
+        XCTAssertEqual(threads.count, 1)
+        XCTAssertEqual(threads[0].name, "Group chat",
+            "synthetic chat IDs (`chat...`) must label as `Group chat`, not the raw key")
+    }
+
+    /// `parse()` runs `localizedCaseInsensitiveCompare` so totally empty
+    /// executor output (whitespace-only or empty) must yield zero threads
+    /// without crashing on the sort. Pin the empty-input path.
+    func testRecentChatsEmptyExecutorOutputYieldsNoThreads() throws {
+        let reader = makeReader(returning: "")
+        let threads = try reader.recentChats()
+        XCTAssertTrue(threads.isEmpty,
+            "no rows in → no threads out; the sort path must accept an empty array")
+    }
+
+    func testRecentChatsWhitespaceOnlyExecutorOutputYieldsNoThreads() throws {
+        let reader = makeReader(returning: "   \n\t \n  ")
+        let threads = try reader.recentChats()
+        XCTAssertTrue(threads.isEmpty,
+            "rows that trim to empty must drop without producing phantom threads")
+    }
+
+    // MARK: - parseMessages() edge cases (messagesForChat)
+
+    /// A message body that itself contains the `||` separator (e.g. a user
+    /// literally typed `a||b`) loses everything after the first `||` to
+    /// the direction column. This is a known parser limitation rather
+    /// than a bug — pin it so a "fix" that breaks the existing direction
+    /// parsing surfaces here. Fixing the lossy split would require a
+    /// different inter-field separator, which is an AppleScript-side
+    /// schema change, not a parser-side one.
+    func testMessagesForChatBodyContainingDoublePipeIsLossy() throws {
+        // `a||b||outgoing` — parts = ["a", "b", "outgoing"]. body = "a",
+        // dir = "b" (not a known direction → defaults to .them).
+        let raw = "a||b||outgoing"
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 5)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertEqual(msgs[0].text, "a",
+            "body keeps everything before the first `||` only — schema-level limitation, pinned for visibility")
+        XCTAssertEqual(msgs[0].from, .them,
+            "an unknown direction string (here `b`) must default to .them rather than silently flip to .me")
+    }
+
+    /// A row with a body but no `||` separator (e.g. AppleScript emitted
+    /// only the body) must default direction to `incoming` → `.them`.
+    /// Pin so a future refactor that lets the missing column collapse to
+    /// an empty string doesn't accidentally route messages to `.me`.
+    func testMessagesForChatRowWithNoSeparatorDefaultsToThem() throws {
+        let raw = "hello with no direction column"
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 5)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertEqual(msgs[0].text, "hello with no direction column",
+            "the entire line becomes the body when no `||` is present")
+        XCTAssertEqual(msgs[0].from, .them,
+            "missing direction column defaults to .them so received messages aren't misattributed to the user")
+    }
+
+    /// Empty executor output for `messagesForChat` must yield zero
+    /// messages without crashing the parser. Pin the empty-input path.
+    func testMessagesForChatEmptyExecutorOutputYieldsNoMessages() throws {
+        let reader = makeReader(returning: "")
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 5)
+        XCTAssertTrue(msgs.isEmpty,
+            "no rows in → no messages out; the parser must accept an empty AppleScript result")
+    }
 }
