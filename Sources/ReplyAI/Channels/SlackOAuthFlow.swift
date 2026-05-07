@@ -49,6 +49,14 @@ protocol SlackAuthorizing: AnyObject, Sendable {
 /// Wires together: LocalhostOAuthListener (callback server) → NSWorkspace URL open
 /// → URLSession token exchange POST → KeychainHelper token storage.
 final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
+    /// Production redirect URI. Slack's app config registers exactly this
+    /// URL — drift on either of the two sites that previously duplicated it
+    /// (auth-URL query item + token-exchange POST body) would produce a
+    /// silent "redirect_uri_mismatch" error from Slack with no UI feedback.
+    /// Single source of truth so the auth-URL leg and the token-exchange
+    /// leg can never desync.
+    static let redirectURI = "http://localhost:4242/callback"
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -114,7 +122,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 components.queryItems = [
                     URLQueryItem(name: "client_id", value: clientID),
                     URLQueryItem(name: "scope", value: "channels:read,chat:write"),
-                    URLQueryItem(name: "redirect_uri", value: "http://localhost:4242/callback")
+                    URLQueryItem(name: "redirect_uri", value: SlackOAuthFlow.redirectURI)
                 ]
                 guard let url = components.url else { return }
                 self.urlOpener.open(url)
@@ -157,7 +165,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
             "code=\(escape(code))",
             "client_id=\(escape(clientID))",
             "client_secret=\(escape(clientSecret))",
-            "redirect_uri=http://localhost:4242/callback"
+            "redirect_uri=\(SlackOAuthFlow.redirectURI)"
         ]
         request.httpBody = Data(bodyParts.joined(separator: "&").utf8)
 

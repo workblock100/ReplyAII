@@ -679,4 +679,31 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertEqual(msg, "response missing ok=true or access_token",
             "ok:false reuses the same guard as missing-token; splitting the message would diverge copy across three failure modes")
     }
+
+    // MARK: - redirectURI single-source-of-truth pin
+
+    /// `SlackOAuthFlow.redirectURI` is the registered redirect URI on the
+    /// Slack app side. Drift on either the auth-URL query-item leg or the
+    /// token-exchange POST body leg would surface as Slack's opaque
+    /// `redirect_uri_mismatch` error with no UI feedback. The two existing
+    /// pins (the auth-URL `redirect_uri` query-item assertion and the
+    /// token-exchange POST-body `redirect_uri=...` assertion in this file)
+    /// verify each leg in isolation; this pin ensures both legs route
+    /// through the *same* constant so a future "let's bump to a different
+    /// path" lands once, not in two parallel edits that could silently
+    /// desync.
+    func testRedirectURIIsSingleSourceOfTruth() {
+        XCTAssertEqual(SlackOAuthFlow.redirectURI,
+                       "http://localhost:4242/callback",
+                       "redirectURI drift breaks Slack OAuth with redirect_uri_mismatch — pin is the only line in the codebase that defines this URL")
+
+        // Sanity: the port suffix matches the LocalhostOAuthListener
+        // default port. If someone bumps the listener port without
+        // updating this string (or vice versa), Slack will accept the
+        // auth-URL leg but the listener won't be bound on the port the
+        // browser actually hits — the OAuth flow hangs until the 120 s
+        // listener timeout. Pin the cross-module invariant.
+        XCTAssertTrue(SlackOAuthFlow.redirectURI.contains(":\(LocalhostOAuthListener.defaultPort)/"),
+                      "redirectURI port suffix must match LocalhostOAuthListener.defaultPort — drift desyncs the auth URL the user is sent to from the listener actually bound for the callback")
+    }
 }
