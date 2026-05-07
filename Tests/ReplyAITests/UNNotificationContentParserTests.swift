@@ -225,4 +225,24 @@ final class UNNotificationContentParserTests: XCTestCase {
         XCTAssertNil(result?.chatGUID,
             "non-String chat identifiers must produce nil chatGUID, never `String(describing:)` of a number")
     }
+
+    /// `UNNotificationContentParser.UserInfoKey.*` are the four iMessage /
+    /// CallKit `userInfo` keys this parser AND the inline divergent path
+    /// in `NotificationCoordinator.willPresent` resolve against. They were
+    /// previously inline literals in both files. Drift on any key silently
+    /// breaks that key's resolution leg without throwing — sender
+    /// attribution falls through to `title`, chatGUID resolution returns
+    /// nil and creates a duplicate thread per notification (instead of
+    /// refreshing the existing thread). Pin the literal values so a
+    /// "let's modernize the keys" edit lands in code review.
+    func testUserInfoKeysAreFrozen() {
+        XCTAssertEqual(UNNotificationContentParser.UserInfoKey.ckSenderID, "CKSenderID",
+            "ckSenderID drift breaks the primary sender-handle resolution leg — sender attribution silently falls through to `content.title`")
+        XCTAssertEqual(UNNotificationContentParser.UserInfoKey.sender, "sender",
+            "sender drift breaks the fallback sender-handle resolution leg — older payloads with only `sender` set silently fall through to `content.title`")
+        XCTAssertEqual(UNNotificationContentParser.UserInfoKey.ckChatIdentifier, "CKChatIdentifier",
+            "ckChatIdentifier drift breaks chatGUID resolution — every notification creates a duplicate thread instead of refreshing the existing one")
+        XCTAssertEqual(UNNotificationContentParser.UserInfoKey.ckChatGUID, "CKChatGUID",
+            "ckChatGUID drift breaks the fallback chatGUID resolution leg — older payloads only carry `CKChatGUID` and would silently lose thread identity")
+    }
 }
