@@ -183,6 +183,45 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(recorder.lastGetParams?["channel"], "C100")
     }
 
+    /// Symmetric counterpart to `testRecentThreadsClampsZeroLimitToOne`. The
+    /// `messages(forThreadID:limit:)` helper applies the same
+    /// `min(max(limit, 1), 200)` clamp before forwarding to Slack. Pin the
+    /// lower-bound branch so a future refactor that "simplifies" the clamp
+    /// (e.g. dropping the `max(limit, 1)` half because callers always pass a
+    /// positive value today) fails loudly here instead of letting Slack
+    /// reject `limit=0` with `invalid_arguments` in the wild.
+    func testMessagesClampsZeroLimitToOne() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "messages": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.messages(forThreadID: "C100", limit: 0)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "1",
+                       "limit < 1 must be clamped to 1 — Slack's conversations.history rejects limit=0")
+        XCTAssertEqual(recorder.lastGetParams?["channel"], "C100",
+                       "channel param must round-trip even when the limit is clamped")
+    }
+
+    /// Negative limits are the other side of the lower-bound clamp. A signed
+    /// `Int` from a stale caller (e.g. `-1` as a sentinel for "unlimited")
+    /// must still resolve to a Slack-legal request rather than serializing
+    /// to `"limit=-1"` and 400-ing on Slack's side.
+    func testMessagesClampsNegativeLimitToOne() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = #"{"ok": true, "messages": []}"#.data(using: .utf8)!
+        let recorder = GetRecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        _ = try await channel.messages(forThreadID: "C100", limit: -1)
+
+        XCTAssertEqual(recorder.lastGetParams?["limit"], "1",
+                       "negative limit must be clamped to 1, not forwarded as -1")
+    }
+
     // MARK: - conversations.list `types` + `exclude_archived` contract
 
     /// The `types` parameter on `conversations.list` is what gates which Slack
