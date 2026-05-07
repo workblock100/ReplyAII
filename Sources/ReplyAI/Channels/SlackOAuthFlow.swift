@@ -57,6 +57,17 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
     /// leg can never desync.
     static let redirectURI = "http://localhost:4242/callback"
 
+    /// Exact, ordered OAuth scope ReplyAI requests on the auth URL. Slack
+    /// re-issues a consent prompt to every existing user when the scope
+    /// string changes (even reordering items), and any token granted under
+    /// the previous scope no longer covers the new bits. Drift here is a
+    /// silent re-consent for the entire user base. `channels:read` lets
+    /// the app list public channels via `conversations.list`; `chat:write`
+    /// is the bot post-message capability used when the user sends a draft.
+    /// Pinned by `SlackOAuthFlowTests`'s `testAuthURLContainsExpectedScope`
+    /// cluster.
+    static let scope = "channels:read,chat:write"
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -121,7 +132,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 var components = URLComponents(string: "https://slack.com/oauth/v2/authorize")!
                 components.queryItems = [
                     URLQueryItem(name: "client_id", value: clientID),
-                    URLQueryItem(name: "scope", value: "channels:read,chat:write"),
+                    URLQueryItem(name: "scope", value: SlackOAuthFlow.scope),
                     URLQueryItem(name: "redirect_uri", value: SlackOAuthFlow.redirectURI)
                 ]
                 guard let url = components.url else { return }

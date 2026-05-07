@@ -157,8 +157,16 @@ final class SlackOAuthFlowTests: XCTestCase {
         }
         let items = components.queryItems ?? []
         let scope = items.first(where: { $0.name == "scope" })?.value ?? ""
-        XCTAssertEqual(scope, "channels:read,chat:write",
-            "scope literal is the exact, ordered set ReplyAI requests; widening it re-consents every existing user and invalidates their stored token's capabilities — the change should be deliberate, not silent")
+        XCTAssertEqual(scope, SlackOAuthFlow.scope,
+            "auth URL scope must route through SlackOAuthFlow.scope — drift means the constant became dead code while the URLQueryItem froze a stale literal")
+        // Pin the literal value of the constant itself. The routing test
+        // above only proves the auth URL goes through Self.scope; this
+        // line proves the constant has the right ordered string. Both
+        // matter — the URL could correctly route through a constant whose
+        // value silently drifted to e.g. "channels:read,chat:write,users:read",
+        // which would re-consent every existing user.
+        XCTAssertEqual(SlackOAuthFlow.scope, "channels:read,chat:write",
+            "SlackOAuthFlow.scope drift re-consents every existing user — Slack re-issues consent prompts on any scope-string change, including reorders")
     }
 
     // MARK: - testSlackOAuthExchangesCodeForToken
