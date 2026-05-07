@@ -382,6 +382,40 @@ final class SlackHTTPClientTests: XCTestCase {
         }
     }
 
+    /// 4xx codes other than 401 (auth) and 429 (rate-limit) fall to the
+    /// default arm with the same "unexpected error" copy + interpolated
+    /// status code. Pin so a future "treat 403 as authorizationDenied"
+    /// or "swallow 404 as empty" refactor surfaces here as a deliberate
+    /// status-mapping change rather than silent UX drift.
+    func test403FallsToUnexpectedDefaultArm() async throws {
+        let session = MockHTTPSession(statusCode: 403)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "conversations.list", token: "t", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack returned an unexpected error (status 403). Try again shortly.",
+                "403 must NOT route to authorizationDenied — that's reserved for 401. Default-arm copy with the literal status code is the contract.")
+        }
+    }
+
+    /// 404 is also a default-arm case — Slack uses 404 for unknown
+    /// endpoints / deleted resources, NOT for "empty result". Pin the
+    /// default-arm routing so a "treat 404 as empty Data" shortcut
+    /// surfaces here. Empty data from a successful 200 already hits
+    /// the success path; 404 is genuinely unexpected.
+    func test404FallsToUnexpectedDefaultArm() async throws {
+        let session = MockHTTPSession(statusCode: 404)
+        let client = URLSessionSlackClient(session: session)
+        do {
+            _ = try await client.get(endpoint: "no.such.endpoint", token: "t", params: [:])
+            XCTFail("Expected networkError")
+        } catch let ChannelError.networkError(msg) {
+            XCTAssertEqual(msg, "Slack returned an unexpected error (status 404). Try again shortly.",
+                "404 must hit the default arm; do not silently coerce to empty data")
+        }
+    }
+
     func testNonHTTPResponseCopyExactLiteral() async throws {
         let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
         let client = URLSessionSlackClient(session: session)
