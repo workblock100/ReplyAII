@@ -1704,6 +1704,18 @@ final class RulesTests: XCTestCase {
         XCTAssertNotNil(obj["rules"], "export must include a rules key")
     }
 
+    /// Pin `RulesStore.exportVersion` directly. The integration test
+    /// above asserts the wire-format literal `1`, but a refactor that
+    /// bumped `exportVersion` to `2` AND changed the test fixture would
+    /// pass green while silently shipping an incompatible wire format
+    /// to every shipped user's rules.json export. The static-constant
+    /// pin is the line that prevents both edits from landing together.
+    @MainActor
+    func testRulesStoreExportVersionConstantIsOne() {
+        XCTAssertEqual(RulesStore.exportVersion, 1,
+            "exportVersion drift requires a deliberate migration story for already-exported rules.json — pin so a casual bump surfaces in code review")
+    }
+
     @MainActor
     func testImportRoundTripWithVersionField() throws {
         let storeURL = tmpURL("ver-rt-store")
