@@ -121,10 +121,13 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
         return payload.channels.map { c in
             // DMs use the user's real name; channels use #name; group DMs use a
             // synthesized list of members (Slack returns it pre-formatted in `name`).
+            // The final fallback also screens out empty strings so a
+            // present-but-blank `name` can't render a literal empty sidebar row.
             let display: String = {
                 if c.is_im == true, let user = c.user_display_name, !user.isEmpty { return user }
                 if c.is_channel == true, let name = c.name, !name.isEmpty { return "#\(name)" }
-                return c.name ?? c.id
+                if let name = c.name, !name.isEmpty { return name }
+                return c.id
             }()
             return MessageThread(
                 id: c.id,

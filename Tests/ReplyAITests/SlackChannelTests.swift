@@ -590,6 +590,123 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(msgs[0].hasAttachment, false,
             "empty files array must produce hasAttachment=false; otherwise Slack's empty-array convention causes ghost-glyph rows")
     }
+
+    // MARK: - Display-name fallback chain (parseThreads)
+
+    /// `is_channel: true` with an empty `name` ("") must fall through past
+    /// the channel branch's `!name.isEmpty` guard and end at the id fallback.
+    /// Pinned so a refactor that drops the empty-string check (e.g. a
+    /// `c.name ?? ""` collapse) doesn't ship a "#" row in the sidebar.
+    func testRecentThreadsChannelWithEmptyNameFallsBackToID() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C500", "is_channel": true, "name": ""}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.first?.name, "C500",
+            "is_channel: true with empty name must fall through to the channel id, not '#'")
+    }
+
+    /// DM with `is_im: true` and a present-but-empty `user_display_name` must
+    /// also fall through to the id fallback (the current branch uses
+    /// `!user.isEmpty`, so empty strings cannot satisfy the DM branch).
+    func testRecentThreadsDMWithEmptyDisplayNameFallsBackToChannelID() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "D700", "is_im": true, "user_display_name": ""}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.first?.name, "D700",
+            "DM with empty user_display_name must fall through to the channel id rather than render a blank row")
+    }
+
+    /// Group DMs (`is_im` and `is_channel` both unset) reach the third branch
+    /// of the display-name chain — `c.name ?? c.id` — and should surface the
+    /// pre-formatted member list Slack returns in `name`. Without this branch
+    /// covered, a refactor could silently start showing the channel id
+    /// instead of "alice, bob, charlie" on group DMs.
+    func testRecentThreadsGroupDMUsesNameField() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "G900", "name": "alice, bob, charlie"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.first?.name, "alice, bob, charlie")
+        XCTAssertEqual(threads.first?.avatar, "A",
+            "avatar is first uppercased character of the resolved display name")
+    }
+
+    /// Group DMs with neither `name` nor flags set fall through to the id —
+    /// pin the absolute last-resort branch so it can't silently regress to
+    /// returning an empty string.
+    func testRecentThreadsConversationWithNoNameOrFlagsFallsBackToID() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "X404"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.first?.name, "X404",
+            "missing name + missing is_channel/is_im flags must surface the channel id rather than an empty row")
+    }
+
+    /// `parseMessages` parses Slack's `ts` (ISO Unix seconds string with a
+    /// fractional ms suffix) via `Double(_:)`. A `ts` that isn't a number
+    /// (e.g. corrupted JSON or a future schema breakage) must produce an
+    /// empty `time` string rather than crash — pin the silent-fallback
+    /// behaviour because `relativeFormatter()` is invoked unconditionally
+    /// downstream and a NaN/inf would render as "in 0 seconds".
+    func testMessagesWithUnparseableTimestampFallsBackToEmptyTime() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "not-a-number", "user": "U001", "text": "hi"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertEqual(msgs[0].time, "",
+            "unparseable timestamp must fall back to empty time, not crash or render a malformed relative string")
+        XCTAssertNil(msgs[0].deliveredAt,
+            "deliveredAt must be nil when the timestamp can't be parsed — downstream sort logic depends on this")
+    }
 }
 
 // MARK: - Test doubles
