@@ -2193,6 +2193,55 @@ final class InboxViewModelViewStateTests: XCTestCase {
         await vm.syncFromIMessage()
         XCTAssertEqual(vm.viewState, .empty(.noMessages))
     }
+
+    // MARK: - ViewState.== operator (autopilot 2026-05-07)
+
+    /// Same-case .error views with the same `localizedDescription` must
+    /// compare equal — SwiftUI's @Observable consumer relies on this to
+    /// avoid spurious re-renders when the same error fires twice.
+    func testViewStateEqualityErrorMatchesByLocalizedDescription() {
+        struct StubError: LocalizedError {
+            let message: String
+            var errorDescription: String? { message }
+        }
+        let a: InboxViewModel.ViewState = .error(StubError(message: "boom"))
+        let b: InboxViewModel.ViewState = .error(StubError(message: "boom"))
+        XCTAssertEqual(a, b,
+                       ".error(_) == .error(_) must compare by errorDescription so the SwiftUI Observable layer can short-circuit unchanged states")
+    }
+
+    /// Different .error descriptions must compare unequal — otherwise a
+    /// transition from one error to another would silently fail to
+    /// invalidate the view.
+    func testViewStateEqualityErrorMismatchByLocalizedDescription() {
+        struct StubError: LocalizedError {
+            let message: String
+            var errorDescription: String? { message }
+        }
+        let a: InboxViewModel.ViewState = .error(StubError(message: "first"))
+        let b: InboxViewModel.ViewState = .error(StubError(message: "second"))
+        XCTAssertNotEqual(a, b,
+                          "different error descriptions must NOT compare equal — view must re-render on transition between distinct errors")
+    }
+
+    /// Cross-case comparisons must always be unequal — the `default:`
+    /// branch handles every (loading, populated), (populated, demo), etc.
+    /// permutation. Pin a representative sample so a future refactor that
+    /// drops the `default:` arm fails this test.
+    func testViewStateEqualityCrossCaseAlwaysUnequal() {
+        let pairs: [(InboxViewModel.ViewState, InboxViewModel.ViewState)] = [
+            (.loading, .populated),
+            (.populated, .demo),
+            (.demo, .empty(.noMessages)),
+            (.empty(.noMessages), .empty(.noPermissions)),
+            (.loading, .empty(.noMessages)),
+            (.populated, .empty(.noPermissions)),
+        ]
+        for (a, b) in pairs {
+            XCTAssertNotEqual(a, b,
+                              "cross-case ViewState comparison must always be unequal: \(a) vs \(b)")
+        }
+    }
 }
 
 // MARK: - chat.db pivot fallback (REP-AUDIT-260505 / 2026-04-23 pivot)
