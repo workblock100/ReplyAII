@@ -129,9 +129,14 @@ final class LocalhostOAuthListener: @unchecked Sendable {
             guard parts.count >= 2 else { return }
             let rawPath = String(parts[1])
 
+            // Require a non-empty code value. `?code=` (empty) is symmetric to
+            // a missing `code` param: it can't satisfy the token-exchange POST,
+            // so silently drop and let the timeout govern instead of completing
+            // with an empty string a downstream caller would have to re-validate.
             guard let url = URL(string: "http://localhost\(rawPath)"),
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  let code = components.queryItems?.first(where: { $0.name == "code" })?.value
+                  let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+                  !code.isEmpty
             else { return }
 
             // Acknowledge to the browser before finishing.

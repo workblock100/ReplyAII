@@ -157,6 +157,56 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertEqual(err, .timeout, "no-code GET must not satisfy the listener — must time out")
     }
 
+    // MARK: - testCallbackURLWithEmptyCodeIsIgnored
+
+    /// Browser GET with `?code=` (empty value) is symmetric to `?state=xyz`:
+    /// the listener must NOT fire `.success("")` because an empty code can't
+    /// satisfy the subsequent token-exchange POST and we'd just round-trip the
+    /// failure through Slack's API for nothing. Pin the silent-drop behavior
+    /// so a refactor that swaps the parser onto a path which preserves empty
+    /// values doesn't ship a broken success callback.
+    func testCallbackURLWithEmptyCodeIsIgnored() async throws {
+        let listener = LocalhostOAuthListener(port: 0, timeout: 0.4)
+
+        let exp = expectation(description: "completion fired (expected: timeout)")
+        let readyExp = expectation(description: "listener ready")
+        var receivedResult: Result<String, OAuthError>?
+
+        listener.start(
+            completion: { result in
+                receivedResult = result
+                exp.fulfill()
+            },
+            onReady: { readyExp.fulfill() }
+        )
+
+        await fulfillment(of: [readyExp], timeout: 3)
+        guard let port = listener.actualPort else {
+            XCTFail("actualPort not set after ready")
+            return
+        }
+
+        // GET /?code= (the parameter is present but the value is empty).
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        conn.start(queue: .global())
+        let request = "GET /?code= HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        conn.send(content: Data(request.utf8), completion: .idempotent)
+
+        await fulfillment(of: [exp], timeout: 5)
+        conn.cancel()
+
+        guard case .failure(let err) = receivedResult else {
+            XCTFail("empty-code GET must not produce .success — got \(String(describing: receivedResult))")
+            return
+        }
+        XCTAssertEqual(err, .timeout,
+            "empty-code GET must be silently dropped and the listener must hit its timeout, same as no-code")
+    }
+
     // MARK: - testStopBeforeStartIsSafeNoop
 
     /// stop() called when nothing is running must be safe and not crash.
