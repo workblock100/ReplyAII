@@ -149,7 +149,14 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         let content = notification.request.content
         let categoryID = content.categoryIdentifier
         // Prefer the explicit sender key iMessage/CKSenderID sets; fall back to title.
-        let senderHandle = content.userInfo["sender"] as? String ?? content.title
+        // The empty-string check prevents an empty `sender` value from
+        // bypassing the title fallback — without it, a malformed
+        // notification with `userInfo["sender"] = ""` would propagate an
+        // empty handle into applyIncomingNotification and (because
+        // `chatGUID.hasSuffix("")` is true for every string) match the
+        // first thread by accident.
+        let rawSender = content.userInfo["sender"] as? String
+        let senderHandle = (rawSender?.isEmpty == false ? rawSender : nil) ?? content.title
         let preview = content.body
         // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
         // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
