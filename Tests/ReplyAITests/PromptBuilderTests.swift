@@ -374,6 +374,43 @@ final class PromptBuilderTests: XCTestCase {
         }
     }
 
+    /// Pin current behaviour: an empty-string voice example produces a bare
+    /// `- ` bullet in the prompt (no trimming or filtering at the build
+    /// layer). This is documented rather than fixed because the boundary
+    /// is the *caller's* responsibility — `UserVoiceProfile` and rule
+    /// rendering should screen empties before passing them in. If a future
+    /// fire decides to harden `build` itself with `.filter { !$0.isEmpty }`,
+    /// this test fails and forces the change to be deliberate.
+    func testEmptyVoiceExampleProducesBareBulletInPrompt() {
+        let thread = makeThread(name: "EmptyVoice")
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [],
+                                         voiceExamples: ["", "real example"])
+
+        XCTAssertTrue(prompt.contains("Style examples from the user's prior messages:"),
+            "section header must still appear when at least one example is non-empty")
+        // The empty-string example renders as a bare "- " line. Pin its
+        // exact substring so a refactor that strips it shows up here as a
+        // deliberate change of contract.
+        XCTAssertTrue(prompt.contains("\n- \n"),
+            "empty voice example currently renders as a bare '- ' bullet — refactor that filters empties must update this test")
+        XCTAssertTrue(prompt.contains("- real example"),
+            "the non-empty example must still appear alongside the bare bullet")
+    }
+
+    /// A voice-examples list that's only empty strings — `["", ""]` — is
+    /// not the same as `[]`. The non-isEmpty guard fires (count > 0), so
+    /// the section header still appears even though every bullet is bare.
+    /// Pin so a future "treat all-empty as missing" optimization is a
+    /// visible behaviour change.
+    func testAllEmptyVoiceExamplesStillEmitSectionHeader() {
+        let thread = makeThread(name: "AllEmptyVoice")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [],
+                                         voiceExamples: ["", ""])
+
+        XCTAssertTrue(prompt.contains("Style examples from the user's prior messages:"),
+            "all-empty voiceExamples list still triggers the header — count, not content, drives the guard")
+    }
+
     // MARK: - REP-206: drop-oldest truncation direction
 
     /// When total message chars exceed the budget, the oldest (earliest in the array)
