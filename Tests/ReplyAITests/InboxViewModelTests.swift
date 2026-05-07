@@ -2449,3 +2449,58 @@ final class InboxViewModelFolderCountTests: XCTestCase {
             "archived pinned thread must NOT count toward .priority — `live` filters out archived first")
     }
 }
+
+// MARK: - InboxViewModel.cycleTone() — ⌘/ tone cycling
+
+/// `cycleTone()` is the entry point for the ⌘/ keyboard shortcut. The
+/// implementation is one line — `activeTone = activeTone.cycled()` —
+/// but the muscle-memory contract (Warm → Direct → Playful → Warm) is
+/// load-bearing for the keyboard-first UX. Pin it here so any refactor
+/// that re-routes ⌘/ through a different code path (e.g. binding to a
+/// new sfc-tone-picker overlay) doesn't silently change the cycle order.
+
+@MainActor
+final class InboxViewModelCycleToneTests: XCTestCase {
+
+    private func freshVM() -> InboxViewModel {
+        let suite = "test.ReplyAI.cycleTone.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        return InboxViewModel(
+            imessage: BlockingMockChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+    }
+
+    func testCycleToneAdvancesWarmToDirect() {
+        let vm = freshVM()
+        vm.activeTone = .warm
+        vm.cycleTone()
+        XCTAssertEqual(vm.activeTone, .direct,
+            "⌘/ from Warm must land on Direct — pinned by Tone.cycled() and re-pinned here against view-model rerouting")
+    }
+
+    func testCycleToneAdvancesDirectToPlayful() {
+        let vm = freshVM()
+        vm.activeTone = .direct
+        vm.cycleTone()
+        XCTAssertEqual(vm.activeTone, .playful)
+    }
+
+    func testCycleToneWrapsPlayfulToWarm() {
+        let vm = freshVM()
+        vm.activeTone = .playful
+        vm.cycleTone()
+        XCTAssertEqual(vm.activeTone, .warm,
+            "⌘/ from the last tone in Tone.allCases must wrap to the first")
+    }
+
+    func testCycleToneThreeTimesReturnsToOrigin() {
+        let vm = freshVM()
+        vm.activeTone = .warm
+        vm.cycleTone()
+        vm.cycleTone()
+        vm.cycleTone()
+        XCTAssertEqual(vm.activeTone, .warm,
+            "Tone has 3 cases; cycling 3 times must return to the starting point. If this fails, Tone.allCases changed size and the keyboard shortcut needs re-validation against the new cycle.")
+    }
+}
