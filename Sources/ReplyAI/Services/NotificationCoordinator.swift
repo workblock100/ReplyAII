@@ -47,6 +47,17 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     /// `willPresent` callback (which has no public path for tests).
     static let foregroundPresentationOptions: UNNotificationPresentationOptions = [.banner, .sound]
 
+    /// Options bitmask both `setUp()` and `requestPermissionIfNeeded()` pass
+    /// to `requestAuthorization`. Hoisted so the two paths share a single
+    /// source of truth — they previously used set-literal `[.alert, .badge, .sound]`
+    /// vs `[.alert, .sound, .badge]` which is order-equivalent today but
+    /// would silently diverge if either side dropped or added a flag in a
+    /// refactor. A drifted bitmask between the two paths produces a TCC
+    /// dialog whose granted permissions depend on which call site ran
+    /// first. Pinned by `NotificationCoordinatorTests`'
+    /// `*RequestsAlertBadgeAndSoundOptions` cluster.
+    static let authorizationRequestOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
+
     /// Weak reference set by InboxScreen after InboxViewModel is alive.
     weak var inbox: InboxViewModel?
 
@@ -89,7 +100,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         // re-requesting when already granted prompts a redundant system dialog.
         let status = await center.authorizationStatus()
         guard status == .notDetermined else { return }
-        _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        _ = try? await center.requestAuthorization(options: Self.authorizationRequestOptions)
     }
 
     /// Requests notification authorization if the status is still undetermined.
@@ -99,7 +110,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     func requestPermissionIfNeeded() async {
         let status = await center.authorizationStatus()
         guard status == .notDetermined else { return }
-        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        _ = try? await center.requestAuthorization(options: Self.authorizationRequestOptions)
     }
 
     // MARK: - Reply handling (extracted for direct testability)

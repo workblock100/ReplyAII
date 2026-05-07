@@ -178,9 +178,8 @@ final class NotificationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(center.authorizationRequestCount, 1,
                        "precondition: setUp must request authorization once on .notDetermined")
-        let expected: UNAuthorizationOptions = [.alert, .badge, .sound]
-        XCTAssertEqual(center.lastRequestedOptions, expected,
-                       "setUp() must request alert+badge+sound; dropping any silently breaks a user-visible surface (banner, menu-bar badge, or chime)")
+        XCTAssertEqual(center.lastRequestedOptions, NotificationCoordinator.authorizationRequestOptions,
+                       "setUp() must route through Self.authorizationRequestOptions; drift means the constant became dead code while the call site froze a private literal")
     }
 
     func testRequestPermissionIfNeededRequestsAlertBadgeAndSoundOptions() async {
@@ -192,9 +191,22 @@ final class NotificationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(center.authorizationRequestCount, 1,
                        "precondition: requestPermissionIfNeeded must request once on .notDetermined")
+        XCTAssertEqual(center.lastRequestedOptions, NotificationCoordinator.authorizationRequestOptions,
+                       "requestPermissionIfNeeded must route through Self.authorizationRequestOptions — drift between paths produces a TCC dialog whose granted bitmask depends on which call site ran first")
+    }
+
+    /// Pin the literal value of `authorizationRequestOptions` itself. The
+    /// path-equality tests above only prove both sites *route through* the
+    /// constant; this test proves the constant has the right flags. Both
+    /// matter — the sites could correctly route through a constant whose
+    /// value silently drifted to e.g. `[.alert, .sound]` (no menu-bar
+    /// badge) or `[.alert, .badge]` (silent notifications for focus-mode
+    /// users). Pin the bitmask so a quiet "tighten the prompt" edit shows
+    /// up here and prompts a deliberate review.
+    func testAuthorizationRequestOptionsBitmaskIsAlertBadgeSound() {
         let expected: UNAuthorizationOptions = [.alert, .badge, .sound]
-        XCTAssertEqual(center.lastRequestedOptions, expected,
-                       "requestPermissionIfNeeded must match setUp's option set; drift between the two paths produces a TCC dialog whose granted bitmask depends on which path ran first")
+        XCTAssertEqual(NotificationCoordinator.authorizationRequestOptions, expected,
+                       "authorizationRequestOptions drift drops a user-visible surface — .alert (banner copy), .badge (menu-bar count), .sound (focus-mode chime). All three are part of the unified-inbox premise.")
     }
 
     // MARK: - foreground presentation options contract
