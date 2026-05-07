@@ -63,6 +63,49 @@ final class SearchIndexTests: XCTestCase {
             "multiple internal hyphens must all be stripped, producing a single token")
     }
 
+    /// Each of `(`, `)`, `*`, `:` individually triggers the phrase-quote
+    /// branch of the sanitizer. testFTSQueryQuotesSpecialChars only covers
+    /// the `:` case explicitly; pin the other three so a future "trim
+    /// special chars instead of quoting them" refactor can't silently turn
+    /// e.g. `parens(x)` into a malformed FTS5 expression at runtime.
+    func testFTSQueryQuotesEachSpecialCharIndividually() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "alpha(beta)"),
+                       #""alpha(beta)""#,
+                       "parentheses must trigger phrase-quote wrapping")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "wild*card"),
+                       #""wild*card""#,
+                       "asterisk inside the token must trigger phrase-quote wrapping (NOT prefix-append)")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "key:value"),
+                       #""key:value""#,
+                       "colon must trigger phrase-quote wrapping (regression guard for the existing :-only test)")
+    }
+
+    /// Mixing one normal token and one with a special char must produce
+    /// `normal* AND "special:token"` — both branches participate in the
+    /// AND join. Pin the order-preserving join because a future "collapse
+    /// quoted tokens to OR" refactor would silently widen result sets.
+    func testFTSQueryMixesPrefixAndQuotedTokensWithAND() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "foo bar:baz"),
+                       #"foo* AND "bar:baz""#,
+                       "mixed normal + special tokens must AND-join in input order")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "key:value plain"),
+                       #""key:value" AND plain*"#,
+                       "input order must be preserved across the AND join (special-then-normal)")
+    }
+
+    /// When a token is dropped entirely (e.g. a bare hyphen) the remaining
+    /// tokens still form a valid query — the surviving single token does
+    /// NOT get an `AND` separator added to its right because there's
+    /// nothing to AND it with. Pin the single-token-after-drop path.
+    func testFTSQuerySurvivingTokenAfterDropDoesNotEmitTrailingAND() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "- foo"),
+                       "foo*",
+                       "a bare-hyphen token gets dropped; the surviving token must not carry an AND prefix or suffix")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "\"\" hello"),
+                       "hello*",
+                       "a bare-quote token gets dropped; surviving token must produce a clean prefix query")
+    }
+
     // MARK: - Live index
 
     func testIndexSearchMatchesText() async {
