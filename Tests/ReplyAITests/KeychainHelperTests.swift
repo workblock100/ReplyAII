@@ -101,6 +101,22 @@ final class KeychainHelperTests: XCTestCase {
         keychain.deleteAll(prefix: "ReplyAI-")
     }
 
+    /// Regression pin: empty prefix must be refused. `String.hasPrefix("")`
+    /// returns true for every account, so a caller that accidentally passed
+    /// an empty prefix (e.g. computed from missing config) would
+    /// catastrophically wipe every item in this service. Guard against it.
+    func testDeleteAllWithEmptyPrefixIsNoop() throws {
+        try keychain.set(value: "v1", for: "Slack-token")
+        try keychain.set(value: "v2", for: "Telegram-token")
+
+        keychain.deleteAll(prefix: "")
+
+        XCTAssertEqual(keychain.get(key: "Slack-token"), "v1",
+            "empty prefix must NOT wipe every item — items must survive")
+        XCTAssertEqual(keychain.get(key: "Telegram-token"), "v2",
+            "empty prefix must NOT wipe every item — items must survive")
+    }
+
     // MARK: - additional edge cases
 
     /// `KeychainError.errorDescription` must surface the OSStatus so logs +

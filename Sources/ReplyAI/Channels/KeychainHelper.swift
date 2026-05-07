@@ -71,6 +71,11 @@ struct KeychainHelper: Sendable {
     /// Deletes all items in this service whose account key starts with `prefix`.
     /// Factory reset calls this with `"ReplyAI-"` to wipe every channel token.
     func deleteAll(prefix: String) {
+        // Refuse to operate with an empty prefix — `String.hasPrefix("")` returns
+        // true for every account, so a caller that accidentally computed an empty
+        // prefix from missing configuration would catastrophically wipe every
+        // item in this service. Caller error; no-op rather than nuke the keychain.
+        guard !prefix.isEmpty else { return }
         let listQuery: [CFString: Any] = [
             kSecClass:            kSecClassGenericPassword,
             kSecAttrService:      service,
