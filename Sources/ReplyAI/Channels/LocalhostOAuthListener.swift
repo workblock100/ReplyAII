@@ -28,6 +28,16 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     /// port across retries.
     static let defaultTimeout: TimeInterval = 120
 
+    /// Maximum bytes we read from a single OAuth callback request before
+    /// parsing. The OAuth callback URL is only the redirect URI + a query
+    /// string; even with a long state token it's well under 4 KB. 8 KB
+    /// gives us headroom without letting a malformed request balloon RAM
+    /// usage on the listener queue. Drift below ~2 KB risks truncating the
+    /// `code=` value when Slack's authorization codes change shape; drift
+    /// above ~64 KB lets a buggy or hostile client pin memory until the
+    /// listener cancels.
+    static let maxRequestBytes: Int = 8192
+
     private let preferredPort: UInt16
     private let timeout: TimeInterval
 
@@ -141,7 +151,7 @@ final class LocalhostOAuthListener: @unchecked Sendable {
 
     private func handleConnection(_ connection: NWConnection) {
         connection.start(queue: .global(qos: .utility))
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: Self.maxRequestBytes) { [weak self] data, _, _, _ in
             defer { connection.cancel() }
             guard let data,
                   let request = String(data: data, encoding: .utf8) else { return }

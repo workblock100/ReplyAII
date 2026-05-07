@@ -468,4 +468,17 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertTrue(template.contains("Content-Length: \(bodyBytes)\r\n"),
                        "Content-Length header must match body byte count (\(bodyBytes))")
     }
+
+    /// Pin the request-receive byte cap. The handler limits the
+    /// initial `connection.receive` to `maxRequestBytes`. Drift below
+    /// ~2 KB risks truncating the `code=` value once Slack's
+    /// authorization codes grow (they've drifted upward historically);
+    /// drift above ~64 KB lets a buggy or hostile client pin memory on
+    /// the listener queue until cancel. Existing parser-edge-case
+    /// tests note `8192` in a comment but no XCTAssertEqual ties the
+    /// constant down — pin it.
+    func testMaxRequestBytesIsHoistedAndProductionDefaultIs8192() {
+        XCTAssertEqual(LocalhostOAuthListener.maxRequestBytes, 8192,
+            "maxRequestBytes drift either truncates legitimate Slack codes (too low) or invites memory-pinning by a hostile client (too high)")
+    }
 }
