@@ -2074,6 +2074,121 @@ final class InboxViewModelBulkFilterTests: XCTestCase {
     }
 }
 
+// MARK: - InboxViewModel.loadMessages (autopilot 2026-05-07)
+
+/// Mock channel that records messages(forThreadID:) call counts and can be
+/// configured to return per-thread message lists or throw a configured error.
+private final class RecordingMessagesChannel: ChannelService, @unchecked Sendable {
+    var perThreadMessages: [String: [Message]] = [:]
+    var throwOnMessages: Error?
+    private(set) var callCount = 0
+    private(set) var lastLimit = 0
+    private(set) var lastThreadID = ""
+
+    func recentThreads(limit: Int) async throws -> [MessageThread] { [] }
+
+    func messages(forThreadID id: String, limit: Int) async throws -> [Message] {
+        callCount += 1
+        lastLimit = limit
+        lastThreadID = id
+        if let err = throwOnMessages { throw err }
+        return perThreadMessages[id] ?? []
+    }
+}
+
+@MainActor
+final class InboxViewModelLoadMessagesTests: XCTestCase {
+
+    private func makeVM(threads: [MessageThread], channel: ChannelService) -> InboxViewModel {
+        let suite = "test.ReplyAI.loadMessages.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let cacheURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InboxVMLoadMessagesTests-\(UUID().uuidString).json")
+        return InboxViewModel(
+            threads: threads,
+            imessage: channel,
+            contacts: fastContacts(),
+            defaults: defaults,
+            threadsCacheURL: cacheURL
+        )
+    }
+
+    func testLoadMessagesPopulatesLiveMessagesOnSuccess() async {
+        let ch = RecordingMessagesChannel()
+        ch.perThreadMessages["t1"] = [
+            Message(from: .them, text: "hi", time: "08:00", rowID: 1)
+        ]
+        let vm = makeVM(
+            threads: [MessageThread(id: "t1", channel: .imessage, name: "A", avatar: "A", preview: "", time: "")],
+            channel: ch
+        )
+
+        await vm.loadMessages(for: "t1")
+
+        XCTAssertEqual(vm.liveMessages["t1"]?.count, 1)
+        XCTAssertEqual(vm.liveMessages["t1"]?.first?.text, "hi")
+        XCTAssertEqual(ch.callCount, 1)
+        XCTAssertEqual(ch.lastLimit, 40,
+                       "loadMessages must request limit=40 — that's the contract the inbox UI relies on for thread-pane backfill")
+    }
+
+    func testLoadMessagesEarlyReturnsWhenAlreadyPopulated() async {
+        let ch = RecordingMessagesChannel()
+        let vm = makeVM(
+            threads: [MessageThread(id: "t2", channel: .imessage, name: "B", avatar: "B", preview: "", time: "")],
+            channel: ch
+        )
+        // Pre-populate liveMessages — subsequent loadMessages must skip the
+        // channel call entirely (this is the contract that prevents
+        // re-querying chat.db every time the user re-selects an already
+        // populated thread).
+        vm.liveMessages["t2"] = [Message(from: .me, text: "ok", time: "08:01", rowID: 2)]
+
+        await vm.loadMessages(for: "t2")
+
+        XCTAssertEqual(ch.callCount, 0,
+                       "loadMessages must early-return when liveMessages[threadID] is already non-nil")
+        XCTAssertEqual(vm.liveMessages["t2"]?.count, 1)
+        XCTAssertEqual(vm.liveMessages["t2"]?.first?.text, "ok")
+    }
+
+    func testLoadMessagesSilentlyIgnoresChannelError() async {
+        let ch = RecordingMessagesChannel()
+        ch.throwOnMessages = ChannelError.networkError("boom")
+        let vm = makeVM(
+            threads: [MessageThread(id: "t3", channel: .imessage, name: "C", avatar: "C", preview: "", time: "")],
+            channel: ch
+        )
+
+        await vm.loadMessages(for: "t3")
+
+        // The channel was hit but threw; loadMessages uses `try?` so the
+        // error is swallowed. liveMessages must stay unset (no empty-array
+        // poisoning that would prevent a future retry).
+        XCTAssertEqual(ch.callCount, 1)
+        XCTAssertNil(vm.liveMessages["t3"],
+                     "channel error must NOT populate liveMessages[threadID] with []; that would block retry")
+    }
+
+    func testLoadMessagesEmptyChannelResponseStillPopulatesEmptyArray() async {
+        let ch = RecordingMessagesChannel()
+        ch.perThreadMessages["t4"] = []
+        let vm = makeVM(
+            threads: [MessageThread(id: "t4", channel: .imessage, name: "D", avatar: "D", preview: "", time: "")],
+            channel: ch
+        )
+
+        await vm.loadMessages(for: "t4")
+
+        XCTAssertEqual(vm.liveMessages["t4"]?.count, 0,
+                       "successful empty response must still populate liveMessages[threadID] = [] so subsequent calls early-return")
+        // The next call must early-return because the key is now present.
+        await vm.loadMessages(for: "t4")
+        XCTAssertEqual(ch.callCount, 1,
+                       "second loadMessages call must early-return on the empty-array sentinel without re-hitting the channel")
+    }
+}
+
 // MARK: - REP-218: archive removes thread from SearchIndex
 
 @MainActor
