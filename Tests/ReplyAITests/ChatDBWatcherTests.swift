@@ -211,6 +211,47 @@ final class ChatDBWatcherTests: XCTestCase {
         finalWatcher.stop()
     }
 
+    // MARK: - Default-argument contract pins
+    //
+    // `InboxViewModel.swift:~1041` instantiates the watcher with only the
+    // trailing closure: `ChatDBWatcher { [weak self] in ... }`. That call
+    // site silently inherits every `init` default — paths, debounce,
+    // restartDelay. Pin the production defaults so a "tighten the timing"
+    // refactor lands in code review rather than as a silent change to
+    // every shipped user's iMessage reactivity / restart-storm behavior.
+
+    /// `restartDelay` is the seed of the exponential backoff curve
+    /// (`min(restartDelay * pow(2, count), 60)`). Halving it would double
+    /// the restart-storm rate when the system cancels our DispatchSource
+    /// during iCloud sync; doubling it would make the inbox appear dead
+    /// for ~10s after a cancel. Pin the production default.
+    func testDefaultRestartDelayMatchesProductionValue() {
+        let watcher = ChatDBWatcher(paths: [], onChange: {})
+        XCTAssertEqual(watcher.restartDelay, 5.0,
+            "restartDelay default seeds the exponential-backoff curve — drift here changes recovery cadence for every shipped user")
+        watcher.stop()
+    }
+
+    /// Constructing with only the trailing closure must succeed (i.e.
+    /// every init parameter besides `onChange` has a default). The
+    /// production call site relies on this; if `paths` ever loses its
+    /// default, callers must thread the chat.db path through manually.
+    func testTrailingClosureInitMatchesProductionCallSite() {
+        var fired = false
+        let watcher = ChatDBWatcher { fired = true }
+        // No paths can resolve in a headless test env — but we just
+        // need the construction to compile and the callback shape to
+        // round-trip. Drive it directly via the package-level shim.
+        watcher.scheduleFire()
+        // Default debounce is 0.6s; settle past it to confirm onChange
+        // runs without touching real fsevents.
+        waitPast(0.6 + 0.2)
+        XCTAssertTrue(fired,
+            "trailing-closure init must wire `onChange` via the default-args path used at the production call site")
+        watcher.stop()
+        _ = fired // silence unused-mutation warning when test trims later
+    }
+
     // MARK: - Helpers
 
     private func waitPast(_ interval: TimeInterval) {
