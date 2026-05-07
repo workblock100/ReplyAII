@@ -380,4 +380,30 @@ final class DraftStoreTests: XCTestCase {
             "listStoredDraftIDs must currently drop dot-prefixed filenames; pin the behavior so a future enumerator change surfaces here")
     }
 
+    /// Pin the prune-retention window. `DraftStore.defaultPruneDays` is
+    /// the only knob between "drafts vanish a week after last edit" and
+    /// "drafts pile up forever filling disk." A future "let's keep
+    /// drafts longer" or "let's prune more aggressively" change should
+    /// land in code review here, not as a silent default-arg edit on
+    /// `pruneStale(olderThan:)`.
+    func testDefaultPruneDaysIsSeven() {
+        XCTAssertEqual(DraftStore.defaultPruneDays, 7,
+            "defaultPruneDays drift changes user-visible draft retention silently — pin so this lands in code review")
+
+        // No-arg pruneStale() must route through defaultPruneDays.
+        // Backdate a draft past the default window and confirm pruning.
+        let store = DraftStore(draftsDirectory: tmpDir)
+        store.write(threadID: "stale", text: "ancient")
+        let stalePath = tmpDir.appendingPathComponent("stale.md")
+        let pastCutoff = Date().addingTimeInterval(-Double(DraftStore.defaultPruneDays + 1) * 86_400)
+        try? FileManager.default.setAttributes(
+            [.modificationDate: pastCutoff],
+            ofItemAtPath: stalePath.path
+        )
+
+        store.pruneStale()
+        XCTAssertNil(store.read(threadID: "stale"),
+            "no-days-arg pruneStale() must route through defaultPruneDays — the default-arg edit would otherwise stop pruning silently")
+    }
+
 }

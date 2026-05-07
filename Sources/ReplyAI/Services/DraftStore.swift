@@ -76,9 +76,15 @@ final class DraftStore: Sendable {
 
     // MARK: - Prune
 
-    /// Remove draft files that are older than 7 days. Called once in init so
-    /// stale drafts don't accumulate indefinitely.
-    func pruneStale(olderThan days: Int = 7) {
+    /// Default retention window in days. After this many days without
+    /// modification a draft is pruned from `~/Library/Application Support/
+    /// ReplyAI/drafts/`. Drift here changes user-visible draft retention
+    /// without an API change — pinned in `DraftStoreTests`.
+    static let defaultPruneDays = 7
+
+    /// Remove draft files that are older than `defaultPruneDays`. Called
+    /// once from init so stale drafts don't accumulate indefinitely.
+    func pruneStale(olderThan days: Int = DraftStore.defaultPruneDays) {
         let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
         guard let enumerator = FileManager.default.enumerator(
             at: draftsDirectory,
