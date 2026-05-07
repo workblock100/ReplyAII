@@ -113,6 +113,31 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://www./"), "www.")
     }
 
+    /// Hosts arrive case-preserved from URL parsing; the implementation lowercases
+    /// the whole host before checking the `www.` prefix so SHOUTY / mixed-case
+    /// "WWW." in a pasted link strips the same as "www.". A future refactor that
+    /// dropped the `.lowercased()` call (e.g. "we already trust URL to normalize")
+    /// would silently regress: `WWW.GOOGLE.COM` would render as the full host
+    /// instead of `google.com`. Pin both the SHOUTY and mixed-case forms.
+    func testSingleURLHostStripsUppercaseAndMixedCaseWwwPrefix() {
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://WWW.GOOGLE.COM/path"),
+                       "google.com",
+                       "uppercase WWW. prefix must be lowercased and stripped")
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://Www.Example.org/x"),
+                       "example.org",
+                       "mixed-case Www. prefix must be lowercased and stripped")
+    }
+
+    /// The `🔗 ` link-prefix glyph is followed by exactly one ASCII space
+    /// before the host. Pin the spacing so the preview never collapses to
+    /// `🔗example.com` (no breathing room) or expands to a wider gap that
+    /// breaks the sidebar's ThreadRow alignment.
+    func testLinkPrefixIsExactlyOneAsciiSpace() {
+        let preview = IMessagePreview.displayString(from: "https://example.com")
+        XCTAssertEqual(preview, "🔗 example.com",
+            "single-URL collapse must render as `🔗 <host>` with exactly one ASCII space; got: \(preview)")
+    }
+
     // MARK: - Sentinel constants — UX copy contract
     //
     // The fallback strings render directly in the inbox sidebar where
