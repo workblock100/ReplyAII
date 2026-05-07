@@ -542,4 +542,57 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertTrue(msgs.isEmpty,
             "no rows in → no messages out; the parser must accept an empty AppleScript result")
     }
+
+    // MARK: - AppleScript template invariants
+
+    /// Pin the AppleScript source emitted by `recentChats()`. The script
+    /// runs against Messages.app and must keep the `tell application
+    /// "Messages"` opener, the `every chat` enumeration, and the
+    /// `||`-delimited output line — drift on any of these breaks the
+    /// FDA-free fallback path silently. Companion to
+    /// `IMessageSenderAppleScriptTemplateTests` which pins the send-side
+    /// template.
+    func testRecentChatsScriptStructureIsStable() throws {
+        final class Captured: @unchecked Sendable { var source: String = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.recentChats()
+
+        let src = captured.source
+        XCTAssertTrue(src.contains("tell application \"Messages\""),
+            "recentChats script must address Messages.app via `tell application \"Messages\"` — got: \(src)")
+        XCTAssertTrue(src.contains("every chat"),
+            "recentChats script must enumerate `every chat` — got: \(src)")
+        XCTAssertTrue(src.contains("\"||\""),
+            "recentChats script must emit `||`-delimited rows — the parser is hard-coded to that delimiter; got: \(src)")
+        XCTAssertTrue(src.contains("end tell"),
+            "recentChats script must close the tell block — got: \(src)")
+    }
+
+    /// Pin the AppleScript source emitted by `messagesForChat(chatGUID:limit:)`.
+    /// Drift in the `first chat whose id is "..."` selector or the
+    /// `text messages of theChat` enumeration would break the per-thread
+    /// load path the inbox falls back to when chat.db isn't readable.
+    func testMessagesForChatScriptStructureIsStable() throws {
+        final class Captured: @unchecked Sendable { var source: String = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 25)
+
+        let src = captured.source
+        XCTAssertTrue(src.contains("tell application \"Messages\""),
+            "messagesForChat script must address Messages.app via `tell application \"Messages\"`")
+        XCTAssertTrue(src.contains("first chat whose id is"),
+            "messagesForChat script must select the chat by id — got: \(src)")
+        XCTAssertTrue(src.contains("text messages of theChat"),
+            "messagesForChat script must enumerate `text messages of theChat` — got: \(src)")
+        XCTAssertTrue(src.contains("\"iMessage;-;+15551234567\""),
+            "messagesForChat script must embed the GUID inside double quotes — got: \(src)")
+    }
 }
