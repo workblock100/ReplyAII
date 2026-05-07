@@ -796,6 +796,48 @@ final class IMessageChannelBusyRetryTests: XCTestCase {
             XCTAssertEqual(code, SQLITE_BUSY)
         }
     }
+
+    /// Pin the exact SQLite open-flags used for chat.db. The flags MUST be
+    /// `SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX`:
+    ///   - READONLY guarantees we never write to chat.db. A regression that
+    ///     drops READONLY (e.g. someone copy-pastes the test fixture's
+    ///     READWRITE|CREATE flags) would let macOS's Messages.app database
+    ///     become corruptible by ReplyAI — Apple would notice.
+    ///   - NOMUTEX skips SQLite's internal mutex; we don't share the
+    ///     connection across threads, so the mutex is wasted overhead. A
+    ///     drop here doesn't break correctness but adds latency to every
+    ///     `recentThreads` call.
+    /// Capture both via the dbOpener hook so a flag drift surfaces here
+    /// instead of as a "Messages won't open" support bug.
+    func testOpenFlagsAreReadOnlyAndNoMutex() async throws {
+        try buildMinimalDB()
+        // Capture box — dbOpener runs synchronously on the calling thread.
+        final class Captured: @unchecked Sendable {
+            var flags: Int32 = 0
+        }
+        let captured = Captured()
+        let channel = IMessageChannel(
+            dbPathOverride: dbURL.path,
+            dbOpener: { path, flags in
+                captured.flags = flags
+                var db: OpaquePointer?
+                let rc = sqlite3_open_v2(path, &db, flags, nil)
+                return (rc, db)
+            }
+        )
+        _ = try await channel.recentThreads(limit: 10)
+
+        XCTAssertNotEqual(captured.flags & SQLITE_OPEN_READONLY, 0,
+            "open flags must include SQLITE_OPEN_READONLY — dropping it lets ReplyAI corrupt Apple's chat.db")
+        XCTAssertEqual(captured.flags & SQLITE_OPEN_READWRITE, 0,
+            "open flags must NOT include READWRITE — symmetric guard against the most likely regression")
+        XCTAssertEqual(captured.flags & SQLITE_OPEN_CREATE, 0,
+            "open flags must NOT include CREATE — chat.db must already exist; CREATE risks accidentally creating an empty Messages DB and shadowing the real one")
+        XCTAssertNotEqual(captured.flags & SQLITE_OPEN_NOMUTEX, 0,
+            "open flags must include SQLITE_OPEN_NOMUTEX — connection is single-threaded; the mutex is wasted overhead per recentThreads call")
+        XCTAssertEqual(captured.flags, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX,
+            "exact-flag pin: READONLY|NOMUTEX is the canonical chat.db open-mode for ReplyAI")
+    }
 }
 
 // MARK: - Message.isRead projection (REP-036)
