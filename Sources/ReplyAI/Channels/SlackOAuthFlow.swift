@@ -138,10 +138,25 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        // Percent-encode each value individually. Slack's actual codes / IDs are
+        // alphanumeric so the encoding is usually a no-op, but a code or secret
+        // with `&`, `=`, `+`, or `%` would otherwise corrupt the form body
+        // (split across separators or change byte semantics on Slack's side).
+        // The allowed set is alphanumerics plus the unreserved punctuation per
+        // RFC 3986 §2.3 — every other byte is percent-escaped, which is what
+        // `application/x-www-form-urlencoded` expects.
+        let formAllowed: CharacterSet = {
+            var set = CharacterSet.alphanumerics
+            set.insert(charactersIn: "-._~")
+            return set
+        }()
+        let escape: (String) -> String = { value in
+            value.addingPercentEncoding(withAllowedCharacters: formAllowed) ?? value
+        }
         let bodyParts = [
-            "code=\(code)",
-            "client_id=\(clientID)",
-            "client_secret=\(clientSecret)",
+            "code=\(escape(code))",
+            "client_id=\(escape(clientID))",
+            "client_secret=\(escape(clientSecret))",
             "redirect_uri=http://localhost:4242/callback"
         ]
         request.httpBody = Data(bodyParts.joined(separator: "&").utf8)

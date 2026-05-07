@@ -378,6 +378,42 @@ final class SlackOAuthFlowTests: XCTestCase {
             "empty access_token must not be persisted to Keychain — every later API call would 401 and look like a stale token")
     }
 
+    /// Code/clientID/clientSecret are percent-encoded in the form body so
+    /// special characters can't corrupt the `application/x-www-form-urlencoded`
+    /// payload. Slack's actual codes/IDs are alphanumeric so the encoding is
+    /// usually a no-op, but a code containing `&`, `=`, `+`, or `%` would
+    /// otherwise split the form body and silently send wrong values.
+    func testSlackOAuthCodeWithSpecialCharsIsPercentEncoded() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "xoxb-after-special-chars"]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            // Slack would never send this, but a faulty proxy or test harness might:
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "ab&cd=ef+gh") }
+        )
+        flow.authorize(clientID: "id&with=amp", clientSecret: "sec+plus%pct") { _ in
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        let bodyString = MockURLProtocol.capturedRequests.first?.httpBody
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+
+        // Verify each value is percent-encoded — `&` and `=` MUST be escaped
+        // because they're form-body separators / key-value delimiters.
+        XCTAssertFalse(bodyString.contains("code=ab&cd=ef+gh"),
+            "raw `&` in code value would split the form body, corrupting subsequent fields")
+        XCTAssertTrue(bodyString.contains("code=ab%26cd%3Def%2Bgh"),
+            "code value must be percent-encoded; got body: \(bodyString)")
+        XCTAssertTrue(bodyString.contains("client_id=id%26with%3Damp"),
+            "client_id must be percent-encoded; got body: \(bodyString)")
+        XCTAssertTrue(bodyString.contains("client_secret=sec%2Bplus%25pct"),
+            "client_secret must be percent-encoded; got body: \(bodyString)")
+    }
+
     /// Auth URL must include redirect_uri matching the listener port (4242).
     /// Regression guard: changing the listener port without changing the URL
     /// would break Slack's redirect.
