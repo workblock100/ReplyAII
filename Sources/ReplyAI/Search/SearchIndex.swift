@@ -179,9 +179,16 @@ actor SearchIndex {
         }
     }
 
+    /// Default cap on the number of rows returned from `search`. Picked so
+    /// the ⌘K palette never paints more than a screenful of suggestions
+    /// (the popover renders ~20 visibly and scrolls; >50 is meaningless
+    /// noise). Hoisted so the limit lives in one place and can be pinned
+    /// against drift independently of either `search` overload.
+    static let defaultSearchLimit: Int = 50
+
     /// FTS5 match query. Empty input returns an empty array. The caller
     /// is expected to debounce UI input.
-    func search(_ query: String, limit: Int = 50) -> [Result] {
+    func search(_ query: String, limit: Int = SearchIndex.defaultSearchLimit) -> [Result] {
         search(query: query, channel: nil, limit: limit)
     }
 
@@ -189,7 +196,7 @@ actor SearchIndex {
     /// When `channel` is non-nil, only rows indexed for that channel are returned.
     /// The `channel` column is UNINDEXED so the filter is a post-MATCH WHERE clause,
     /// not a full-text search — this is safe and efficient for small result sets.
-    func search(query: String, channel: Channel?, limit: Int = 50) -> [Result] {
+    func search(query: String, channel: Channel?, limit: Int = SearchIndex.defaultSearchLimit) -> [Result] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let db else { return [] }
 

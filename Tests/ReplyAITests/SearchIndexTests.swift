@@ -830,6 +830,18 @@ final class SearchIndexTests: XCTestCase {
 
     // MARK: - REP-119: search result cap at 50
 
+    /// Pin the literal default cap independently of behavior. The behavior
+    /// tests below populate 100 rows and assert the result count is 50 —
+    /// they would still pass if a refactor changed both the literal default
+    /// AND the test cap together. Pinning the constant catches a drift
+    /// even when accompanied by a "fix the test" edit, because the
+    /// constant lives in source as the source-of-truth for both call
+    /// sites of `search`.
+    func testDefaultSearchLimitConstantIsFifty() {
+        XCTAssertEqual(SearchIndex.defaultSearchLimit, 50,
+                       "search default cap is shipped UX — see test rationale")
+    }
+
     func testSearchResultCapAt50() async {
         let index = SearchIndex(databaseURL: nil)
         for i in 1...100 {
