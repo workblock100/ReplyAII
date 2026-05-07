@@ -20,9 +20,19 @@ struct KeychainHelper: Sendable {
     /// `KeychainHelperTests` (literal `"ReplyAI-"` references).
     static let accountPrefix = "ReplyAI-"
 
+    /// Default Keychain service identifier for the production app's tokens
+    /// — Slack OAuth via `SlackTokenStore` reads/writes against this
+    /// service. Renaming orphans every shipped user's stored token
+    /// (Keychain identity is the service+account literal). Hoisted so the
+    /// `KeychainHelper` default and the `SlackTokenStore` default route
+    /// through the same constant; previously each was an inline literal,
+    /// so a rename touching one wouldn't fail the other's test. Pinned by
+    /// `KeychainHelperTests.testDefaultServiceLiteralIsCoReplyAIApp`.
+    static let defaultService = "co.replyai.app"
+
     let service: String
 
-    init(service: String = "co.replyai.app") {
+    init(service: String = KeychainHelper.defaultService) {
         self.service = service
     }
 
@@ -154,7 +164,7 @@ struct SlackTokenStore: Sendable {
         let workspaceName: String
     }
 
-    init(keychain: KeychainHelper = KeychainHelper(service: "co.replyai.app")) {
+    init(keychain: KeychainHelper = KeychainHelper(service: KeychainHelper.defaultService)) {
         self.keychain = keychain
     }
 

@@ -167,7 +167,9 @@ final class KeychainHelperTests: XCTestCase {
     /// items. Pin the literal so a refactor surfaces as a code-review diff.
     func testDefaultServiceLiteralIsPinned() throws {
         let helper = KeychainHelper()
-        XCTAssertEqual(helper.service, "co.replyai.app",
+        XCTAssertEqual(helper.service, KeychainHelper.defaultService,
+            "default Keychain service must route through KeychainHelper.defaultService — drift means the constant became dead code while the init froze a stale literal")
+        XCTAssertEqual(KeychainHelper.defaultService, "co.replyai.app",
             "default Keychain service must remain `co.replyai.app` — renaming silently orphans every existing token")
     }
 
