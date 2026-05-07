@@ -157,10 +157,15 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 completion(.failure(.tokenExchangeFailed("empty response")))
                 return
             }
+            // Reject present-but-empty access_token symmetrically with the
+            // missing-key path: storing "" produces 401 on every later call
+            // and surfaces as a "stale token" UX rather than a clear auth
+            // failure at the moment the OAuth handshake actually broke.
             guard
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let ok = json["ok"] as? Bool, ok,
-                let token = json["access_token"] as? String
+                let token = json["access_token"] as? String,
+                !token.isEmpty
             else {
                 completion(.failure(.tokenExchangeFailed("response missing ok=true or access_token")))
                 return

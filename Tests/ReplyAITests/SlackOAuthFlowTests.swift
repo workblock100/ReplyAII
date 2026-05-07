@@ -347,6 +347,37 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertNil(SlackTokenStore(keychain: keychain).get())
     }
 
+    /// `{"ok":true,"access_token":""}` (present-but-empty token) is symmetric
+    /// to the missing-key case — Slack should never reach this state, but a
+    /// future Web API change or a proxy that strips secrets could produce
+    /// the empty value, and silently storing it would result in every
+    /// subsequent API call returning 401 and looking like a stale token.
+    /// Pin the failure path so the empty-token short-circuit can't drift.
+    func testSlackOAuthOKResponseWithEmptyAccessTokenFails() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": ""]
+
+        let exp = expectation(description: "authorize completes")
+        var result: Result<Void, OAuthError>?
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") {
+            result = $0
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3)
+
+        guard case .failure(let error) = result, case .tokenExchangeFailed = error else {
+            XCTFail("Expected tokenExchangeFailed for empty access_token, got \(String(describing: result))")
+            return
+        }
+        XCTAssertNil(SlackTokenStore(keychain: keychain).get(),
+            "empty access_token must not be persisted to Keychain — every later API call would 401 and look like a stale token")
+    }
+
     /// Auth URL must include redirect_uri matching the listener port (4242).
     /// Regression guard: changing the listener port without changing the URL
     /// would break Slack's redirect.
