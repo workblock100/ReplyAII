@@ -1689,6 +1689,54 @@ final class IMessageChannelFormatRelativeTests: XCTestCase {
         XCTAssertTrue(label.contains(where: { $0.isNumber }),
                       "today's label must contain at least one digit (h:mm a format), got: '\(label)'")
     }
+
+    /// A timestamp from ~3 days ago lands in the EEE (abbreviated weekday)
+    /// bucket. The exact string is locale-dependent ("Mon" / "пн" / "월"),
+    /// so we don't pin a literal — instead pin the structural invariants
+    /// every locale shares: non-empty, contains at least one letter, and
+    /// not equal to the "Yesterday" literal or any time-of-day shape.
+    /// Catches a future refactor that swaps the `< 7` guard to `<= 7` (or
+    /// drops the EEE bucket entirely and falls through to MMM d).
+    func testFormatRelativeEEEBucketProducesShortWeekdayLabel() {
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        // 3 days ago at noon — well inside the [yesterday, 7-days) window.
+        let threeDaysAgo = cal.date(byAdding: .day, value: -3, to: startOfToday)!
+            .addingTimeInterval(12 * 3600)
+        let appleDate = Int64(threeDaysAgo.timeIntervalSinceReferenceDate)
+        let label = IMessageChannel.formatRelative(appleDate: appleDate)
+
+        XCTAssertFalse(label.isEmpty,
+            "3-days-ago must produce a non-empty label, got: '\(label)'")
+        XCTAssertNotEqual(label, "Yesterday",
+            "3-days-ago must NOT collapse into the Yesterday bucket")
+        XCTAssertTrue(label.contains(where: { $0.isLetter }),
+            "EEE bucket label must contain at least one letter (weekday name) regardless of locale, got: '\(label)'")
+        XCTAssertFalse(label.contains(":"),
+            "EEE bucket label must NOT contain ':' — that would mean we hit the today bucket instead, got: '\(label)'")
+    }
+
+    /// 8+ days ago lands in the MMM d bucket. Like the EEE bucket, the
+    /// literal is locale-dependent, but every locale produces something
+    /// containing the day-of-month digit and at least one letter (month
+    /// abbreviation). Pin so a future bucket-boundary refactor can't
+    /// accidentally widen the EEE window into multi-week territory.
+    func testFormatRelativeMMMDBucketContainsDigitAndLetter() {
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        // 14 days ago — well outside the < 7 EEE window.
+        let twoWeeksAgo = cal.date(byAdding: .day, value: -14, to: startOfToday)!
+            .addingTimeInterval(12 * 3600)
+        let appleDate = Int64(twoWeeksAgo.timeIntervalSinceReferenceDate)
+        let label = IMessageChannel.formatRelative(appleDate: appleDate)
+
+        XCTAssertFalse(label.isEmpty,
+            "14-days-ago must produce a non-empty label, got: '\(label)'")
+        XCTAssertTrue(label.contains(where: { $0.isLetter }),
+            "MMM d bucket must contain at least one letter (month abbreviation), got: '\(label)'")
+        XCTAssertTrue(label.contains(where: { $0.isNumber }),
+            "MMM d bucket must contain at least one digit (day of month), got: '\(label)'")
+    }
 }
 
 // MARK: - chatDBPath default contract
