@@ -1017,6 +1017,80 @@ final class InboxViewModelSendTests: XCTestCase {
         XCTAssertEqual(draft, "My draft text",
                        "userEdits must be preserved on failure so the user can retry")
     }
+
+    // MARK: - advanceToNextThread (autopilot 2026-05-07)
+
+    /// `advanceToNextThread` is private, but its observable contract — that
+    /// `selectedThreadID` advances to the next thread after a successful
+    /// send — drives the ⌘↵ "burn down the inbox" muscle memory. Pin it
+    /// through `confirmSend` since that's the only public caller.
+    func testSendSuccessAdvancesSelectedThreadIDToNext() async {
+        let t1 = MessageThread(id: "ad-1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", chatGUID: "iMessage;-;ad-1")
+        let t2 = MessageThread(id: "ad-2", channel: .imessage, name: "Bob", avatar: "B", preview: "", time: "", chatGUID: "iMessage;-;ad-2")
+        let t3 = MessageThread(id: "ad-3", channel: .imessage, name: "Carol", avatar: "C", preview: "", time: "", chatGUID: "iMessage;-;ad-3")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2, t3], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("ad-1")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "Hello")
+        await vm.confirmSend()
+
+        XCTAssertEqual(vm.selectedThreadID, "ad-2",
+                       "successful send must advance selectedThreadID to the next thread")
+    }
+
+    /// Wraparound: sending from the last thread must return selection to the
+    /// first thread so the user keeps the ⌘↵ rhythm without having to
+    /// scroll back to the top manually.
+    func testSendSuccessFromLastThreadWrapsToFirst() async {
+        let t1 = MessageThread(id: "wr-1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", chatGUID: "iMessage;-;wr-1")
+        let t2 = MessageThread(id: "wr-2", channel: .imessage, name: "Bob", avatar: "B", preview: "", time: "", chatGUID: "iMessage;-;wr-2")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("wr-2")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "Hello")
+        await vm.confirmSend()
+
+        XCTAssertEqual(vm.selectedThreadID, "wr-1",
+                       "successful send from the last thread must wrap selection to the first thread")
+    }
+
+    /// Failed send must NOT advance selectedThreadID — the user is staying
+    /// put to fix the error.
+    func testSendFailureDoesNotAdvanceSelectedThreadID() async {
+        let t1 = MessageThread(id: "fa-1", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "", chatGUID: "iMessage;-;fa-1")
+        let t2 = MessageThread(id: "fa-2", channel: .imessage, name: "Bob", avatar: "B", preview: "", time: "", chatGUID: "iMessage;-;fa-2")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [t1, t2], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("fa-1")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in
+            throw IMessageSender.SendError.notAuthorized
+        }
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "Hello")
+        await vm.confirmSend()
+
+        XCTAssertEqual(vm.selectedThreadID, "fa-1",
+                       "failed send must NOT advance selection — the user is staying put to retry")
+    }
 }
 
 // MARK: - Thread ordering (REP-103)
