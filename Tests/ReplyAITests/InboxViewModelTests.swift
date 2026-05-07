@@ -2349,3 +2349,103 @@ final class InboxViewModelEditKeyTests: XCTestCase {
             "success toast must read exactly `Sent to <recipient>` — drift in this prefix changes the post-send affordance the keyboard-first UX depends on")
     }
 }
+
+// MARK: - InboxViewModel.count(for:) — sidebar folder counts
+
+/// Pins the count function that backs the per-folder badge numbers in
+/// `Folder` rows on the sidebar. Drift in any of these branches would
+/// silently mis-state the user's inbox state — e.g. claiming `priority`
+/// has 3 items when only 2 are pinned, or showing archived threads under
+/// `.all`. The function is called every render via the sidebar's
+/// `Folder.count` snapshot, so even off-by-one bugs are immediately
+/// visible.
+
+@MainActor
+final class InboxViewModelFolderCountTests: XCTestCase {
+
+    private func vmWith(threads: [MessageThread]) -> InboxViewModel {
+        let suite = "test.ReplyAI.folderCount.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        // Unique cache URL pointed at a path that won't exist — InboxViewModel's
+        // init falls back to the persisted thread cache when `threads` is empty,
+        // so without this we'd inherit whatever the running user's last cache
+        // happened to contain.
+        let cacheURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("folder-count-\(UUID().uuidString).json")
+        return InboxViewModel(
+            threads: threads,
+            imessage: BlockingMockChannel(),
+            contacts: fastContacts(),
+            defaults: d,
+            threadsCacheURL: cacheURL)
+    }
+
+    func testEmptyVMReturnsZeroForEveryKind() {
+        // Pass a unique cacheURL via vmWith so the empty-threads fallback can't
+        // load a stale cache file from disk and inflate the count.
+        let vm = vmWith(threads: [])
+        for kind in Folder.Kind.allCases {
+            XCTAssertEqual(vm.count(for: kind), 0,
+                "empty vm: count(\(kind)) must be 0")
+        }
+    }
+
+    func testAllCountExcludesArchivedThreads() {
+        let t1 = MessageThread(id: "t1", channel: .imessage, name: "A", avatar: "A", preview: "p1", time: "now")
+        let t2 = MessageThread(id: "t2", channel: .imessage, name: "B", avatar: "B", preview: "p2", time: "now")
+        let t3 = MessageThread(id: "t3", channel: .imessage, name: "C", avatar: "C", preview: "p3", time: "now")
+        let vm = vmWith(threads: [t1, t2, t3])
+        XCTAssertEqual(vm.count(for: .all), 3, "before archive: all 3 threads count")
+        vm.archive("t2")
+        XCTAssertEqual(vm.count(for: .all), 2,
+            "after archive: archived thread must drop out of .all")
+        XCTAssertEqual(vm.count(for: .done), 1,
+            "archived thread must show up in .done")
+    }
+
+    func testPriorityCountReflectsPinnedThreadsOnly() {
+        let unpinned = MessageThread(id: "u1", channel: .imessage, name: "U", avatar: "U", preview: "p", time: "now", pinned: false)
+        let pinned1  = MessageThread(id: "p1", channel: .slack,    name: "P", avatar: "P", preview: "p", time: "now", pinned: true)
+        let pinned2  = MessageThread(id: "p2", channel: .imessage, name: "Q", avatar: "Q", preview: "p", time: "now", pinned: true)
+        let vm = vmWith(threads: [unpinned, pinned1, pinned2])
+        XCTAssertEqual(vm.count(for: .priority), 2,
+            ".priority must equal the number of pinned threads")
+    }
+
+    func testAwaitingCountReflectsUnreadThreadsOnly() {
+        let read    = MessageThread(id: "r1", channel: .imessage, name: "A", avatar: "A", preview: "p", time: "now", unread: 0)
+        let unread1 = MessageThread(id: "u1", channel: .imessage, name: "B", avatar: "B", preview: "p", time: "now", unread: 1)
+        let unread2 = MessageThread(id: "u2", channel: .slack,    name: "C", avatar: "C", preview: "p", time: "now", unread: 5)
+        let vm = vmWith(threads: [read, unread1, unread2])
+        XCTAssertEqual(vm.count(for: .awaiting), 2,
+            ".awaiting must equal the number of threads with unread > 0 (count of threads, not sum of unread counts)")
+    }
+
+    func testArchivedThreadStillCountsInDone() {
+        let t1 = MessageThread(id: "t1", channel: .imessage, name: "A", avatar: "A", preview: "p", time: "now")
+        let t2 = MessageThread(id: "t2", channel: .imessage, name: "B", avatar: "B", preview: "p", time: "now")
+        let vm = vmWith(threads: [t1, t2])
+        vm.archive("t1")
+        vm.archive("t2")
+        XCTAssertEqual(vm.count(for: .done), 2,
+            ".done must reflect every archived thread")
+        XCTAssertEqual(vm.count(for: .all), 0,
+            "after archiving everything, .all must be 0 — not the original input length")
+    }
+
+    func testPinnedAndArchivedThreadDoesNotDoubleCount() {
+        // A pinned thread that's later archived should drop out of
+        // .priority (the count function checks the live, non-archived
+        // subset for pinned/unread). Pin this contract so a refactor
+        // that filters from `threads` directly without the archived
+        // mask doesn't silently re-introduce archived threads into
+        // the priority badge.
+        let pinned = MessageThread(id: "p1", channel: .imessage, name: "P", avatar: "P",
+                                   preview: "p", time: "now", pinned: true)
+        let vm = vmWith(threads: [pinned])
+        XCTAssertEqual(vm.count(for: .priority), 1, "pinned thread shows in .priority")
+        vm.archive("p1")
+        XCTAssertEqual(vm.count(for: .priority), 0,
+            "archived pinned thread must NOT count toward .priority — `live` filters out archived first")
+    }
+}
