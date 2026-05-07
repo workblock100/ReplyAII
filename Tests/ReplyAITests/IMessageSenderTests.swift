@@ -600,6 +600,72 @@ final class IMessageSenderTests: XCTestCase {
                           "retryDelay=0 must not add wall-clock time (got \(elapsed)s)")
         XCTAssertEqual(callCount, 2, "hook must be called twice: initial attempt + one retry")
     }
+
+    // MARK: - Legacy send(_:toChatIdentifier:channel:) overload (autopilot 2026-05-07)
+
+    /// The legacy by-identifier overload had zero direct test coverage.
+    /// It synthesizes a 1:1-shaped GUID and forwards to sendRaw, which
+    /// means group sends from this path can't work — but that's an
+    /// intentional contract documented in the source. Pin the four
+    /// observable behaviors:
+
+    func testLegacyByIdentifierThrowsUnsupportedForSlackChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        XCTAssertThrowsError(
+            try IMessageSender.send("hi", toChatIdentifier: "C123", channel: .slack)
+        ) { err in
+            guard case IMessageSender.SendError.unsupported = err else {
+                return XCTFail("expected .unsupported, got \(err)")
+            }
+        }
+    }
+
+    func testLegacyByIdentifierThrowsUnsupportedForWhatsAppChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        XCTAssertThrowsError(
+            try IMessageSender.send("hi", toChatIdentifier: "+15550009999", channel: .whatsapp)
+        ) { err in
+            guard case IMessageSender.SendError.unsupported = err else {
+                return XCTFail("expected .unsupported, got \(err)")
+            }
+        }
+    }
+
+    func testLegacyByIdentifierBuildsIMessageGUIDForIMessageChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        var capturedScript: String?
+        IMessageSender.executeHook = { src in capturedScript = src }
+
+        XCTAssertNoThrow(
+            try IMessageSender.send("hi", toChatIdentifier: "+15551234567", channel: .imessage)
+        )
+
+        let script = capturedScript ?? ""
+        XCTAssertTrue(script.contains("iMessage;-;+15551234567"),
+                      "legacy iMessage send must synthesize 1:1 GUID 'iMessage;-;<id>'; got: \(script)")
+    }
+
+    func testLegacyByIdentifierBuildsSMSGUIDForSMSChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        var capturedScript: String?
+        IMessageSender.executeHook = { src in capturedScript = src }
+
+        XCTAssertNoThrow(
+            try IMessageSender.send("hi", toChatIdentifier: "+15551234567", channel: .sms)
+        )
+
+        let script = capturedScript ?? ""
+        XCTAssertTrue(script.contains("SMS;-;+15551234567"),
+                      "legacy SMS send must synthesize 1:1 GUID 'SMS;-;<id>'; got: \(script)")
+    }
 }
 
 // MARK: - REP-174: escapeForAppleScriptLiteral completeness
