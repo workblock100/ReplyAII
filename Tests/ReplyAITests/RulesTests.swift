@@ -1142,6 +1142,51 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(g, "Family")
     }
 
+    /// Empty pattern audit, part 2 of 3: `textContains("")` matches NOTHING.
+    /// `String.range(of: "", options: .caseInsensitive)` returns nil (unlike
+    /// `hasPrefix("")` / `hasSuffix("")` which return true), so an empty
+    /// `textContains` pattern can't accidentally promote every message into
+    /// matching the rule. Pin the surprising-but-safe behaviour; a future
+    /// "consistency fix" that special-cased empty pattern as "always match"
+    /// (matching the prefix/suffix variants) would silently fire archive /
+    /// silentlyIgnore rules on every incoming message.
+    func testTextContainsEmptyPatternNeverMatches() {
+        let ctx = RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "Some real message body",
+            isUnread: true, unreadCount: 1, senderKnown: true,
+            chatIdentifier: "t1", hasAttachment: false, threadDisplayName: "Alice"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.textContains(""), in: ctx),
+            "empty textContains pattern must not match a non-empty body")
+
+        let emptyBodyCtx = RuleContext(
+            senderName: "Alice", senderHandle: "Alice",
+            channel: .imessage, lastMessageText: "",
+            isUnread: true, unreadCount: 1, senderKnown: true,
+            chatIdentifier: "t1", hasAttachment: false, threadDisplayName: "Alice"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.textContains(""), in: emptyBodyCtx),
+            "empty textContains pattern + empty body must also not match")
+    }
+
+    /// Empty pattern audit, part 3 of 3: `senderContains("")` matches NOTHING.
+    /// Same Foundation invariant as `textContains` — `range(of: "")` returns
+    /// nil. Pinned because senderContains is a high-impact predicate (drives
+    /// archive / pin / silentlyIgnore based on the sender), so the empty
+    /// pattern accidentally promoting to "match every sender" would be a
+    /// catastrophic misfire on a misconfigured rule.
+    func testSenderContainsEmptyPatternNeverMatches() {
+        let ctx = RuleContext(
+            senderName: "Maya", senderHandle: "+15551112222",
+            channel: .slack, lastMessageText: "hi",
+            isUnread: false, unreadCount: 0, senderKnown: true,
+            chatIdentifier: "t2", hasAttachment: false, threadDisplayName: "Maya"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.senderContains(""), in: ctx),
+            "empty senderContains pattern must not match a non-empty sender")
+    }
+
     /// Empty `groupName` does NOT match any group — Swift's
     /// `localizedCaseInsensitiveContains("")` returns `false` for empty
     /// patterns (unlike `hasPrefix("")` / `hasSuffix("")` which return
