@@ -297,6 +297,36 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(msgs.first?.from, .me)
     }
 
+    /// Sibling case: present-but-empty `user` value is currently classified
+    /// as `.them` (the test predicate is `m.user != nil`, and `Some("")` is
+    /// non-nil). This is INCONSISTENT with the missing-user path which maps
+    /// to `.me`. Pinned because:
+    ///   1. Slack's API typically omits `user` on bot/system messages
+    ///      rather than sending an empty string, so this case is rare —
+    ///      but the inconsistency is real and worth surfacing if it ever
+    ///      starts firing in the wild (a malformed Slack payload, a bot
+    ///      with a misbehaving SDK, a future Slack schema change).
+    ///   2. A future "harden present-but-empty as missing" tightening
+    ///      (parallel to the chatGUID/sender empty-string fixes) would
+    ///      flip this behavior — pin so the change is deliberate.
+    func testMessagesWithEmptyStringUserAreAttributedToThem() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000000.0002", "user": "", "text": "weirdly empty user"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.first?.from, .them,
+            "present-but-empty `user` is currently classified as .them — pin so a future tightening to .me is deliberate")
+    }
+
     // MARK: - Identity
 
     func testSlackChannelIdentifiesAsSlack() {
