@@ -263,4 +263,24 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         XCTAssertFalse(newFired,
             "stop() must not allow a stale-schedule callback to surface to a re-attached handler")
     }
+
+    // MARK: - default-debounce pin
+
+    /// `MessagesAppActivationObserver(notificationCenter:bundleIDExtractor:)`
+    /// with no explicit `debounce` is the production call site at
+    /// `InboxViewModel.activationObserver` init. If a future refactor tightens
+    /// the default below the visible 600ms window, every shipped user will
+    /// see extra sync triggers as they thumb between Messages threads —
+    /// this pin catches that drift.
+    func testDefaultDebounceIsSixHundredMilliseconds() {
+        XCTAssertEqual(MessagesAppActivationObserver.defaultDebounce, 0.6,
+            "defaultDebounce drift changes how many sync triggers fire per user visit to Messages.app")
+
+        let observer = MessagesAppActivationObserver(
+            notificationCenter: NotificationCenter(),
+            bundleIDExtractor: testExtractor
+        )
+        XCTAssertEqual(observer.debounce, MessagesAppActivationObserver.defaultDebounce,
+            "the no-debounce-arg init must route through Self.defaultDebounce — otherwise the static constant becomes dead code while the literal 0.6 lives on in the init signature")
+    }
 }

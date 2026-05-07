@@ -10,10 +10,18 @@ import AppKit
 /// test coverage without real NSRunningApplication instances or
 /// NSWorkspace machinery.
 final class MessagesAppActivationObserver: @unchecked Sendable {
+    /// Production debounce window. Drift here changes how many sync triggers
+    /// fire when the user thumbs through Messages between conversations —
+    /// 600ms coalesces rapid activations to one callback per visit.
+    static let defaultDebounce: TimeInterval = 0.6
+
     /// Fired at most once per `debounce` interval when Messages becomes frontmost.
     var onMessagesActivated: (() -> Void)?
 
-    private let debounce: TimeInterval
+    /// Package-internal so tests can pin the production default without
+    /// constructing a second observer with an explicit value (see
+    /// `MessagesAppActivationObserverTests.testDefaultDebounceIsSixHundredMilliseconds`).
+    let debounce: TimeInterval
     private let notificationCenter: NotificationCenter
     /// Extracts the activated app's bundle ID from the notification userInfo.
     /// Production uses NSWorkspace.applicationUserInfoKey; tests inject a stub.
@@ -27,7 +35,7 @@ final class MessagesAppActivationObserver: @unchecked Sendable {
         bundleIDExtractor: @escaping (Notification) -> String? = {
             ($0.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
         },
-        debounce: TimeInterval = 0.6
+        debounce: TimeInterval = MessagesAppActivationObserver.defaultDebounce
     ) {
         self.notificationCenter = notificationCenter
         self.bundleIDExtractor = bundleIDExtractor
