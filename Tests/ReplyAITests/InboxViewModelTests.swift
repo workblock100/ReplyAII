@@ -878,6 +878,67 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
                       "unsnoozed thread must reappear in filteredThreads")
     }
 
+    /// Re-snoozing a thread before the original wake fires must overwrite
+    /// the wake date, and the original wake task firing afterwards must
+    /// NOT clear the new snooze (wakeIfStillSnoozed compares
+    /// `current == expectedWake`).
+    func testReSnoozeBeforeOriginalWakeKeepsTheLatestEntry() async {
+        let d = makeIsolatedDefaults(suffix: ".sn5")
+        let t = MessageThread(id: "sn-f", channel: .imessage, name: "Frank", avatar: "F", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+
+        let pastWake = Date().addingTimeInterval(-1)
+        vm.snooze(threadID: "sn-f", until: pastWake)
+
+        // Immediately re-snooze with a future wake — overwriting the past
+        // entry while the original wake Task is still scheduled.
+        let futureWake = Date().addingTimeInterval(3600)
+        vm.snooze(threadID: "sn-f", until: futureWake)
+
+        // Drain — the original past-wake task fires here. With
+        // `wakeIfStillSnoozed` correctly comparing against expectedWake, the
+        // entry survives because current (futureWake) != expectedWake (pastWake).
+        for _ in 0..<10 { await Task.yield() }
+
+        XCTAssertNotNil(vm.snoozedUntil["sn-f"],
+                        "re-snoozing before the original wake fires must NOT lose the new entry — the stale wake task must check expectedWake before clearing")
+        XCTAssertEqual(vm.snoozedUntil["sn-f"], futureWake,
+                       "the latest snooze wake must remain intact; not overwritten by the stale task")
+    }
+
+    /// Snoozing twice must overwrite the prior wake date — there's no
+    /// stack/queue behavior, just a single mapping per thread.
+    func testSnoozeOverwritesPriorWakeDate() {
+        let d = makeIsolatedDefaults(suffix: ".sn6")
+        let t = MessageThread(id: "sn-g", channel: .imessage, name: "Grace", avatar: "G", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+
+        let firstWake = Date().addingTimeInterval(3600)
+        let secondWake = Date().addingTimeInterval(7200)
+        vm.snooze(threadID: "sn-g", until: firstWake)
+        vm.snooze(threadID: "sn-g", until: secondWake)
+
+        XCTAssertEqual(vm.snoozedUntil["sn-g"], secondWake,
+                       "second snooze must overwrite the first — single mapping per thread, no stack")
+    }
+
+    /// Unsnoozing a thread that was never snoozed must be a no-op (the
+    /// keyboard shortcut may fire defensively without checking state
+    /// first).
+    func testUnsnoozeNonSnoozedIsNoOp() {
+        let d = makeIsolatedDefaults(suffix: ".sn7")
+        let t = MessageThread(id: "sn-h", channel: .imessage, name: "Hank", avatar: "H", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t], contacts: fastContacts(), defaults: d)
+
+        // No snooze was ever set on sn-h. Calling unsnooze must not crash
+        // or insert a marker entry.
+        vm.unsnooze("sn-h")
+
+        XCTAssertNil(vm.snoozedUntil["sn-h"])
+        XCTAssertTrue(vm.snoozedUntil.isEmpty,
+                      "unsnooze on a non-snoozed thread must not insert a sentinel — snoozedUntil stays empty")
+    }
+
     func testApplyPinnedReStampsPinFlag() {
         // Direct test of the helper used by syncAllChannels: thread that comes
         // back from a channel as `pinned: false` gets re-stamped if its id is
