@@ -1142,6 +1142,24 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(g, "Family")
     }
 
+    /// Empty `groupName` does NOT match any group — Swift's
+    /// `localizedCaseInsensitiveContains("")` returns `false` for empty
+    /// patterns (unlike `hasPrefix("")` / `hasSuffix("")` which return
+    /// true). Pin the safe-by-default behaviour because it's surprising
+    /// to anyone who knows the prefix/suffix variants — a future
+    /// "consistency fix" that swapped the matcher for one that DID
+    /// short-circuit empty as true would silently match every group on
+    /// the user's device.
+    func testContactGroupMatchesEmptyNameNeverMatches() {
+        let ctxWithGroups = contactGroupCtx(groups: ["Coworkers", "Family"])
+        XCTAssertFalse(RuleEvaluator.matches(.contactGroupMatchesName(groupName: ""), in: ctxWithGroups),
+            "empty groupName must not match any group — Swift's localizedCaseInsensitiveContains returns false on empty pattern, unlike has{Prefix,Suffix}")
+
+        let ctxNoGroups = contactGroupCtx(groups: [])
+        XCTAssertFalse(RuleEvaluator.matches(.contactGroupMatchesName(groupName: ""), in: ctxNoGroups),
+            "empty groupName + empty groups list also returns false — short-circuits via the empty list")
+    }
+
     // MARK: - REP-016 senderKnown classification
 
     private func makeThread(name: String) -> MessageThread {
