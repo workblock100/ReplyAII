@@ -180,6 +180,54 @@ final class NotificationCoordinatorTests: XCTestCase {
             "Empty reply text must not set pendingNotificationReply")
     }
 
+    /// `nil` userText (the `userText: String?` param) is the actual UN
+    /// representation when a non-text-input action fires; pin the silent
+    /// drop so a refactor that replaces `let text = userText` with a
+    /// non-optional default ("") doesn't accidentally start propagating
+    /// blank replies through to IMessageSender.
+    func testHandleReplyIgnoresNilText() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+
+        coordinator.handleReply(
+            actionIdentifier: NotificationCoordinator.replyActionID,
+            userText: nil,
+            notificationID: "t1"
+        )
+
+        XCTAssertNil(inbox.pendingNotificationReply,
+            "nil reply text must not set pendingNotificationReply (the optional unwrap is the gate)")
+    }
+
+    /// An empty `notificationID` reaches `pendingNotificationReply`
+    /// verbatim — the gate at this layer only screens action identifier
+    /// and text. Pin the current behaviour so a future tightening to
+    /// also reject empty IDs is a deliberate change visible here, and so
+    /// downstream consumeNotificationReply's "thread not found" silent
+    /// drop continues to act as the safety net.
+    func testHandleReplyAcceptsEmptyNotificationIDVerbatim() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+
+        coordinator.handleReply(
+            actionIdentifier: NotificationCoordinator.replyActionID,
+            userText: "ok",
+            notificationID: ""
+        )
+
+        guard let pending = inbox.pendingNotificationReply else {
+            XCTFail("empty notificationID must still set pendingNotificationReply at this layer")
+            return
+        }
+        XCTAssertEqual(pending.threadID, "",
+            "threadID must be passed through verbatim — the empty-string filter is downstream in consumeNotificationReply")
+        XCTAssertEqual(pending.text, "ok")
+    }
+
     func testAuthorizationRequestedWhenNotDetermined() async {
         let center = MockNotificationCenter()
         center.stubbedStatus = .notDetermined
