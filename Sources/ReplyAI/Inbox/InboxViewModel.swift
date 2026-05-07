@@ -9,6 +9,10 @@ import Observation
 @Observable
 @MainActor
 final class InboxViewModel {
+    /// Lifecycle of one sync round-trip against the iMessage `chat.db`.
+    /// Stored on the view model so the sidebar status pill, the FDA banner,
+    /// and the inbox `viewState` derivation can all read the same source
+    /// of truth instead of triangulating from thread-count + last-error.
     enum SyncStatus: Equatable {
         case idle                 // showing fixtures, no sync attempted yet
         case syncing
@@ -148,6 +152,11 @@ final class InboxViewModel {
     /// reply text in the composer for the matching thread.
     var pendingNotificationReply: (threadID: String, text: String)?
 
+    /// Snapshot captured by `requestSend(text:)` before any UI confirms or
+    /// the bubble is appended. The `SendConfirmSheet` reads this snapshot
+    /// so the user always confirms exactly what they're sending — even if
+    /// the active thread, tone, or composer text changes between request
+    /// and confirm. Equatable to make SwiftUI sheet presentation idempotent.
     struct SendConfirmation: Equatable {
         let threadID: String
         let recipient: String
