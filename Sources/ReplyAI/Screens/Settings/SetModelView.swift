@@ -13,6 +13,11 @@ struct SetModelView: View {
     private let modelID: String = "mlx-community/Llama-3.2-3B-Instruct-4bit"
     private let modelDisplayName: String = "Llama-3.2-3B · 4-bit"
 
+    /// On-disk state of the MLX weight cache. Probed lazily from the
+    /// HuggingFace cache directory (`~/Library/Caches/huggingface/hub/`)
+    /// and surfaced in the "Cache" card. `.unknown` is the pre-probe
+    /// state so the UI renders a neutral placeholder instead of flashing
+    /// "Not downloaded" before the disk read completes.
     enum CacheStatus: Equatable {
         case unknown
         case notDownloaded

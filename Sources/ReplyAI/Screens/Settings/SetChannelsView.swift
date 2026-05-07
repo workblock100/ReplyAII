@@ -14,6 +14,10 @@ struct SetChannelsView: View {
     private let oauth = SlackOAuthFlow()
     private let slackTokenStore = SlackTokenStore()
 
+    /// One channel row built from `Channel.allCases` and the live
+    /// keychain/health state of each `ChannelService`. `canConnect = false`
+    /// for `.comingSoon` channels so the trailing button can render
+    /// disabled instead of triggering a no-op auth flow.
     struct Row: Identifiable {
         let id = UUID()
         let channel: Channel
@@ -22,6 +26,9 @@ struct SetChannelsView: View {
         let detail: String
         let canConnect: Bool
 
+        /// Connection state for the row's status pill. The `text` values
+        /// here render literally to the user — changing one is a UI
+        /// change, not a refactor.
         enum Status {
             case connected, error, disconnected, comingSoon
             var color: Color {
