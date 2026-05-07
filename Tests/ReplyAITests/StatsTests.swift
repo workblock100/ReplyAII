@@ -204,6 +204,41 @@ final class StatsTests: XCTestCase {
         XCTAssertTrue(content.contains("ruleLoadSkips: 0"))
     }
 
+    func testWeeklyLogEmptyRulesFiredByActionEmitsBraceLiteral() throws {
+        // The else-branch in writeWeeklyLog explicitly emits
+        // `- rulesFiredByAction: {}` when no rules have fired, so weekly
+        // archives stay column-aligned and a parser scanning for the field
+        // never sees a missing line. Removing the placeholder would silently
+        // break automation that diffs week-over-week stats.
+        let stats = Stats(fileURL: tempURL())
+
+        let logURL = tempURL("weekly-empty-rules.md")
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL, encoding: .utf8)
+
+        XCTAssertTrue(content.contains("- rulesFiredByAction: {}"),
+                      "empty rulesFiredByAction must serialize as the literal `{}` placeholder, not be omitted")
+    }
+
+    func testWeeklyLogRulesFiredByActionSortedByKey() throws {
+        // The actionsSorted line in writeWeeklyLog sorts alphabetically by
+        // action key so the file is stable across runs — week-over-week
+        // diffs would otherwise be polluted by Dictionary's hash-order churn.
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleFired(action: "snooze")
+        stats.recordRuleFired(action: "archive")
+        stats.recordRuleFired(action: "mark-read")
+
+        let logURL = tempURL("weekly-sorted-rules.md")
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL, encoding: .utf8)
+
+        // The triple appears on one line, joined by ", ", in alphabetical
+        // order. Pin both the order and the join separator.
+        XCTAssertTrue(content.contains("archive: 1, mark-read: 1, snooze: 1"),
+                      "rulesFiredByAction entries must be sorted by key and joined with ', '")
+    }
+
     func testWeeklyLogWritesToFile() throws {
         let stats = Stats(fileURL: tempURL())
         stats.recordDraftGenerated()
