@@ -133,4 +133,34 @@ final class IMessageSenderErrorDescriptionTests: XCTestCase {
         XCTAssertEqual(IMessageSender.maxMessageLength, 4096,
             "iMessage AppleScript send cap must remain 4096 chars — bumping requires testing real send-path behavior")
     }
+
+    /// `errOSAScriptError` (-1743) is the macOS TCC denial code returned
+    /// when the user has not granted ReplyAI Automation permission to
+    /// control Messages.app. Drift here decouples the AppleScript error
+    /// classifier from `SendError.notAuthorized`, which is the case the
+    /// inbox uses to render the "re-grant in System Settings" CTA. The
+    /// raw integer is part of the macOS ABI; refactoring it would silently
+    /// route TCC denials through the generic `.scriptFailure` path.
+    func testTCCDeniedErrorCodeIsPinned() {
+        XCTAssertEqual(IMessageSender.tccDeniedErrorCode, -1743,
+            "tccDeniedErrorCode is the macOS Automation-permission denial code; drift breaks the System Settings reconnect CTA")
+    }
+
+    /// `errAEEventNotHandled` (-1708) is Messages's transient "I accepted
+    /// the script but couldn't dispatch it" error. The retry path keys off
+    /// this exact integer; if it drifts, every transient send becomes a
+    /// hard failure surfaced to the user as "AppleScript error -1708"
+    /// with no retry. Pin the constant + the existing retry mechanism's
+    /// message-substring contract.
+    func testEventNotHandledErrorCodeIsPinned() {
+        XCTAssertEqual(IMessageSender.eventNotHandledErrorCode, -1708,
+            "eventNotHandledErrorCode drift breaks the transient-failure retry path; transient failures would surface as hard send errors")
+
+        // The retry classifier uses substring matching on the error
+        // message, so pin the substring shape that the AppleScript
+        // executor formats when it hits this code.
+        let formatted = "AppleScript error \(IMessageSender.eventNotHandledErrorCode)"
+        XCTAssertEqual(formatted, "AppleScript error -1708",
+            "the retry classifier relies on this exact formatted substring — drift in either side breaks transient retry")
+    }
 }

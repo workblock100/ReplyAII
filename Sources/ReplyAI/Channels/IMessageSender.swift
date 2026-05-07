@@ -41,6 +41,16 @@ enum IMessageSender {
     /// we surface an error so the user sees a clear failure instead.
     static let maxMessageLength = 4096
 
+    /// `errOSAScriptError` — TCC (Automation permission) denial. Messages
+    /// returns this when the user has not granted ReplyAI Automation access.
+    /// Maps to `SendError.notAuthorized` for the reconnect-CTA UI path.
+    static let tccDeniedErrorCode = -1743
+
+    /// `errAEEventNotHandled` — transient. Messages.app accepted the
+    /// AppleScript but couldn't dispatch the event (commonly during
+    /// startup or iCloud sync). Triggers the `retryDelay` retry path.
+    static let eventNotHandledErrorCode = -1708
+
     /// Production default for `sendTimeout`. Hoisted to a `let` constant
     /// so tests can pin the production cadence without round-tripping
     /// through the mutable `sendTimeout` (which other tests temporarily
@@ -136,7 +146,7 @@ enum IMessageSender {
                 // send but couldn't dispatch — typically transient during
                 // startup or iCloud sync. Signal it for the retry path.
                 let code = error[NSAppleScript.errorNumber] as? Int ?? 0
-                if code == -1743 {
+                if code == Self.tccDeniedErrorCode {
                     throw SendError.notAuthorized
                 }
                 let msg = error[NSAppleScript.errorMessage] as? String ?? "\(error)"
@@ -157,7 +167,8 @@ enum IMessageSender {
             } catch let err as SendError {
                 // -1708 (errAEEventNotHandled) is transient — retry once after
                 // a short wait. All other errors propagate immediately.
-                if case .scriptFailure(let msg) = err, msg.contains("AppleScript error -1708") {
+                if case .scriptFailure(let msg) = err,
+                   msg.contains("AppleScript error \(Self.eventNotHandledErrorCode)") {
                     Thread.sleep(forTimeInterval: Self.retryDelay)
                     do {
                         try executor(source)
