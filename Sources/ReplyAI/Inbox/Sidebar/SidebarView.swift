@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Left-rail of the inbox window: brand row, search pill, folder nav,
+/// channel filter, and the persistent connection-health pill at the
+/// bottom. The 28-pt top spacer is load-bearing — without it the macOS
+/// traffic-light buttons overlay the brand row when the window uses the
+/// hidden title bar style. Folder selection writes through to
+/// `Preferences.lastSelectedFolder` so cold launches restore the user's
+/// last view.
 struct SidebarView: View {
     @Bindable var model: InboxViewModel
 

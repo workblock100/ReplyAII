@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// AI-summary card pinned to the top of the message stream when a
+/// thread has a non-nil `contextSummary`. Always rendered — never
+/// auto-expanded — because the summary is the LLM's read of the
+/// conversation, not ground truth, and forcing the user to see it in
+/// passing rather than full-screen keeps it advisory.
 struct ContextCard: View {
     let summary: String
 

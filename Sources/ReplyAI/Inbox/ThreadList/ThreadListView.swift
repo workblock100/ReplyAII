@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Middle-column of the inbox: header chip + the scrolling list of
+/// `ThreadRow`s for the currently-selected folder/channel filter.
+/// `LazyVStack` is deliberate — the inbox can hold thousands of threads
+/// and `List` was rejected during design review for the keyboard-nav
+/// quirks it imposes on `selection:` on macOS 14+.
 struct ThreadListView: View {
     @Bindable var model: InboxViewModel
 

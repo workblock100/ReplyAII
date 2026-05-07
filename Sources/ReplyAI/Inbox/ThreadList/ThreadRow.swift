@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// One row in the thread list. The 2-pt left accent bar is rendered
+/// always-present (clear when unselected) rather than conditionally so
+/// row height stays constant during selection animations — without it,
+/// the list shifts horizontally as the bar appears/disappears.
 struct ThreadRow: View {
     let thread: MessageThread
     let isSelected: Bool

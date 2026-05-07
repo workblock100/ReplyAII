@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// One bubble in the thread message stream. Renders the bubble flush-
+/// right when `message.from == .me` and flush-left when `.them`, with
+/// the opposite-side `Spacer` taking up the remaining row width — this
+/// is what gives the iMessage-style alternating-side layout without
+/// needing per-message alignment configuration on the parent stack.
 struct MessageBubble: View {
     let message: Message
 

@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Right-pane of the inbox: header, scrolling message stream, and the
+/// composer. Composes `ComposerView` directly rather than as a sibling
+/// because the composer's `selectedThread` must always agree with the
+/// stream above it — making them parent/child guarantees they both see
+/// the same `InboxViewModel` snapshot during state churn.
 struct ThreadDetailView: View {
     @Bindable var model: InboxViewModel
     @Environment(DraftEngine.self) private var engine

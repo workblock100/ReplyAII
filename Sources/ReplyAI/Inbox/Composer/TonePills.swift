@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Horizontal segmented control over `Tone.allCases` — the source of
+/// truth for the composer's voice register. Bound to a `@Binding` rather
+/// than the view model directly so the same component renders in the
+/// composer header and in onboarding's tone-preview without duplicating
+/// the styling. The animation curve (`Theme.Motion.tone`) intentionally
+/// matches the `⌘/` cycle animation in the composer so click-cycling and
+/// keyboard-cycling feel like the same gesture.
 struct TonePills: View {
     @Binding var selection: Tone
 

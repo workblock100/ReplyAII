@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Reply-drafting surface at the bottom of the thread detail. Owns the
+/// active-tone header, the streaming draft well backed by `DraftEngine`,
+/// and the keyboard-hint footer. Lives inside `ThreadDetailView` rather
+/// than at the inbox root so the composer reads `selectedThread` from
+/// the same `InboxViewModel` that drives the message stream above it —
+/// keeping draft state co-located with the thread it belongs to.
 struct ComposerView: View {
     @Bindable var model: InboxViewModel
     @Environment(DraftEngine.self) private var engine
