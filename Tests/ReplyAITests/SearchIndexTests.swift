@@ -455,6 +455,28 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(realHits.first?.threadID, "ok")
     }
 
+    /// Stronger pin on the rebuild empty-threadID skip: assert via a positive
+    /// search that the empty-threadID row's text is genuinely absent from the
+    /// FTS table, not just that it didn't masquerade under another thread.
+    /// The previous test only checks that the valid thread is indexed; a
+    /// regression that forwarded empty-threadID rows through and bound them
+    /// to threadID="" would still pass that assertion. This negative search
+    /// catches it.
+    func testRebuildEmptyThreadIDRowsAreNotSearchable() async {
+        let index = SearchIndex()
+        let real = MessageThread(id: "ok", channel: .imessage, name: "OK",
+                                 avatar: "O", preview: "", time: "", unread: 0)
+        let messages: [String: [Message]] = [
+            "ok": [Message(from: .them, text: "alligator", time: "now")],
+            "":   [Message(from: .them, text: "should-not-index", time: "now")],
+        ]
+        await index.rebuild(from: messages, threads: [real])
+
+        let phantomHits = await index.search("should-not-index")
+        XCTAssertTrue(phantomHits.isEmpty,
+            "empty-threadID rows must not be searchable — found \(phantomHits.count) phantom hit(s) for `should-not-index`")
+    }
+
     // MARK: - BM25 ranking (REP-033)
 
     func testExactMatchRanksAbovePartialMatch() async {
