@@ -315,6 +315,150 @@ final class ShortcutsExportHandlerTests: XCTestCase {
                        "preview must fall back to the most recent message when the JSON omits it")
     }
 
+    // MARK: - Empty-string passthrough (Some("") regressions — gotcha #243-style)
+
+    /// `preview` set to the empty string (NOT missing) wins over the message
+    /// fallback: the cascade is `preview ?? messages?.last?.text ?? ""`, and
+    /// `Some("")` is non-nil, so `??` doesn't fall through. Pinned because the
+    /// AGENTS.md "present-but-empty strings are a recurring bug class" gotcha
+    /// covers exactly this shape — a future "treat blank previews as missing"
+    /// refactor should surface as a deliberate change here, not silent drift.
+    func testExplicitEmptyPreviewWinsOverMessageFallback() throws {
+        let json = """
+        [
+          { "id": "x", "displayName": "Maya", "channel": "imessage",
+            "preview": "",
+            "messages": [
+              { "from": "me", "text": "hi", "time": "1:00 PM" }
+            ]
+          }
+        ]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.preview, "",
+            "Some(\"\") on the preview field is non-nil, so ?? does not fall through to the last message text")
+    }
+
+    /// `id` set to the empty string is structurally valid JSON (the schema
+    /// only requires the keys to exist, not be non-empty). The parser passes
+    /// it through verbatim — `MessageThread.id == ""` and `chatGUID == ""`.
+    /// Pinned because downstream code should be able to assume the export is
+    /// faithful to the JSON, not silently rewritten. If a future audit
+    /// decides empty IDs are nonsense and should throw `.malformedPayload`,
+    /// this test surfaces that as a deliberate change.
+    func testEmptyIdStringPassesThroughVerbatim() throws {
+        let json = #"[ { "id": "", "displayName": "Maya", "channel": "imessage", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.id, "")
+        XCTAssertEqual(exports[0].thread.chatGUID, "",
+            "chatGUID is mirrored from id, so an empty id produces an empty chatGUID — Some(\"\") again")
+    }
+
+    // MARK: - Whitespace handling
+
+    /// `from` is matched by `dto.from.lowercased() == "me"` — exact equality,
+    /// no trim. `" me "` and `"  me"` therefore both route to `.them`,
+    /// because the literal comparison fails. Pinned so a future change that
+    /// trims whitespace (well-meaning robustness) surfaces here rather than
+    /// quietly flipping the sender on every Shortcuts payload that has stray
+    /// whitespace from a user-authored shortcut.
+    func testFromFieldWithLeadingTrailingWhitespaceMapsToThem() throws {
+        // Use space-padded variants only — embedding literal control chars
+        // (tab, newline) in JSON strings would be invalid JSON, and the
+        // semantic we're pinning is "no trim happens", which spaces prove.
+        let json = """
+        [
+          { "id": "x", "displayName": "Maya", "channel": "imessage",
+            "messages": [
+              { "from": " me ",   "text": "spaces around" },
+              { "from": "  me",   "text": "leading spaces" },
+              { "from": "me  ",   "text": "trailing spaces" }
+            ]
+          }
+        ]
+        """
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].messages.count, 3)
+        for (i, m) in exports[0].messages.enumerated() {
+            XCTAssertEqual(m.from, .them,
+                "whitespace-padded `me` at index \(i) must NOT match the literal lowercased == \"me\" check; routing to .them is intentional, no trimming")
+        }
+    }
+
+    /// Channel value with surrounding whitespace fails the
+    /// `Channel(rawValue:)` lookup — `Channel.imessage` rawValue is
+    /// `"imessage"` exactly. The `?? .imessage` fallback then catches it,
+    /// so a whitespace-padded value still produces an iMessage thread.
+    /// Pinned because the user-visible behavior (whitespace tolerated) is
+    /// correct, but the *path* (rawValue miss → fallback) is fragile —
+    /// switching to `.trimmingCharacters(in: .whitespaces)` upstream would
+    /// make whitespace-padded "slack" produce a Slack thread instead, and
+    /// that's a change that should be visible in tests.
+    func testChannelValueWithSurroundingWhitespaceFallsBackToImessage() throws {
+        let json = #"[ { "id": "x", "displayName": "Maya", "channel": "  slack  ", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.channel, .imessage,
+            "current parser does NOT trim the channel string; `\"  slack  \"` misses the rawValue lookup and falls through to .imessage")
+    }
+
+    // MARK: - Multi-grapheme avatar
+
+    /// Avatar uses `String(displayName.prefix(1))`, which is grapheme-aware
+    /// — an emoji at the front is one `Character`, so the avatar is the
+    /// full emoji rather than half a surrogate pair. Pinned because a
+    /// well-meaning switch to `.unicodeScalars.prefix(1)` or to a byte-
+    /// based slice would break this for any non-BMP first character.
+    func testAvatarPreservesEmojiFirstGrapheme() throws {
+        let json = #"[ { "id": "x", "displayName": "🦊 Fox Friend", "channel": "imessage", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.avatar, "🦊",
+            "first Character of \"🦊 Fox Friend\" is the fox emoji; prefix(1) on String returns a one-Character substring, not a half-surrogate")
+    }
+
+    // MARK: - Duplicate query parameter
+
+    /// `URLComponents.queryItems.first(where: { $0.name == "data" })` returns
+    /// the FIRST `data` parameter when more than one is present. A user
+    /// mis-authoring a Shortcut to append `&data=…` twice will see the first
+    /// payload imported and the second silently dropped. Pinned to make
+    /// that semantic explicit — if a future change starts merging or
+    /// rejecting duplicates, the new behavior should be deliberate.
+    func testFirstDataQueryItemWinsWhenMultiplePresent() throws {
+        let firstPayload = #"[ { "id": "first", "displayName": "First", "channel": "imessage", "messages": [] } ]"#
+        let secondPayload = #"[ { "id": "second", "displayName": "Second", "channel": "imessage", "messages": [] } ]"#
+
+        var comps = URLComponents()
+        comps.scheme = "replyai"
+        comps.host = "import-messages"
+        comps.queryItems = [
+            URLQueryItem(name: "data", value: firstPayload),
+            URLQueryItem(name: "data", value: secondPayload),
+        ]
+        let url = try XCTUnwrap(comps.url)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.id, "first",
+            "queryItems.first(where:) returns the first matching item; the second `data=…` is dropped")
+    }
+
     // MARK: - Helpers
 
     private func makeURL(payload: String) throws -> URL {
