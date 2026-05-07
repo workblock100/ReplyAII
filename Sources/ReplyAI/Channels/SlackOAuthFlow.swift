@@ -96,7 +96,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         clientSecret: String,
         completion: @escaping (Result<Void, OAuthError>) -> Void
     ) {
-        let listener = listenerFactory(4242, 120)
+        let listener = listenerFactory(LocalhostOAuthListener.defaultPort, LocalhostOAuthListener.defaultTimeout)
 
         listener.start(
             completion: { [weak self] result in
