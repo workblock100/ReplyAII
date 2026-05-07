@@ -922,6 +922,88 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
                        "second snooze must overwrite the first — single mapping per thread, no stack")
     }
 
+    // MARK: - searchQuery filter (autopilot 2026-05-07)
+
+    /// Empty searchQuery must leave the visible thread list untouched —
+    /// the typing field shouldn't filter anything until characters arrive.
+    func testFilteredThreadsEmptySearchQueryIsPassThrough() {
+        let d = makeIsolatedDefaults(suffix: ".sq1")
+        let t1 = MessageThread(id: "sq-1", channel: .imessage, name: "Alice", avatar: "A", preview: "p1", time: "")
+        let t2 = MessageThread(id: "sq-2", channel: .slack,    name: "Bob",   avatar: "B", preview: "p2", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.searchQuery = ""
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sq-1", "sq-2"])
+    }
+
+    /// Whitespace-only searchQuery must be trimmed and treated as empty —
+    /// otherwise typing a single space would falsely narrow the results.
+    func testFilteredThreadsWhitespaceOnlySearchQueryIsTrimmed() {
+        let d = makeIsolatedDefaults(suffix: ".sq2")
+        let t1 = MessageThread(id: "sq-3", channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "sq-4", channel: .slack,    name: "Bob",   avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.searchQuery = "   \n  \t "
+        XCTAssertEqual(vm.filteredThreads.count, 2,
+                       "whitespace-only searchQuery must be trimmed and treated as empty (otherwise a single space would falsely narrow)")
+    }
+
+    /// searchQuery must match thread.name case-insensitively.
+    func testFilteredThreadsSearchByNameIsCaseInsensitive() {
+        let d = makeIsolatedDefaults(suffix: ".sq3")
+        let t1 = MessageThread(id: "sq-5", channel: .imessage, name: "Alice Park",  avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "sq-6", channel: .slack,    name: "Bob Carter",  avatar: "B", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.searchQuery = "alice"
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sq-5"],
+                       "lowercase 'alice' must match 'Alice Park' via localizedCaseInsensitiveContains")
+    }
+
+    /// searchQuery must also match thread.preview text — useful for finding
+    /// a thread by what was last said in it.
+    func testFilteredThreadsSearchByPreviewIsCaseInsensitive() {
+        let d = makeIsolatedDefaults(suffix: ".sq4")
+        let t1 = MessageThread(id: "sq-7", channel: .imessage, name: "Alice", avatar: "A", preview: "Pizza tonight?", time: "")
+        let t2 = MessageThread(id: "sq-8", channel: .slack,    name: "Bob",   avatar: "B", preview: "Standup at 10", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.searchQuery = "PIZZA"
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sq-7"],
+                       "uppercase 'PIZZA' must match 'Pizza tonight?' via localizedCaseInsensitiveContains")
+    }
+
+    /// Search must compose with the archive filter — archived threads
+    /// stay hidden even if their name matches the query.
+    func testFilteredThreadsSearchHidesArchivedMatches() {
+        let d = makeIsolatedDefaults(suffix: ".sq5")
+        let t1 = MessageThread(id: "sq-9",  channel: .imessage, name: "Alice", avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "sq-10", channel: .imessage, name: "Alice the Second", avatar: "A", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.archive("sq-9")
+        vm.searchQuery = "alice"
+
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sq-10"],
+                       "archived threads must stay hidden even when their name matches the search query")
+    }
+
+    /// Search composes with the channel filter too — query narrows within
+    /// the active channel only.
+    func testFilteredThreadsSearchComposesWithChannelFilter() {
+        let d = makeIsolatedDefaults(suffix: ".sq6")
+        let t1 = MessageThread(id: "sq-11", channel: .imessage, name: "Alice iMsg",  avatar: "A", preview: "", time: "")
+        let t2 = MessageThread(id: "sq-12", channel: .slack,    name: "Alice Slack", avatar: "A", preview: "", time: "")
+        let vm = InboxViewModel(threads: [t1, t2], contacts: fastContacts(), defaults: d)
+
+        vm.filterByChannel(.imessage)
+        vm.searchQuery = "alice"
+
+        XCTAssertEqual(vm.filteredThreads.map(\.id), ["sq-11"],
+                       "search must respect the active channel filter — Slack 'Alice Slack' must NOT appear when channel filter is .imessage")
+    }
+
     /// Unsnoozing a thread that was never snoozed must be a no-op (the
     /// keyboard shortcut may fire defensively without checking state
     /// first).
