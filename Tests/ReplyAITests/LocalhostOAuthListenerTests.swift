@@ -410,6 +410,27 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             "duplicate `code` params must resolve to the first occurrence; a switch to `last` would silently change which auth code we exchange")
     }
 
+    // MARK: - Production default port + timeout pins
+
+    /// Production port is `4242`. The Slack OAuth flow embeds
+    /// `redirect_uri=http://localhost:4242/callback` in both the
+    /// authorize URL and the token-exchange POST body; Slack rejects
+    /// the exchange if those don't match the registered app's redirect.
+    /// A drift here while the registered app stays on `:4242` would
+    /// break Slack auth flow for every existing install.
+    func testDefaultPortIs4242() {
+        XCTAssertEqual(LocalhostOAuthListener.defaultPort, 4242,
+                       "loopback port is part of the OAuth redirect_uri contract — see test rationale")
+    }
+
+    /// Production timeout is `120` seconds. Drop too low and slow-network
+    /// or 2FA-prompted users hit `.timeout` mid-flow; raise too high and
+    /// a stale listener squats the port across retries.
+    func testDefaultTimeoutIs120Seconds() {
+        XCTAssertEqual(LocalhostOAuthListener.defaultTimeout, 120,
+                       "OAuth wait budget — see test rationale")
+    }
+
     // MARK: - testOkResponseTemplateIsExactLiteral
 
     /// Pins the exact HTTP/1.1 ack we send back to the browser tab after

@@ -13,6 +13,21 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     /// Content-Length must match the body byte count: "OK" = 2.
     static let okResponseTemplate = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
 
+    /// Production default loopback port. The Slack OAuth flow embeds
+    /// `redirect_uri=http://localhost:4242/callback` in both the authorize
+    /// URL and the token-exchange POST body — those URIs MUST match exactly
+    /// or Slack rejects the exchange. Hoisted to a constant so the port
+    /// here, the redirect URI in `SlackOAuthFlow`, and the test harness all
+    /// stay coupled to the same number.
+    static let defaultPort: UInt16 = 4242
+
+    /// Production default timeout in seconds. 120s is enough for a user to
+    /// notice the browser tab, click the workspace, sign in if needed, and
+    /// approve. Drop too low and slow-network or 2FA-prompted users hit
+    /// `.timeout` mid-flow; raise too high and a stale listener squats the
+    /// port across retries.
+    static let defaultTimeout: TimeInterval = 120
+
     private let preferredPort: UInt16
     private let timeout: TimeInterval
 
@@ -28,7 +43,8 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     private var completionHandler: ((Result<String, OAuthError>) -> Void)?
     private var readyHandler: (() -> Void)?
 
-    init(port: UInt16 = 4242, timeout: TimeInterval = 120) {
+    init(port: UInt16 = LocalhostOAuthListener.defaultPort,
+         timeout: TimeInterval = LocalhostOAuthListener.defaultTimeout) {
         self.preferredPort = port
         self.timeout = timeout
     }
