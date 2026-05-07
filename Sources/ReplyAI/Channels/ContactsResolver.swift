@@ -29,6 +29,12 @@ protocol ContactsStoring: Sendable {
 /// actor-isolated. CNContactStore reads are safe from any thread; we
 /// wrap the mutable state in a `Locked<ResolverState>`.
 final class ContactsResolver: @unchecked Sendable {
+    /// TCC authorization state for the Contacts framework. Tracked
+    /// separately from the system's `CNAuthorizationStatus` so tests can
+    /// override it via `overrideAccessForTesting(.granted)` without
+    /// touching the real Contacts daemon. `.unknown` means the resolver
+    /// hasn't yet asked the system; `.denied` is sticky until the user
+    /// grants permission in System Settings and re-launches the app.
     enum Access: Sendable {
         case unknown
         case granted

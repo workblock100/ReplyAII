@@ -42,6 +42,10 @@ final class DraftEngine {
     /// warming them into memory). Cleared when a real token arrives.
     var modelLoadStatus: ModelLoadStatus?
 
+    /// Snapshot of LLM weight-load progress for the `ModelLoadBanner`.
+    /// `Sendable` because MLX's progress callbacks fire off the main
+    /// actor and hop back here to update the banner — without `Sendable`
+    /// the compiler rejects the cross-actor send.
     struct ModelLoadStatus: Equatable, Sendable {
         var fraction: Double  // 0.0 – 1.0
         var message: String
