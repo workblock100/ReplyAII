@@ -595,4 +595,37 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertTrue(src.contains("\"iMessage;-;+15551234567\""),
             "messagesForChat script must embed the GUID inside double quotes — got: \(src)")
     }
+
+    /// `AppleScriptMessageReader.minimumMessageLimit` is the floor used by
+    /// `messagesForChat(chatGUID:limit:)` to clamp a caller-supplied non-positive
+    /// `limit`. Drift below 1 produces `startIdx = msgCount - 0 + 1 = msgCount + 1`,
+    /// returning zero rows on a healthy chat (silently empty composer);
+    /// drift to a large value (e.g. 100) caps every legitimate small-limit
+    /// query at that floor and over-fetches when the caller is trying to
+    /// preview just a few rows. Pin the value so a quiet "let's avoid empty
+    /// returns by raising the floor" lands in code review.
+    func testMessagesForChatMinimumLimitIsOne() {
+        XCTAssertEqual(AppleScriptMessageReader.minimumMessageLimit, 1,
+            "minimumMessageLimit drift either silences zero-limit callers (too low → degenerate AppleScript) or over-fetches small-limit callers (too high → wastes the AppleScript runtime budget)")
+    }
+
+    /// The `clampedLimit` calculation inside `messagesForChat` routes
+    /// through `Self.minimumMessageLimit`. This pin proves that a 0
+    /// caller-supplied limit lands on the constant — drift means the
+    /// constant became dead code while the inline clamp froze a stale
+    /// literal. Verify by inspecting the embedded `\(clampedLimit)` value
+    /// in the emitted AppleScript source.
+    func testMessagesForChatClampsZeroLimitToMinimumMessageLimit() throws {
+        final class Captured: @unchecked Sendable { var source: String = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 0)
+        XCTAssertTrue(
+            captured.source.contains("set startIdx to msgCount - \(AppleScriptMessageReader.minimumMessageLimit) + 1"),
+            "clamp must route through Self.minimumMessageLimit; got: \(captured.source)"
+        )
+    }
 }

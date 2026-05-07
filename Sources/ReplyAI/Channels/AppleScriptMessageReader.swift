@@ -4,6 +4,15 @@ import Foundation
 /// Requires macOS Automation permission (not FDA). Used as fallback when
 /// chat.db is inaccessible due to Full Disk Access denial.
 struct AppleScriptMessageReader: Sendable {
+    /// Smallest useful `limit` arg to `messagesForChat(chatGUID:limit:)`. A
+    /// caller passing 0 produces a degenerate AppleScript `startIdx = msgCount + 1`
+    /// (zero rows on a healthy chat); a negative value produces `startIdx > msgCount`
+    /// which the script then clamps to 1, silently returning the entire chat
+    /// history — the opposite of what the caller intended. We clamp the
+    /// caller-supplied limit up to 1 instead. Pinned by
+    /// `AppleScriptMessageReaderTests.testMessagesForChatMinimumLimitIsOne`.
+    static let minimumMessageLimit: Int = 1
+
     /// Executes an AppleScript source string and returns the result as text.
     /// Injectable so tests can verify the script string and return mock data
     /// without touching Messages.app.
@@ -87,7 +96,7 @@ struct AppleScriptMessageReader: Sendable {
         // Clamp limit to a sane positive value. Zero or negative would
         // produce a degenerate `startIdx` calculation in AppleScript and
         // return the whole history (or error). One is the smallest useful.
-        let clampedLimit = max(1, limit)
+        let clampedLimit = max(Self.minimumMessageLimit, limit)
 
         let script = """
         tell application "Messages"
