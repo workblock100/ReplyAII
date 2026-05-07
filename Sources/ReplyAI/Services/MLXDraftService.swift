@@ -19,6 +19,14 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
     /// a silent storage hit during the next OTA update.
     static let defaultModelID = "mlx-community/Llama-3.2-3B-Instruct-4bit"
 
+    /// Confidence value yielded as the first `DraftChunk` for every MLX
+    /// draft. The composer routes drafts with confidence < `lowConfidenceThreshold`
+    /// through the `cmp-lowconf` screen, so dropping this below that threshold
+    /// silently flips the UX into "we're not sure" mode for every MLX-generated
+    /// draft; drift to 1.0 would hide any future real low-confidence signal.
+    /// Pinned by `MLXDraftServiceTests.testDefaultDraftConfidenceIsZeroPointEightFive`.
+    static let defaultDraftConfidence: Double = 0.85
+
     /// Package-internal so tests can pin the production default after a
     /// no-arg init (see `MLXDraftServiceTests.testDefaultModelIDIsLlama32_3BInstruct4bit`).
     let modelID: String
@@ -38,7 +46,7 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
         AsyncThrowingStream { continuation in
             let task = Task { [self] in
                 do {
-                    continuation.yield(DraftChunk(kind: .confidence(0.85)))
+                    continuation.yield(DraftChunk(kind: .confidence(MLXDraftService.defaultDraftConfidence)))
 
                     // If we don't already have a container, announce the
                     // load immediately so the UI shows "preparing…" rather

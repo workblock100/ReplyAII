@@ -37,4 +37,19 @@ final class MLXDraftServiceTests: XCTestCase {
         XCTAssertEqual(svc.modelID, "test-org/test-model-7b",
                        "init(modelID:) must store the passed-in value verbatim — drift here breaks every migration / forced-model test")
     }
+
+    /// Every MLX draft yields its first chunk as `.confidence(defaultDraftConfidence)`
+    /// before any model tokens stream. The composer routes drafts below the
+    /// low-confidence threshold to the `cmp-lowconf` screen instead of the
+    /// normal three-tone composer. 0.85 sits comfortably above the cutoff, so
+    /// today every MLX draft renders as a normal draft — but a refactor that
+    /// dropped this to e.g. 0.4 (because someone read "MLX is uncertain by
+    /// default") would silently flip every MLX-generated draft into the
+    /// low-confidence UX, and drift to 1.0 would hide any future real
+    /// low-confidence signal once we wire one. Pin the literal so either
+    /// drift surfaces in code review.
+    func testDefaultDraftConfidenceIsZeroPointEightFive() {
+        XCTAssertEqual(MLXDraftService.defaultDraftConfidence, 0.85, accuracy: 1e-9,
+                       "MLXDraftService.defaultDraftConfidence drift either flips MLX drafts into the low-confidence composer (too low) or hides future real low-confidence signal (too high)")
+    }
 }
