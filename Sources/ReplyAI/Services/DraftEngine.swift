@@ -23,17 +23,26 @@ final class DraftEngine {
     /// `isStreaming` is true (token-by-token append), flips to the "Send"
     /// affordance once `isDone` is true, and surfaces `error` inline rather
     /// than via a toast so the user can retry without losing their place.
-    /// `confidence` drives the bottom-of-composer indicator; below 0.4 the
-    /// view shows a low-confidence warning (`isLowConfidence`) so the user
-    /// double-checks before sending.
+    /// `confidence` drives the bottom-of-composer indicator; below
+    /// `DraftState.lowConfidenceThreshold` the view shows a low-confidence
+    /// warning (`isLowConfidence`) so the user double-checks before sending.
     struct DraftState: Equatable {
+        /// Strict less-than cutoff used by `isLowConfidence`. Drift up
+        /// silently routes more drafts through the `cmp-lowconf` composer
+        /// (e.g. raising to 0.9 would low-confidence every MLX draft, which
+        /// yields `MLXDraftService.defaultDraftConfidence = 0.85`); drift
+        /// down hides genuinely uncertain drafts behind the normal
+        /// three-tone UX. Pinned by
+        /// `DraftEngineTests.testLowConfidenceThresholdLiteralIsZeroPointFour`.
+        static let lowConfidenceThreshold: Double = 0.4
+
         var text: String = ""
         var confidence: Double = 1.0
         var isStreaming: Bool = false
         var isDone: Bool = false
         var error: String?
 
-        var isLowConfidence: Bool { confidence < 0.4 }
+        var isLowConfidence: Bool { confidence < Self.lowConfidenceThreshold }
     }
 
     private(set) var drafts: [Key: DraftState] = [:]

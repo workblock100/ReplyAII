@@ -958,6 +958,26 @@ final class DraftEngineTests: XCTestCase {
             "default confidence (1.0) must not be low — would render warning before any chunk arrives")
     }
 
+    /// Pin the literal value of `DraftState.lowConfidenceThreshold`.
+    /// The behavioral tests above lock the boundary via 0.39/0.4/0.85
+    /// confidence inputs, but a refactor that moved the literal cutoff
+    /// from `isLowConfidence` into the constant could silently change the
+    /// constant's value without those tests noticing (they'd just shift
+    /// boundary-by-input). This test asserts the constant directly.
+    /// Drift up routes more MLX drafts through the cmp-lowconf composer
+    /// (`MLXDraftService.defaultDraftConfidence = 0.85` would route low
+    /// at any threshold ≥ 0.86); drift down hides genuinely uncertain
+    /// drafts behind the normal three-tone UX. The constant must stay
+    /// strictly less than MLX's confidence default so today's MLX path
+    /// continues to render in the high-confidence composer.
+    func testLowConfidenceThresholdLiteralIsZeroPointFour() {
+        XCTAssertEqual(DraftEngine.DraftState.lowConfidenceThreshold, 0.4, accuracy: 1e-9,
+            "DraftState.lowConfidenceThreshold drift either over-warns (too high) or hides uncertain drafts (too low)")
+        XCTAssertLessThan(DraftEngine.DraftState.lowConfidenceThreshold,
+                          MLXDraftService.defaultDraftConfidence,
+            "lowConfidenceThreshold must stay strictly less than MLXDraftService.defaultDraftConfidence — otherwise every MLX draft routes through cmp-lowconf")
+    }
+
 }
 
 // MARK: - Test-only mock LLM services (REP-038)
