@@ -17,6 +17,15 @@ enum UNNotificationContentParser {
     /// Sender resolution order: `userInfo["CKSenderID"]` → `userInfo["sender"]` → `content.title`.
     /// Returns nil when none of those produce a non-empty string.
     /// `chatGUID` is populated from `userInfo["CKChatIdentifier"]` or `userInfo["CKChatGUID"]`.
+    ///
+    /// **Divergence with `NotificationCoordinator.willPresent`**: this parser
+    /// keeps an empty-string `CKChatIdentifier` verbatim (no fallback to
+    /// `CKChatGUID`), pinned by `testEmptyCKChatIdentifierIsNotFalledBack`.
+    /// The inline logic in `NotificationCoordinator.userNotificationCenter(_:willPresent:)`
+    /// instead filters present-but-empty values to nil and falls through.
+    /// If this parser ever replaces the inline path, harmonize the empty
+    /// handling first — the pinned test will fail and force a deliberate
+    /// decision rather than a silent behavior change.
     static func parse(_ content: UNNotificationContent) -> ParsedMessageNotification? {
         let senderHandle: String
         if let ckSender = content.userInfo["CKSenderID"] as? String, !ckSender.isEmpty {
