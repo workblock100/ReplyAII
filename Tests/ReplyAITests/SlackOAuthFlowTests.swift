@@ -491,6 +491,32 @@ final class SlackOAuthFlowTests: XCTestCase {
         )
     }
 
+    /// The token-exchange POST URL must be exactly
+    /// `https://slack.com/api/oauth.v2.access`. Existing siblings only
+    /// substring-check `oauth.v2.access`, so a refactor that "modernized"
+    /// the host to `https://api.slack.com/oauth.v2.access` (or added a
+    /// `/v2/` prefix, etc.) would slip past — and Slack's API surface
+    /// answers different things at different hosts. Pin the exact URL.
+    func testTokenExchangeURLIsExactSlackAPIEndpoint() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        XCTAssertEqual(
+            MockURLProtocol.capturedRequests.first?.url?.absoluteString,
+            "https://slack.com/api/oauth.v2.access",
+            "token-exchange URL is part of the OAuth contract — see test rationale"
+        )
+    }
+
     /// Token-exchange body includes the redirect_uri so Slack can validate it
     /// against the registered app's redirect (must match exactly).
     func testTokenExchangeBodyIncludesRedirectURI() {
