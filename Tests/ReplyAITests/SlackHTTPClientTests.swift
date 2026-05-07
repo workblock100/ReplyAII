@@ -527,4 +527,35 @@ final class SlackHTTPClientTests: XCTestCase {
             "Content-Type must include charset=utf-8 — Slack rejects bare application/json on some endpoints"
         )
     }
+
+    // MARK: - apiBase exact-string pin
+    //
+    // The private `URLSessionSlackClient.apiBase = "https://slack.com/api/"`
+    // is the load-bearing constant for every Slack request. It's currently
+    // checked piecewise (scheme/host/path) but never as the full literal
+    // prefix. A subtle drift — say, dropping the trailing slash so the
+    // first endpoint character collides with `api`, or swapping in
+    // `slack.com/api/v2/` to "support a future API version" — would land
+    // every request at the wrong path. Pin the full noQuery URL string
+    // for both verbs.
+
+    func testGetURLAbsoluteStringMatchesSlackApiPrefix() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+        _ = try await client.get(endpoint: "auth.test", token: "tok", params: [:])
+
+        let url = session.capturedRequest?.url?.absoluteString ?? ""
+        XCTAssertEqual(url, "https://slack.com/api/auth.test",
+            "GET URL with no params must equal the apiBase + endpoint exactly — drift in the prefix lands every request at the wrong path")
+    }
+
+    func testPostURLAbsoluteStringMatchesSlackApiPrefix() async throws {
+        let session = MockHTTPSession(statusCode: 200, body: Data("{}".utf8))
+        let client = URLSessionSlackClient(session: session)
+        _ = try await client.post(endpoint: "chat.postMessage", token: "tok", json: [:])
+
+        let url = session.capturedRequest?.url?.absoluteString ?? ""
+        XCTAssertEqual(url, "https://slack.com/api/chat.postMessage",
+            "POST URL must equal the apiBase + endpoint exactly — drift here would surface as 404 errors in production only")
+    }
 }
