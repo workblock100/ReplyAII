@@ -113,7 +113,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                ~1450 tests as of 2026-05-07 (1425 pass under the autopilot's three-skip workaround; the other ~40 live in ContactsResolverTests + InboxViewModelIsSyncingTests + InboxViewModelTests, see gotcha #243). Plus 2 always-skipped in headless: `GlobalHotkeyContractTests` AppKit-touching cases gated behind `RUN_APPKIT_TOUCHING_TESTS=1`; opt-in to exercise locally.
+Tests/ReplyAITests/                ~1460 tests as of 2026-05-07 (1434 pass under the autopilot's three-skip workaround; the other ~40 live in ContactsResolverTests + InboxViewModelIsSyncingTests + InboxViewModelTests, see gotcha #243). Plus 2 always-skipped in headless: `GlobalHotkeyContractTests` AppKit-touching cases gated behind `RUN_APPKIT_TOUCHING_TESTS=1`; opt-in to exercise locally.
 ```
 
 ## Architecture patterns
