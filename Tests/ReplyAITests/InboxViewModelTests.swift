@@ -2504,3 +2504,88 @@ final class InboxViewModelCycleToneTests: XCTestCase {
             "Tone has 3 cases; cycling 3 times must return to the starting point. If this fails, Tone.allCases changed size and the keyboard shortcut needs re-validation against the new cycle.")
     }
 }
+
+// MARK: - InboxViewModel.effectiveDraft / setEdit / clearEdit
+
+/// `effectiveDraft` is what the composer reads to decide what to render
+/// in the textbox — user-edit wins over the model-generated fallback.
+/// `setEdit` / `clearEdit` are the only two write paths into that
+/// per-(threadID, tone) bucket. The functions are tiny but the
+/// (threadID, tone) keying is load-bearing — pin it so a refactor that
+/// keys by threadID alone (or accidentally drops the tone-distinction)
+/// can't silently leak one tone's edit into another.
+
+@MainActor
+final class InboxViewModelEffectiveDraftTests: XCTestCase {
+
+    private func freshVM() -> InboxViewModel {
+        let suite = "test.ReplyAI.effectiveDraft.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        return InboxViewModel(
+            imessage: BlockingMockChannel(),
+            contacts: fastContacts(),
+            defaults: d)
+    }
+
+    func testEffectiveDraftReturnsFallbackWhenNoEditSet() {
+        let vm = freshVM()
+        let result = vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: "model said hi")
+        XCTAssertEqual(result, "model said hi",
+            "no edit → composer must show the model-generated fallback verbatim")
+    }
+
+    func testSetEditOverridesFallback() {
+        let vm = freshVM()
+        vm.setEdit(threadID: "t1", tone: .warm, text: "user typed this")
+        let result = vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: "ignored fallback")
+        XCTAssertEqual(result, "user typed this",
+            "user edit wins over fallback — that's the whole point of `effectiveDraft`")
+    }
+
+    func testClearEditRestoresFallback() {
+        let vm = freshVM()
+        vm.setEdit(threadID: "t1", tone: .warm, text: "user typed this")
+        vm.clearEdit(threadID: "t1", tone: .warm)
+        let result = vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: "back to fallback")
+        XCTAssertEqual(result, "back to fallback",
+            "after clearEdit, the bucket is empty again and fallback wins")
+    }
+
+    func testEditsAreScopedPerTone() {
+        // Critical contract: the same threadID with different tones must
+        // address different buckets. ⌘/ flips the tone; without per-tone
+        // keying, the new tone's composer would inherit the prior tone's
+        // typed text.
+        let vm = freshVM()
+        vm.setEdit(threadID: "t1", tone: .warm, text: "warm version")
+        let direct = vm.effectiveDraft(threadID: "t1", tone: .direct, fallback: "fb")
+        XCTAssertEqual(direct, "fb",
+            "different tone → different bucket; warm's edit must NOT bleed into direct")
+        let warm = vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: "fb")
+        XCTAssertEqual(warm, "warm version",
+            "warm's edit is still there — only the read for direct returns fallback")
+    }
+
+    func testEditsAreScopedPerThread() {
+        // Critical contract: same tone with different threads must address
+        // different buckets. Switching threads via the sidebar without this
+        // would inherit the prior thread's typed draft.
+        let vm = freshVM()
+        vm.setEdit(threadID: "t1", tone: .warm, text: "thread1 draft")
+        let t2 = vm.effectiveDraft(threadID: "t2", tone: .warm, fallback: "fb")
+        XCTAssertEqual(t2, "fb",
+            "different thread → different bucket; t1's edit must NOT bleed into t2")
+    }
+
+    func testClearEditOnUnsetKeyIsNoOp() {
+        // Defensive: the composer's drag-to-discard gesture calls clearEdit
+        // unconditionally. Calling it when no edit was ever set must not
+        // crash or reset some other state.
+        let vm = freshVM()
+        vm.setEdit(threadID: "t1", tone: .warm, text: "kept")
+        vm.clearEdit(threadID: "t2", tone: .warm)   // unrelated key
+        let kept = vm.effectiveDraft(threadID: "t1", tone: .warm, fallback: "fb")
+        XCTAssertEqual(kept, "kept",
+            "clearEdit on an unrelated (threadID, tone) must not affect the existing edit")
+    }
+}
