@@ -1651,6 +1651,18 @@ final class IMessageChannelFormatRelativeTests: XCTestCase {
                        "non-zero appleDate must produce a non-empty label, got: '\(yearAgo)'")
     }
 
+    /// Negative appleDate is non-zero and should pass the sentinel guard,
+    /// then fall through to the "MMM d" branch (it's a pre-2001 date).
+    /// Pinned because chat.db rarely produces negative timestamps but a
+    /// corrupted or migrated row could; the format must still be non-empty
+    /// rather than degrading to the empty-string sentinel that means "no
+    /// message at all".
+    func testFormatRelativeNegativeAppleDateFormatsAsHistoricalDate() {
+        let label = IMessageChannel.formatRelative(appleDate: -100)
+        XCTAssertFalse(label.isEmpty,
+            "negative appleDate must format as a historical date, not the empty sentinel")
+    }
+
     /// A timestamp from ~25 hours ago must land in the "Yesterday" bucket.
     /// "Yesterday" is the only bucket whose output is locale-stable enough
     /// to pin verbatim; today/this-week buckets would produce
