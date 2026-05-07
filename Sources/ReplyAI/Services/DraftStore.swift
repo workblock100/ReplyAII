@@ -33,19 +33,30 @@ final class DraftStore: Sendable {
 
     /// Persist draft text for a thread. The file name is derived from the
     /// thread ID so re-writes are idempotent.
+    /// No-ops on an empty threadID — `fileURL(for: "")` would otherwise
+    /// produce `.md` (a hidden filename), and both `listStoredDraftIDs`
+    /// and `pruneStale` skip hidden files. The result would be a draft
+    /// silently written to disk that no API can ever read back or prune.
+    /// Caller error; refuse rather than corrupt on-disk state.
     func write(threadID: String, text: String) {
+        guard !threadID.isEmpty else { return }
         let url = fileURL(for: threadID)
         try? text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// Return the persisted draft text for a thread, or nil if none exists.
+    /// Symmetric with `write` — nil on empty threadID rather than reading
+    /// the hidden `.md` slot.
     func read(threadID: String) -> String? {
+        guard !threadID.isEmpty else { return nil }
         let url = fileURL(for: threadID)
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
     /// Remove the persisted draft for a thread (e.g. after send or archive).
+    /// Symmetric with `write` — no-op on empty threadID.
     func delete(threadID: String) {
+        guard !threadID.isEmpty else { return }
         try? FileManager.default.removeItem(at: fileURL(for: threadID))
     }
 

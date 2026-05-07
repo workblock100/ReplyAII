@@ -204,6 +204,27 @@ final class DraftStoreTests: XCTestCase {
             "empty draft still occupies a slot — listing must include it")
     }
 
+    /// Empty threadID is refused on every API. Without the guards,
+    /// `fileURL(for: "")` resolves to a `.md` (hidden) file:
+    ///   - `write("", "x")` would silently write to disk
+    ///   - `read("")` would return that text
+    ///   - `listStoredDraftIDs()` would NOT see it (skipsHiddenFiles)
+    ///   - `pruneStale()` would NEVER prune it (also skipsHiddenFiles)
+    /// Net effect: orphan drafts that accumulate forever, invisible to
+    /// every observability surface. Refuse the operation outright.
+    func testEmptyThreadIDIsRefusedOnEveryAPI() {
+        let store = DraftStore(draftsDirectory: tmpDir)
+
+        store.write(threadID: "", text: "would-be-orphan")
+        XCTAssertNil(store.read(threadID: ""),
+            "empty threadID write must be a no-op, so read still returns nil")
+        XCTAssertFalse(store.listStoredDraftIDs().contains(""),
+            "empty threadID must never appear in listStoredDraftIDs (would-be hidden file is unreadable anyway)")
+
+        // delete on empty must also be a no-op — symmetric with write
+        store.delete(threadID: "")  // must not throw / log
+    }
+
     /// `delete()` on a thread that never had a persisted draft must be a
     /// silent no-op. The inbox calls delete after every send/archive
     /// without checking presence first; throwing or printing here would
