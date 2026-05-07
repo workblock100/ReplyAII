@@ -883,6 +883,26 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(SlackChannel.minAPILimit, 1,
             "limit < 1 is undefined Slack-side; the clamp lower bound must stay at 1")
     }
+
+    /// `SlackChannel.Endpoint.*` are the three Slack Web API endpoint names
+    /// embedded into recentThreads/messages/send. Drift at any one site
+    /// (e.g. typoing `conversations.history` to `conversation.history`)
+    /// quietly routes that operation to a wrong endpoint that returns
+    /// `unknown_method` from Slack while the other two continue to work —
+    /// a partial regression that's hard to spot in code review unless
+    /// every endpoint name is pinned independently. Existing behavioral
+    /// tests check `lastGetEndpoint`/`lastPostEndpoint` against literal
+    /// strings; this pin locks the constant values themselves so a
+    /// refactor that moves the literal into the enum can't silently
+    /// change the value.
+    func testEndpointNameLiteralsAreFrozen() {
+        XCTAssertEqual(SlackChannel.Endpoint.conversationsList, "conversations.list",
+            "Endpoint.conversationsList drift breaks recentThreads (Slack returns `unknown_method`) while messages and send still work")
+        XCTAssertEqual(SlackChannel.Endpoint.conversationsHistory, "conversations.history",
+            "Endpoint.conversationsHistory drift breaks messages(forThreadID:) — the inbox reads empty for every newly opened thread without surfacing an error")
+        XCTAssertEqual(SlackChannel.Endpoint.chatPostMessage, "chat.postMessage",
+            "Endpoint.chatPostMessage drift breaks send(text:toThreadID:) — every Slack send fails silently with `ok=false, error=unknown_method`")
+    }
 }
 
 // MARK: - Test doubles

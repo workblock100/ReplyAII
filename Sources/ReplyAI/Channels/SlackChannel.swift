@@ -36,6 +36,19 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     /// produce undefined behavior server-side.
     static let minAPILimit: Int = 1
 
+    /// Slack Web API endpoint names embedded into `URLSessionSlackClient.get`/`.post`.
+    /// Hoisted so the three call sites (recentThreads, messages, send) reference
+    /// a single source of truth — drift at any one site quietly routes that
+    /// operation to a wrong endpoint that returns `unknown_method` from Slack
+    /// while the other two continue to work, a partial regression that's hard
+    /// to spot in code review. Pinned by
+    /// `SlackChannelTests.testEndpointNameLiteralsAreFrozen`.
+    enum Endpoint {
+        static let conversationsList    = "conversations.list"
+        static let conversationsHistory = "conversations.history"
+        static let chatPostMessage      = "chat.postMessage"
+    }
+
     private let tokenStore: SlackTokenStore
     private let http: SlackHTTPClient
     private let oauthFlowFactory: SlackOAuthFlowFactory
@@ -73,7 +86,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             throw ChannelError.authorizationDenied
         }
         let data = try await http.get(
-            endpoint: "conversations.list",
+            endpoint: Endpoint.conversationsList,
             token: creds.token,
             params: [
                 "limit": String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
@@ -92,7 +105,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             throw ChannelError.authorizationDenied
         }
         let data = try await http.get(
-            endpoint: "conversations.history",
+            endpoint: Endpoint.conversationsHistory,
             token: creds.token,
             params: [
                 "channel": id,
@@ -110,7 +123,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             throw ChannelError.authorizationDenied
         }
         let data = try await http.post(
-            endpoint: "chat.postMessage",
+            endpoint: Endpoint.chatPostMessage,
             token: creds.token,
             json: [
                 "channel": id,
