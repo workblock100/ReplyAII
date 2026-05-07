@@ -68,6 +68,19 @@ final class StatsTests: XCTestCase {
             "the aggregate counter is untouched by per-channel non-positive calls")
     }
 
+    /// Companion behavior pin: `recordRuleFired` tracks an empty action
+    /// string verbatim as a key (per the docstring's "unknown strings are
+    /// tracked verbatim — a typo shows up in the stats rather than silently
+    /// disappearing"). Pinned because empty action would mean a degenerate
+    /// caller passed `""` for the discriminator — the verbatim policy makes
+    /// that visible in the rulesFiredByAction map rather than dropping it.
+    func testRecordRuleFiredAcceptsEmptyActionVerbatim() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleFired(action: "")
+        XCTAssertEqual(stats.snapshot().rulesFiredByAction[""], 1,
+            "empty action string is tracked verbatim per the verbatim-discriminator policy")
+    }
+
     /// Parallel guard pin for `recordRuleLoadSkips` — also no-ops on
     /// `count <= 0`. Pinned because rules.json load is one of the few
     /// paths that calls this counter, and a guard regression would
