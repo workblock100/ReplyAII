@@ -140,11 +140,11 @@ final class InboxViewModelRuleObservationTests: XCTestCase {
     /// the "thread starts unpinned" precondition. Clear before each test.
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.pinnedKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.pinnedKey)
         super.tearDown()
     }
 
@@ -3006,7 +3006,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     func testArchivedThreadIDsLoadFromLiteralKey() throws {
         let d = isolatedDefaults()
         let payload = try JSONEncoder().encode(["t-archived-1", "t-archived-2"].sorted())
-        d.set(payload, forKey: "pref.inbox.archivedThreadIDs")
+        d.set(payload, forKey: InboxViewModel.archivedKey)
 
         let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
 
@@ -3018,7 +3018,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     func testSilentlyIgnoredThreadIDsLoadFromLiteralKey() throws {
         let d = isolatedDefaults()
         let payload = try JSONEncoder().encode(["t-silenced-1"])
-        d.set(payload, forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        d.set(payload, forKey: InboxViewModel.silentlyIgnoredKey)
 
         let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
 
@@ -3030,7 +3030,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     func testPinnedThreadIDsLoadFromLiteralKey() throws {
         let d = isolatedDefaults()
         let payload = try JSONEncoder().encode(["t-pinned-1", "t-pinned-2"])
-        d.set(payload, forKey: "pref.inbox.pinnedThreadIDs")
+        d.set(payload, forKey: InboxViewModel.pinnedKey)
 
         let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
 
@@ -3043,7 +3043,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
         let d = isolatedDefaults()
         let wake = Date(timeIntervalSince1970: 1_900_000_000)
         let payload = try JSONEncoder().encode(["t-snoozed": wake])
-        d.set(payload, forKey: "pref.inbox.snoozedUntil")
+        d.set(payload, forKey: InboxViewModel.snoozedUntilKey)
 
         let vm = InboxViewModel(threads: [], contacts: makeContacts(), defaults: d)
 
