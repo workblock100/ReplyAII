@@ -132,4 +132,17 @@ final class GlobalHotkeyContractTests: XCTestCase {
         XCTAssertFalse(fallbackFired,
             "fast path must match the window titled `Inbox` and skip the fallback — drift in either side breaks ⌘⇧R surfacing")
     }
+
+    /// Pin the GlobalHotkey NSLog prefix used at three sites
+    /// (RegisterEventHotKey-failed, InstallEventHandler-failed,
+    /// successful-register confirmation). Drift between any two sites
+    /// would have one filterable by `[ReplyAI] GlobalHotkey:` while
+    /// another is invisible to that grep.
+    func testLogPrefixIsFrozen() {
+        XCTAssertEqual(GlobalHotkey.logPrefix, "[ReplyAI] GlobalHotkey: ")
+        XCTAssertTrue(GlobalHotkey.logPrefix.hasPrefix("[ReplyAI]"),
+            "log prefix must start with `[ReplyAI]` so process-wide log filtering catches it")
+        XCTAssertTrue(GlobalHotkey.logPrefix.hasSuffix(": "),
+            "log prefix must end with `: ` so subsequent message text reads naturally without an extra separator")
+    }
 }

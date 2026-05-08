@@ -18,6 +18,17 @@ final class GlobalHotkey: @unchecked Sendable {
     private static let signature: OSType = 0x52504C59 // 'RPLY'
     private static let hotkeyID: UInt32 = 1
 
+    /// Common prefix for every GlobalHotkey NSLog line. Visible in
+    /// Console.app — `log show --predicate 'process == "ReplyAI"'`
+    /// filters by process, and the bracketed prefix lets a triage
+    /// engineer further filter by component. Used at THREE call sites
+    /// (RegisterEventHotKey-failed, InstallEventHandler-failed,
+    /// successful-register confirmation). Drift between any two would
+    /// have one site filterable by `[ReplyAI] GlobalHotkey:` while
+    /// another is invisible to that grep. Pinned by
+    /// `GlobalHotkeyContractTests.testLogPrefixIsFrozen`.
+    static let logPrefix = "[ReplyAI] GlobalHotkey: "
+
     private var ref: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private var callback: (() -> Void)?
@@ -48,7 +59,7 @@ final class GlobalHotkey: @unchecked Sendable {
             &hotkeyRef
         )
         guard registerStatus == noErr, let hotkeyRef else {
-            NSLog("[ReplyAI] GlobalHotkey: RegisterEventHotKey failed (status=\(registerStatus))")
+            NSLog("\(Self.logPrefix)RegisterEventHotKey failed (status=\(registerStatus))")
             return
         }
         self.ref = hotkeyRef
@@ -76,13 +87,13 @@ final class GlobalHotkey: @unchecked Sendable {
             &handlerRef
         )
         guard installStatus == noErr, let handlerRef else {
-            NSLog("[ReplyAI] GlobalHotkey: InstallEventHandler failed (status=\(installStatus))")
+            NSLog("\(Self.logPrefix)InstallEventHandler failed (status=\(installStatus))")
             UnregisterEventHotKey(hotkeyRef)
             self.ref = nil
             return
         }
         self.handler = handlerRef
-        NSLog("[ReplyAI] GlobalHotkey: ⌘⇧R registered")
+        NSLog("\(Self.logPrefix)⌘⇧R registered")
     }
 
     /// Tear down the registration. Safe to call when nothing is registered.
