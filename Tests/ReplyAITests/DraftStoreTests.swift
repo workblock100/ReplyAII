@@ -406,4 +406,38 @@ final class DraftStoreTests: XCTestCase {
             "no-days-arg pruneStale() must route through defaultPruneDays — the default-arg edit would otherwise stop pruning silently")
     }
 
+    // MARK: - File extension pin
+    //
+    // The `.md` extension is used both at the write/read site
+    // (constructing the file URL) and at the enumeration site (filtering
+    // `pathExtension == "md"`). Drift between the two sites is silent:
+    // drafts get written with one extension while enumeration filters
+    // for another, so saved drafts disappear from listStoredDraftIDs()
+    // and the pruner never reaches them. Hoisted to
+    // `DraftStore.fileExtension`; pin freezes the literal.
+
+    func testFileExtensionIsFrozen() {
+        XCTAssertEqual(DraftStore.fileExtension, "md",
+            "DraftStore.fileExtension drift desyncs the writer from the enumerator — drafts get written with one extension and never enumerate / never prune")
+    }
+
+    func testWriteThenListUsesHoistedExtension() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DraftStoreExtensionPin-\(UUID().uuidString)", isDirectory: true)
+        let store = DraftStore(draftsDirectory: tempDir)
+        store.write(threadID: "round-trip", text: "hello")
+
+        // The enumerator must find the freshly-written draft. If write uses
+        // ".md" but the enumerator filters ".markdown", this returns []
+        // even though the draft is on disk.
+        XCTAssertEqual(store.listStoredDraftIDs(), ["round-trip"],
+            "writer + enumerator must agree on the extension — the round-trip is the live regression class hoisting prevents")
+
+        // And the file on disk must actually end with the hoisted extension.
+        let written = try FileManager.default.contentsOfDirectory(atPath: tempDir.path)
+        XCTAssertEqual(written.first, "round-trip.\(DraftStore.fileExtension)",
+            "the file on disk must end with .\\(DraftStore.fileExtension) so a future shell-side `find` from the autopilot can list drafts")
+
+        try? FileManager.default.removeItem(at: tempDir)
+    }
 }

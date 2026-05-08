@@ -5,6 +5,15 @@ import Foundation
 /// refined. Files live in ~/Library/Application Support/ReplyAI/drafts/ and
 /// are pruned when they are older than 7 days.
 final class DraftStore: Sendable {
+    /// File extension used by every persisted draft. Used both at the
+    /// write/read site (constructing the file URL) AND at the
+    /// enumeration site (filtering `pathExtension == fileExtension`).
+    /// Drift between the two sites is silent: drafts get written with
+    /// one extension while enumeration filters for another, so saved
+    /// drafts disappear from the listStoredDraftIDs() result and the
+    /// pruner never reaches them. Pinned by
+    /// `DraftStoreTests.testFileExtensionIsFrozen`.
+    static let fileExtension: String = "md"
 
     private let draftsDirectory: URL
 
@@ -70,7 +79,7 @@ final class DraftStore: Sendable {
             options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
         ) else { return [] }
         return (enumerator.allObjects as? [URL] ?? [])
-            .filter { $0.pathExtension == "md" }
+            .filter { $0.pathExtension == Self.fileExtension }
             .map { $0.deletingPathExtension().lastPathComponent }
     }
 
@@ -106,6 +115,6 @@ final class DraftStore: Sendable {
         let safe = threadID
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "-")
-        return draftsDirectory.appendingPathComponent("\(safe).md")
+        return draftsDirectory.appendingPathComponent("\(safe).\(Self.fileExtension)")
     }
 }
