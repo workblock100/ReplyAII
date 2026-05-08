@@ -56,6 +56,28 @@ struct ShortcutsExportHandler: Sendable {
     /// `ShortcutsExportHandlerTests.testQueryParameterNameIsFrozen`.
     static let payloadQueryParameterName = "data"
 
+    /// Default channel applied when a payload omits the `channel` field
+    /// or supplies a value that doesn't decode as a `Channel.rawValue`.
+    /// The user-authored Shortcut may legitimately omit the field for
+    /// backward compatibility — defaulting to iMessage matches the
+    /// behaviour of every Shortcut shipped before the multi-channel
+    /// refactor. Hoisted so the default is greppable + pinned, and so
+    /// a future "default to .sms for SMS-relay payloads" decision lands
+    /// once. Pinned by
+    /// `ShortcutsExportHandlerTests.testDefaultChannelIsImessage`.
+    static let defaultChannel: Channel = .imessage
+
+    /// Outgoing-message marker in the wire format. The Shortcut emits
+    /// `{"from": "me", ...}` for messages the user sent and any other
+    /// value (typically `"them"` or the sender's name) for incoming
+    /// messages. Drift would silently flip authorship for every
+    /// outgoing message in every imported thread. The same `me` literal
+    /// is also `PromptBuilder.Template.speakerSelf` and
+    /// `SearchIndex.outgoingSenderLabel` — three modules sharing one
+    /// convention. Pinned by
+    /// `ShortcutsExportHandlerTests.testOutgoingMarkerIsMe`.
+    static let outgoingMessageMarker = "me"
+
     /// Parse `[Export]` out of a `replyai://import-messages?data=…` URL.
     /// Throws `.malformedPayload` for any structural failure (missing
     /// `data` param, malformed JSON, missing required fields).
@@ -97,7 +119,7 @@ struct ShortcutsExportHandler: Sendable {
         }
 
         func toExport() -> Export {
-            let resolvedChannel = Channel(rawValue: (channel ?? "imessage").lowercased()) ?? .imessage
+            let resolvedChannel = Channel(rawValue: (channel ?? ShortcutsExportHandler.defaultChannel.rawValue).lowercased()) ?? ShortcutsExportHandler.defaultChannel
             let preview = preview ?? messages?.last?.text ?? ""
             let thread = MessageThread(
                 id: id,
@@ -110,7 +132,7 @@ struct ShortcutsExportHandler: Sendable {
             )
             let mapped: [Message] = (messages ?? []).map { dto in
                 Message(
-                    from: dto.from.lowercased() == "me" ? .me : .them,
+                    from: dto.from.lowercased() == ShortcutsExportHandler.outgoingMessageMarker ? .me : .them,
                     text: dto.text,
                     time: dto.time ?? ""
                 )

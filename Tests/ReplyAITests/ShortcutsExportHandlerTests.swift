@@ -471,6 +471,38 @@ final class ShortcutsExportHandlerTests: XCTestCase {
             "drift in the wire-format query name silently fails every Shortcut export — the user sees nothing happen and gets no error to act on")
     }
 
+    // MARK: - Default channel + outgoing marker pins (REP-hoist 2026-05-07)
+
+    /// The default channel applied when the `channel` field is absent
+    /// from the payload (or unrecognized). Drift to e.g. `.sms` would
+    /// silently re-route every legacy Shortcut export through the SMS
+    /// path — InboxViewModel would mis-render the chip + dot color.
+    func testDefaultChannelIsImessage() {
+        XCTAssertEqual(ShortcutsExportHandler.defaultChannel, .imessage,
+            "defaultChannel drift silently re-routes every legacy Shortcut export through the wrong channel")
+    }
+
+    /// The outgoing-message wire-format marker. The same literal `me`
+    /// is used by `PromptBuilder.Template.speakerSelf` and
+    /// `SearchIndex.outgoingSenderLabel` — three modules sharing one
+    /// convention. Pin both the literal AND the cross-module equality.
+    func testOutgoingMarkerIsMe() {
+        XCTAssertEqual(ShortcutsExportHandler.outgoingMessageMarker, "me",
+            "outgoingMessageMarker drift silently flips authorship for every outgoing message in every imported thread")
+    }
+
+    func testOutgoingMarkerEqualsPromptBuilderSpeakerSelf() {
+        XCTAssertEqual(ShortcutsExportHandler.outgoingMessageMarker,
+                       PromptBuilder.Template.speakerSelf,
+            "ShortcutsExportHandler.outgoingMessageMarker must equal PromptBuilder.Template.speakerSelf — three modules share this `me` convention")
+    }
+
+    func testOutgoingMarkerEqualsSearchIndexOutgoingSenderLabel() {
+        XCTAssertEqual(ShortcutsExportHandler.outgoingMessageMarker,
+                       SearchIndex.outgoingSenderLabel,
+            "ShortcutsExportHandler.outgoingMessageMarker must equal SearchIndex.outgoingSenderLabel — drift desyncs imported-thread authorship from search")
+    }
+
     // MARK: - Helpers
 
     private func makeURL(payload: String) throws -> URL {
