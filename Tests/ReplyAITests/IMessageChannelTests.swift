@@ -630,6 +630,45 @@ final class IMessageChannelAvatarInitialTests: XCTestCase {
             "syntheticChatIDPrefix's underscore is the entire signal that prevents `.isGroupChat` matching against synthetic-id threads — drift is a silent rule misfire")
     }
 
+    /// Cross-file equality pin. `IMessageChannel.ChatDBRowDecode.serviceFallback`
+    /// and `IMessageSender.iMessageServiceID` are both the literal string
+    /// `"iMessage"`, used in adjacent code paths: serviceFallback labels
+    /// chat.db rows whose `service` column is null, and iMessageServiceID
+    /// is the AppleScript service identifier embedded as the first
+    /// segment of every chat GUID we synthesize for sends. They must
+    /// agree because Messages.app uses one canonical service name —
+    /// drift between them would mean we read rows tagged "iMessage" but
+    /// emit chat GUIDs tagged "iMessages" / "iMessage_v2" / etc, and
+    /// every send would fail with "no chat matching that GUID". The
+    /// equality is currently true by accident (both pinned to "iMessage"
+    /// individually); pin the cross-file invariant so a rename of one
+    /// surfaces the gap immediately rather than at the production send
+    /// site. Mirrors the cross-module `me` cross-pin pattern between
+    /// `PromptBuilder.Template.speakerSelf`,
+    /// `SearchIndex.outgoingSenderLabel`, and
+    /// `ShortcutsExportHandler.outgoingMessageMarker`.
+    func testServiceFallbackEqualsIMessageSenderServiceID() {
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.serviceFallback,
+                       IMessageSender.iMessageServiceID,
+            "IMessageChannel.serviceFallback must equal IMessageSender.iMessageServiceID — both name the same Messages.app service convention; drift desyncs the chat.db row decoder from the AppleScript GUID synthesizer and breaks every send for rows whose `service` column was decoded via the fallback path")
+    }
+
+    /// Sibling cross-file pin for the SMS service. The chat.db row
+    /// decoder lowercases `service` before comparing against
+    /// `smsServiceLowercase` ("sms"); the AppleScript sender uses
+    /// `IMessageSender.smsServiceID` ("SMS") verbatim as the chat-GUID
+    /// service segment. The casing intentionally differs between the
+    /// two paths (chat.db emits "SMS" and the decoder lowercases for
+    /// comparison; AppleScript needs the canonical-cased identifier),
+    /// but the underlying string value must agree case-insensitively.
+    /// Pin the case-insensitive equality so a rename of either side
+    /// (e.g. drift to "MMS" or "Carrier") surfaces immediately.
+    func testSMSServiceLowercaseEqualsIMessageSenderSMSServiceIDLowercased() {
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.smsServiceLowercase,
+                       IMessageSender.smsServiceID.lowercased(),
+            "ChatDBRowDecode.smsServiceLowercase must equal IMessageSender.smsServiceID.lowercased() — the row-decoder's classification key and the AppleScript GUID-segment must name the same service; case differs intentionally, the value must not")
+    }
+
     /// The synthetic chat-ID prefix MUST start with `chat` (so it's
     /// unambiguous in logs) but MUST NOT match the
     /// `RuleEvaluator.groupChatIdentifierPrefix` exactly — otherwise
