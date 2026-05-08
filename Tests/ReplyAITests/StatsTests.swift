@@ -657,6 +657,60 @@ final class StatsAcceptanceRateTests: XCTestCase {
     }
 }
 
+// MARK: - flushNow contract on file-less Stats
+
+/// `Stats(fileURL: nil)` is the explicit "no persistence" mode used by
+/// tests that only care about in-memory counters and by any caller that
+/// wants to skip disk I/O. Calling `flushNow()` on such an instance MUST
+/// be a safe no-op — neither crash, nor surface an error, nor sneak a
+/// write to a default path. The 21 existing `flushNow()` callsites all
+/// have a non-nil fileURL, so this branch has no other coverage today.
+/// Drift toward `guard let url = fileURL else { fatalError() }` (or a
+/// default-path fallback) would silently change behavior for every
+/// `Stats(fileURL: nil)` test fixture in the suite. Pinned at the public
+/// surface so the no-op contract is explicit.
+final class StatsFlushNowNoFileURLTests: XCTestCase {
+
+    func testFlushNowOnNilFileURLIsSafeNoOp() {
+        let stats = Stats(fileURL: nil)
+        // First call: no pending write, nil fileURL — must complete without
+        // crashing or throwing. (`flushNow` is non-throwing, so absence of
+        // a `try` already proves part of the contract; the assertion is
+        // that this line executes at all.)
+        stats.flushNow()
+        // Second call after a counter bump: a pending debounced write was
+        // skipped at `persist()` time too (file-less path returns at the
+        // first guard), so flushNow has nothing to flush AND nothing to
+        // cancel. Still safe.
+        stats.recordDraftGenerated()
+        stats.flushNow()
+        // Counter state is unaffected by flushNow — file-less mode keeps
+        // every increment in memory, and flushNow doesn't reset.
+        XCTAssertEqual(stats.snapshot().draftsGenerated, 1,
+            "flushNow on nil-fileURL Stats must not zero or otherwise mutate counters — it's a write-only operation that becomes a no-op when there's no destination")
+    }
+
+    func testFlushNowOnNilFileURLCancelsAnyPendingWriteSafely() {
+        // Even though `persist()` short-circuits on nil fileURL and never
+        // schedules a DispatchWorkItem, the `flushNow` lock-cancel-unlock
+        // dance still runs. Pin that this is safe under contention by
+        // calling flushNow from concurrent threads — a regression that
+        // dropped the lock guard would race the (always-nil) pendingWrite
+        // pointer. Bracketed at 50 iterations × 4 threads to keep the
+        // suite fast while still exercising the lock path.
+        let stats = Stats(fileURL: nil)
+        DispatchQueue.concurrentPerform(iterations: 4) { _ in
+            for _ in 0..<50 { stats.flushNow() }
+        }
+        // Survival is the assertion — a deadlock or race would fail the
+        // test by timing out the runner. Bump and re-read to confirm the
+        // instance is still live and usable after the storm.
+        stats.recordDraftSent()
+        XCTAssertEqual(stats.snapshot().draftsSent, 1,
+            "Stats instance must remain usable after concurrent flushNow on nil-fileURL — the lock-cancel-unlock dance must not corrupt internal state")
+    }
+}
+
 // MARK: - REP-160: Stats concurrent mixed-counter stress test
 
 final class StatsConcurrentMixedCounterTests: XCTestCase {
