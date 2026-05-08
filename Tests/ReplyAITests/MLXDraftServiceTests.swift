@@ -156,4 +156,19 @@ final class MLXDraftServiceTests: XCTestCase {
         XCTAssertEqual(MLXDraftService.formatBytes(2 * 1024 * 1024 * 1024), "2.0 GB",
                        "exact 2 GiB renders `2.0 GB` (one decimal) — drift to `2 GB` would expose a precision change at the boundary")
     }
+
+    /// Pin the 1024-MiB threshold boundary (the `mib > 1024` cutoff
+    /// inside `formatBytes`). A value of *exactly* 1024 MiB is below
+    /// the strict-greater-than threshold and renders as `"1024 MB"`,
+    /// not `"1.0 GB"`. The first byte over (1024 MiB + 1 byte) flips
+    /// to GB form. Both sides matter — the strict inequality means a
+    /// future swap to `>=` would silently flip 1 GiB-exactly downloads
+    /// from "1024 MB" to "1.0 GB" mid-fire of an in-progress download
+    /// banner. Pin so the boundary direction can't drift.
+    func testFormatBytesAtExactly1024MibStaysInMegabytes() {
+        XCTAssertEqual(MLXDraftService.formatBytes(1024 * 1024 * 1024), "1024 MB",
+                       "exactly 1024 MiB (== 1 GiB) renders as MB (1024) — `mib > 1024` is strict-greater-than; drift to `>=` would flip this case to `1.0 GB`")
+        XCTAssertEqual(MLXDraftService.formatBytes(1024 * 1024 * 1024 + 1), "1.0 GB",
+                       "1024 MiB + 1 byte must flip to GB form — pin the first-byte-over boundary so a future precision tweak surfaces here, not in user-visible banner copy")
+    }
 }
