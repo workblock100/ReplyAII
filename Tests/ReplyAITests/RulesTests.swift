@@ -1187,6 +1187,44 @@ final class RulesTests: XCTestCase {
             "empty senderContains pattern must not match a non-empty sender")
     }
 
+    /// `.senderContains` searches BOTH `senderName` and `senderHandle`,
+    /// OR'd. The existing `testSimpleEvaluationMatches` uses a context
+    /// where the pattern matches both fields, so it can't distinguish
+    /// "matched name only" from "matched handle only" from "matched
+    /// both". Pin each leg independently so a refactor that drops one
+    /// field from the search (say, "search only the handle now that
+    /// names are contact-resolved") surfaces here as a deliberate edit
+    /// rather than as users seeing rules silently stop firing on saved
+    /// contacts whose names changed.
+    func testSenderContainsSearchesBothNameAndHandleIndependently() {
+        // Pattern only in name — handle is a phone number with no shared chars.
+        let nameOnly = RuleContext(
+            senderName: "Maya Chen", senderHandle: "+15551112222",
+            channel: .slack, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: "t1"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.senderContains("maya"), in: nameOnly),
+            "pattern present in senderName but absent from senderHandle must still match")
+
+        // Pattern only in handle — name has no shared chars.
+        let handleOnly = RuleContext(
+            senderName: "Bob", senderHandle: "maya@example.com",
+            channel: .slack, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: "t2"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.senderContains("maya"), in: handleOnly),
+            "pattern absent from senderName but present in senderHandle must still match — drift would silently break rules keyed off email addresses or raw phone handles")
+
+        // Pattern in neither — must not match.
+        let neither = RuleContext(
+            senderName: "Bob", senderHandle: "+15553334444",
+            channel: .slack, lastMessageText: "hi",
+            isUnread: false, senderKnown: true, chatIdentifier: "t3"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.senderContains("maya"), in: neither),
+            "pattern absent from both fields must not match — sanity for the OR")
+    }
+
     /// Empty `groupName` does NOT match any group — Swift's
     /// `localizedCaseInsensitiveContains("")` returns `false` for empty
     /// patterns (unlike `hasPrefix("")` / `hasSuffix("")` which return
