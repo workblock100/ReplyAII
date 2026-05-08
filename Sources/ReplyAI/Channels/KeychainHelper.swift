@@ -157,7 +157,16 @@ enum KeychainError: LocalizedError, Sendable {
 /// a second API round-trip in Settings when displaying "Connected: <workspace>".
 struct SlackTokenStore: Sendable {
     private let keychain: KeychainHelper
-    private static let storageKey = "slack-access-token"
+
+    /// Keychain key the Slack access-token JSON entry lives under (the
+    /// account-side prefix is added by `KeychainHelper`). Promoted from
+    /// `private` so existing tests can reference it directly instead of
+    /// re-typing the literal at five call sites — drift between any test's
+    /// inline literal and this constant would make the test pass against
+    /// a different (and almost-always empty) Keychain row, hiding real
+    /// production regressions in the storage path. Pinned by
+    /// `KeychainHelperTests` (existing literal references re-routed).
+    static let storageKey = "slack-access-token"
 
     private struct Entry: Codable {
         let token: String

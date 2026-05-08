@@ -10,7 +10,7 @@ final class SlackChannelTests: XCTestCase {
 
     override func tearDownWithError() throws {
         // SlackTokenStore writes one Keychain entry; clear it after each test.
-        KeychainHelper(service: testService).delete(key: "slack-access-token")
+        KeychainHelper(service: testService).delete(key: SlackTokenStore.storageKey)
     }
 
     // MARK: - Auth gate

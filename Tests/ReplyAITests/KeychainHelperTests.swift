@@ -299,9 +299,9 @@ final class SlackTokenStoreTests: XCTestCase {
         // Write raw non-JSON bytes under the store's key via the underlying KeychainHelper.
         let keychain = KeychainHelper(service: "co.replyai.test-slack-malformed-\(UUID().uuidString)")
         let corruptStore = SlackTokenStore(keychain: keychain)
-        try keychain.set(value: "not-valid-json{{{{", for: "slack-access-token")
+        try keychain.set(value: "not-valid-json{{{{", for: SlackTokenStore.storageKey)
         XCTAssertNil(corruptStore.get(), "malformed JSON should return nil without crashing")
-        keychain.delete(key: "slack-access-token")
+        keychain.delete(key: SlackTokenStore.storageKey)
     }
 
     /// Pin the on-Keychain storage key and JSON wire format. The store's
@@ -313,13 +313,15 @@ final class SlackTokenStoreTests: XCTestCase {
     func testSlackTokenStoreWriteToKeychainKeyAndJSONShape() throws {
         let keychain = KeychainHelper(service: "co.replyai.test-slack-shape-\(UUID().uuidString)")
         let testStore = SlackTokenStore(keychain: keychain)
-        defer { keychain.delete(key: "slack-access-token") }
+        defer { keychain.delete(key: SlackTokenStore.storageKey) }
 
         try testStore.set(token: "xoxb-shape-test", workspaceName: "Acme Corp")
 
         // 1. The store must write under exactly the "slack-access-token"
         //    Keychain account suffix (KeychainHelper prepends "ReplyAI-").
-        let raw = keychain.get(key: "slack-access-token")
+        XCTAssertEqual(SlackTokenStore.storageKey, "slack-access-token",
+            "SlackTokenStore.storageKey drift orphans every existing user's Slack token (Keychain identity is the literal account suffix)")
+        let raw = keychain.get(key: SlackTokenStore.storageKey)
         XCTAssertNotNil(raw,
             "SlackTokenStore must persist under the `slack-access-token` Keychain key — renaming orphans existing tokens")
 

@@ -84,7 +84,7 @@ final class SlackOAuthFlowTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        keychain.delete(key: "slack-access-token")
+        keychain.delete(key: SlackTokenStore.storageKey)
     }
 
     // MARK: - testSlackOAuthOpensCorrectAuthURL
