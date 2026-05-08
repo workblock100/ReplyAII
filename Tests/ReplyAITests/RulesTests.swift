@@ -1875,6 +1875,39 @@ final class RulesTests: XCTestCase {
         )
     }
 
+    /// Pin the boundary direction of `.messageAgeOlderThan`. The predicate
+    /// uses strict `>` (NOT `>=`), so a thread last-messaged exactly N
+    /// hours ago does NOT match `messageAgeOlderThan(hours: N)` — only
+    /// threads that exceed N hours match. Existing tests cover the 25h
+    /// vs 1h cases (clearly above + clearly below) but leave the exact-
+    /// boundary leg unpinned. A future "harden to >=" refactor would
+    /// silently flip behavior for every thread sitting at the boundary,
+    /// firing every "auto-archive after 24h" rule a tick earlier than
+    /// users expect. Pin both legs of the boundary so the strictness is
+    /// explicit in CI.
+    func testMessageAgeOlderThanIsStrictlyGreaterAtExactBoundary() {
+        let now = Date()
+        var ctx = RuleContext(
+            senderName: "Boundary Bot", senderHandle: "boundary",
+            channel: .imessage, lastMessageText: "ping",
+            isUnread: false, senderKnown: false, chatIdentifier: ""
+        )
+
+        // Exactly 24h ago — predicate uses `>`, so this returns false.
+        ctx.lastMessageDate = now.addingTimeInterval(-24 * 3600)
+        XCTAssertFalse(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "exactly N hours old must NOT match messageAgeOlderThan(hours: N) — predicate is strict-greater (`>`), not `>=`"
+        )
+
+        // 24h + 1s ago — strictly older, must match.
+        ctx.lastMessageDate = now.addingTimeInterval(-24 * 3600 - 1)
+        XCTAssertTrue(
+            RuleEvaluator.matches(.messageAgeOlderThan(hours: 24), in: ctx, currentDate: now),
+            "any duration strictly greater than N hours must match — confirms the boundary lies between exact-N and exact-N+ε"
+        )
+    }
+
     func testMessageAgeOlderThanCodableRoundTrip() throws {
         let pred: RulePredicate = .messageAgeOlderThan(hours: 48)
         let data = try JSONEncoder().encode(pred)
