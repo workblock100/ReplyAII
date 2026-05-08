@@ -2011,6 +2011,43 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
             "withinWeekDays drift either makes weekday labels ambiguous (>7 days) or pushes recent threads to absolute dates (<7 days)")
     }
 
+    /// `appleDateNanosecondThreshold` is the strict-`>` boundary above
+    /// which a `message.date` value flips from seconds-encoded to
+    /// nanoseconds-encoded interpretation. The existing
+    /// `testAppleDateAtExactThresholdTreatedAsSeconds` /
+    /// `testAppleDateOneAboveThresholdTreatedAsNanoseconds` pair
+    /// exercises the strict-`>` semantics, but didn't pin the value
+    /// itself. Drift up risks misclassifying nanosecond-form values
+    /// from production chat.db (rendering as 2001 + change instead of
+    /// 2026); drift down risks dividing legacy seconds values by 10⁹
+    /// and rendering 2031 messages as 1970-era timestamps.
+    func testAppleDateNanosecondThresholdIsTenToTheTwelfth() {
+        XCTAssertEqual(IMessageChannel.appleDateNanosecondThreshold, 1_000_000_000_000,
+            "appleDateNanosecondThreshold drift breaks the seconds-vs-nanoseconds autodetect on chat.db rows — every shipped time chip renders the wrong year")
+    }
+
+    /// `appleDateNanosecondDivisor` converts nanoseconds-form values
+    /// to seconds. Drift breaks the magnitude of every nanosecond
+    /// timestamp by ~10ⁿ — 2026 messages would render as 1971 (drift
+    /// down) or 2055 (drift up).
+    func testAppleDateNanosecondDivisorIsTenToTheNinth() {
+        XCTAssertEqual(IMessageChannel.appleDateNanosecondDivisor, 1_000_000_000, accuracy: 0.0001,
+            "appleDateNanosecondDivisor drift renders nanosecond-form timestamps with the wrong magnitude — every shipped time chip renders the wrong year")
+    }
+
+    /// The threshold and divisor have a documented relationship:
+    /// `threshold ÷ divisor ≈ 10³ seconds`, which is the resolution
+    /// boundary. A future refactor that updated one without the
+    /// other (e.g. switched to microseconds in the divisor while
+    /// leaving the threshold at 10¹²) would silently mis-bucket
+    /// every value in the thousand-second window between them.
+    func testAppleDateConstantsRelationshipIsConsistent() {
+        let ratio = Double(IMessageChannel.appleDateNanosecondThreshold) /
+                    IMessageChannel.appleDateNanosecondDivisor
+        XCTAssertEqual(ratio, 1_000, accuracy: 0.0001,
+            "threshold ÷ divisor must remain ≈ 10³ — drift between the two constants opens a thousand-second mis-bucket window")
+    }
+
     // MARK: - openReadOnly error-message format pins
 
     /// `IMessageChannel.missingDatabaseErrorMessage(path:)` is the

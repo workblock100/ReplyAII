@@ -534,12 +534,36 @@ struct IMessageChannel: ChannelService {
 
     // MARK: - Date handling
 
+    /// Strict-greater-than threshold above which `appleDate` is
+    /// interpreted as nanoseconds rather than seconds. macOS Messages
+    /// switched to nanosecond encoding around macOS 10.13 — values
+    /// post-2013 in the nanosecond format are well above 10¹², while
+    /// any plausible legacy seconds-form value is well below. Pinned
+    /// in `IMessageChannelTests.testAppleDateAtExactThresholdTreatedAsSeconds`
+    /// against the strict-`>` semantics: a value exactly equal to the
+    /// threshold is treated as seconds (the historical default), and
+    /// only `> threshold` flips into nanoseconds. Drift up risks
+    /// classifying genuine nanosecond-form values as seconds (date
+    /// renders as 2001 + change instead of 2026); drift down risks
+    /// classifying large legacy seconds values (year ~2031+) as
+    /// nanoseconds and dividing them away.
+    static let appleDateNanosecondThreshold: Int64 = 1_000_000_000_000
+
+    /// Divisor that converts `appleDate` nanoseconds to seconds. The
+    /// `secondsSinceReferenceDate` arithmetic divides by this — drift
+    /// down rounds every nanosecond timestamp toward 1970, drift up
+    /// rounds them toward 2001+epsilon. Pinned alongside the
+    /// threshold so the two-constant relationship (threshold ÷
+    /// divisor ≈ 10³ seconds, the resolution boundary) flows through
+    /// a single source of truth.
+    static let appleDateNanosecondDivisor: TimeInterval = 1_000_000_000
+
     /// macOS stores message.date in either seconds or nanoseconds since
     /// 2001-01-01. Nanosecond encoding is larger than ~10¹⁵ for anything
     /// after 2001.
     static func secondsSinceReferenceDate(appleDate: Int64) -> TimeInterval {
-        if appleDate > 1_000_000_000_000 {   // nanoseconds
-            return TimeInterval(appleDate) / 1_000_000_000
+        if appleDate > Self.appleDateNanosecondThreshold {   // nanoseconds
+            return TimeInterval(appleDate) / Self.appleDateNanosecondDivisor
         }
         return TimeInterval(appleDate)
     }
