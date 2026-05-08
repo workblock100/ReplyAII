@@ -273,9 +273,9 @@ final class StatsTests: XCTestCase {
         stats.incrementIndexed(channel: .imessage, count: 2)
 
         let snap = stats.snapshot()
-        XCTAssertEqual(snap.messagesIndexedByChannel["imessage"], 7)
-        XCTAssertEqual(snap.messagesIndexedByChannel["slack"], 3)
-        XCTAssertNil(snap.messagesIndexedByChannel["whatsapp"])
+        XCTAssertEqual(snap.messagesIndexedByChannel[Channel.imessage.rawValue], 7)
+        XCTAssertEqual(snap.messagesIndexedByChannel[Channel.slack.rawValue], 3)
+        XCTAssertNil(snap.messagesIndexedByChannel[Channel.whatsapp.rawValue])
     }
 
     func testPerChannelCountersRoundTrip() throws {
@@ -287,8 +287,8 @@ final class StatsTests: XCTestCase {
 
         let second = Stats(fileURL: url)
         let snap = second.snapshot()
-        XCTAssertEqual(snap.messagesIndexedByChannel["imessage"], 10)
-        XCTAssertEqual(snap.messagesIndexedByChannel["teams"], 4)
+        XCTAssertEqual(snap.messagesIndexedByChannel[Channel.imessage.rawValue], 10)
+        XCTAssertEqual(snap.messagesIndexedByChannel[Channel.teams.rawValue], 4)
     }
 
     // MARK: - Per-tone draft counters (REP-032)
