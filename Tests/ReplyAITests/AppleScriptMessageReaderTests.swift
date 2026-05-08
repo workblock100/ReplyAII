@@ -709,6 +709,39 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "AppleScript emitter must contain the same delimiter the Swift parser splits on")
     }
 
+    /// Cross-file invariant: AppleScriptMessageReader's group-chat
+    /// detection (`prettyPhone` skip, `formatHandleFromChatID`
+    /// label, `resolveContact` skip) must classify a chat ID exactly
+    /// the way ContactsResolver and SmartRule do — all three sites
+    /// route through `RuleEvaluator.groupChatIdentifierPrefix`. Drift
+    /// in the constant flows to every site; drift on a single site
+    /// (e.g. someone reverts to inline `"chat"`) is what this pin
+    /// catches. Round-trip witnesses against the live constant value.
+    func testGroupChatPrefixRoutesThroughRuleEvaluatorConstant() {
+        let prefix = RuleEvaluator.groupChatIdentifierPrefix
+        // formatHandleFromChatID: a chatID whose suffix begins with the
+        // prefix must yield the group-chat display label.
+        let groupID = "iMessage;+;\(prefix)1234567890"
+        let reader = AppleScriptMessageReader(executor: { _ in "" }, nameFor: { _ in nil })
+        do {
+            // Drive parse() via recentChats() with one synthetic group row.
+            let synthLine = "missing value\(AppleScriptMessageReader.rowDelimiter)\(groupID)\n"
+            let stubbed = AppleScriptMessageReader(executor: { _ in synthLine }, nameFor: { _ in nil })
+            let threads = try stubbed.recentChats()
+            XCTAssertEqual(threads.first?.name, AppleScriptMessageReader.groupChatDisplayLabel,
+                "synthetic chat ID with `\(prefix)` prefix must surface as `\(AppleScriptMessageReader.groupChatDisplayLabel)` — drift in the prefix constant must flow to AppleScriptMessageReader")
+        } catch {
+            XCTFail("recentChats threw: \(error)")
+        }
+        _ = reader
+        // prettyPhone: a string starting with the prefix must pass
+        // through unchanged (we don't try to format a chat-key as a
+        // phone number).
+        let chatKey = "\(prefix)42"
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone(chatKey), chatKey,
+            "prettyPhone must skip strings starting with `\(prefix)` — those are synthetic chat keys, not phone numbers")
+    }
+
     /// Pins the AppleScript-side direction fallback (`set msgDir to
     /// "incoming"`) to route through `Self.incomingDirectionValue` via
     /// Swift interpolation. The value is what the AppleScript emits

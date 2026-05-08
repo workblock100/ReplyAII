@@ -277,7 +277,10 @@ struct AppleScriptMessageReader: Sendable {
         let s = String(last)
         // If it's a phone number, return as-is; if it's an email, return as-is;
         // if it's a synthetic chat key (e.g. "chat1234567890"), label it generically.
-        if s.hasPrefix("chat") { return groupChatDisplayLabel }
+        // Route through `RuleEvaluator.groupChatIdentifierPrefix` so a rename
+        // there flows here (and to ContactsResolver, which already uses the
+        // constant) atomically — drift between the two sites is silent.
+        if s.hasPrefix(RuleEvaluator.groupChatIdentifierPrefix) { return groupChatDisplayLabel }
         return s
     }
 
@@ -287,7 +290,10 @@ struct AppleScriptMessageReader: Sendable {
     /// unchanged.
     static func prettyPhone(_ s: String) -> String {
         // Skip if it's already formatted, an email, a chat-key, or a real name.
-        if s.contains(" ") || s.contains("@") || s.hasPrefix("chat") || s.contains("(") { return s }
+        // The `chat`-prefix routes through `RuleEvaluator.groupChatIdentifierPrefix`
+        // so the group-chat-key check stays coupled across all sites that
+        // need to recognize a synthetic chat ID.
+        if s.contains(" ") || s.contains("@") || s.hasPrefix(RuleEvaluator.groupChatIdentifierPrefix) || s.contains("(") { return s }
         let digits = s.filter(\.isNumber)
         switch digits.count {
         case ContactsResolver.USPhoneNormalization.prefixedLength
@@ -326,7 +332,7 @@ struct AppleScriptMessageReader: Sendable {
         let parts = id.split(separator: ";")
         guard let suffix = parts.last else { return nil }
         let handle = String(suffix)
-        if handle.hasPrefix("chat") { return nil }
+        if handle.hasPrefix(RuleEvaluator.groupChatIdentifierPrefix) { return nil }
         // Same guard as the first path: when ContactsResolver has access but
         // no match, it echoes the input handle back. Treat that as no match
         // so the caller's prettyPhone() formatter still runs.
