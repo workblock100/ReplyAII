@@ -1108,4 +1108,53 @@ final class StatsResetAndGuardTests: XCTestCase {
         XCTAssertEqual(stats.snapshot().draftsGenerated, 3,
             "decoder must accept and ignore unknown keys without dropping known-key data")
     }
+
+    // MARK: - RuleAction constants freeze
+
+    /// Pin the five `Stats.RuleAction` discriminator strings. These are
+    /// also the dictionary keys persisted to disk via
+    /// `Stats.persist()` — drift here splits historical counters
+    /// across two keys (old builds wrote "pin" and a renamed constant
+    /// would create a new bucket while the old one stays untouched on
+    /// disk forever).
+    func testRuleActionConstantsAreFrozen() {
+        XCTAssertEqual(Stats.RuleAction.archive,        "archive")
+        XCTAssertEqual(Stats.RuleAction.silentlyIgnore, "silentlyIgnore")
+        XCTAssertEqual(Stats.RuleAction.markDone,       "markDone")
+        XCTAssertEqual(Stats.RuleAction.setDefaultTone, "setDefaultTone")
+        XCTAssertEqual(Stats.RuleAction.pin,            "pin")
+    }
+
+    /// Pin the partition invariant: the five constants are pairwise
+    /// distinct. Collision (two constants resolving to the same string)
+    /// would silently merge two action counters into one bucket — the
+    /// stats surface would show the right total but the wrong per-
+    /// action breakdown.
+    func testRuleActionConstantsArePairwiseDistinct() {
+        let all = [
+            Stats.RuleAction.archive,
+            Stats.RuleAction.silentlyIgnore,
+            Stats.RuleAction.markDone,
+            Stats.RuleAction.setDefaultTone,
+            Stats.RuleAction.pin,
+        ]
+        XCTAssertEqual(Set(all).count, all.count,
+            "RuleAction constants must be pairwise distinct — collision merges per-action counters")
+    }
+
+    /// Route-through pin: counting `recordRuleFired(action:)` with the
+    /// hoisted constant is observed by the snapshot under the same
+    /// raw-string key. Catches a refactor that would route the constant
+    /// through a transformer (lowercasing, trimming) before storage.
+    func testRecordRuleFiredRoutesThroughRuleActionConstant() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
+        stats.recordRuleFired(action: Stats.RuleAction.pin)
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 2)
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.pin],     1)
+        XCTAssertEqual(snap.rulesFiredByAction["archive"], 2,
+            "constants must round-trip to the bare-string key — the snapshot dictionary is keyed on the raw value")
+    }
 }

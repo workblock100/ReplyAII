@@ -348,10 +348,10 @@ final class InboxViewModel {
             switch rule.then {
             case .setDefaultTone(let tone):
                 if activeTone != tone { activeTone = tone }
-                stats.recordRuleFired(action: "setDefaultTone")
+                stats.recordRuleFired(action: Stats.RuleAction.setDefaultTone)
             case .pin:
                 markPinned(thread.id)
-                stats.recordRuleFired(action: "pin")
+                stats.recordRuleFired(action: Stats.RuleAction.pin)
             case .archive, .markDone, .silentlyIgnore:
                 // Deferred: these mutate the thread list; need the
                 // incoming-message pipeline to fire them at the right
@@ -376,10 +376,10 @@ final class InboxViewModel {
                 switch rule.then {
                 case .setDefaultTone(let tone):
                     if thread.id == selectedThreadID { activeTone = tone }
-                    stats.recordRuleFired(action: "setDefaultTone")
+                    stats.recordRuleFired(action: Stats.RuleAction.setDefaultTone)
                 case .pin:
                     markPinned(thread.id)
-                    stats.recordRuleFired(action: "pin")
+                    stats.recordRuleFired(action: Stats.RuleAction.pin)
                 case .archive, .markDone, .silentlyIgnore:
                     continue
                 }
@@ -890,13 +890,13 @@ final class InboxViewModel {
                 switch rule.then {
                 case .archive:
                     archive(thread.id)
-                    stats.recordRuleFired(action: "archive")
+                    stats.recordRuleFired(action: Stats.RuleAction.archive)
                 case .silentlyIgnore:
                     silentlyIgnoredThreadIDs.insert(thread.id)
-                    stats.recordRuleFired(action: "silentlyIgnore")
+                    stats.recordRuleFired(action: Stats.RuleAction.silentlyIgnore)
                 case .markDone:
                     markUnreadZero(thread.id)
-                    stats.recordRuleFired(action: "markDone")
+                    stats.recordRuleFired(action: Stats.RuleAction.markDone)
                 case .setDefaultTone, .pin:
                     // Focus-time actions — handled in applyRules(for:).
                     continue

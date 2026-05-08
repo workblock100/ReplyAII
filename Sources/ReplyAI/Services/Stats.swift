@@ -146,10 +146,31 @@ final class Stats: @unchecked Sendable {
 
     // MARK: - Writes
 
-    /// Record a rule firing by its action discriminator
-    /// (`archive`, `silentlyIgnore`, `markDone`, `setDefaultTone`,
-    /// `pin`). Unknown strings are tracked verbatim — a typo shows up
-    /// in the stats rather than silently disappearing.
+    /// Stable action-discriminator vocabulary used as keys into
+    /// `Snapshot.rulesFiredByAction`. Hoisted from the inline literals
+    /// at every InboxViewModel call site so a typo in a new call site
+    /// is a compile error rather than a silent split key (a string
+    /// "Pin" instead of "pin" creates a new bucket and partitions the
+    /// counter across two keys, only one of which is read by any
+    /// downstream surface). Drift here also breaks any persisted
+    /// stats from older builds — `Stats.persist()` writes the raw
+    /// strings to disk and a key rename would orphan historical
+    /// counters. Pinned by
+    /// `StatsTests.testRuleActionConstantsAreFrozen` and the
+    /// `*RoutesThroughRuleActionConstant` cluster.
+    enum RuleAction {
+        static let archive          = "archive"
+        static let silentlyIgnore   = "silentlyIgnore"
+        static let markDone         = "markDone"
+        static let setDefaultTone   = "setDefaultTone"
+        static let pin              = "pin"
+    }
+
+    /// Record a rule firing by its action discriminator. Use the
+    /// `Stats.RuleAction.*` constants at call sites — passing a free
+    /// String works (any unknown string is tracked verbatim — a typo
+    /// shows up in the stats rather than silently disappearing) but
+    /// loses the typo-as-compile-error safety net.
     func recordRuleFired(action: String) {
         state.withLock { $0.rulesFiredByAction[action, default: 0] += 1 }
         persist()
