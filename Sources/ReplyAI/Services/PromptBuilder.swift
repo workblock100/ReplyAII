@@ -85,20 +85,37 @@ struct PromptBuilder {
 
     // MARK: - Private
 
-    private static func rawSystemPrompt(tone: Tone) -> String {
-        let base = """
+    /// System-prompt base + per-tone suffix vocabulary. Hoisted from
+    /// the inline literals inside `rawSystemPrompt(tone:)`. The base
+    /// instruction (output-only-the-reply-text, no preamble) is the
+    /// most load-bearing copy in the entire app — the model's first-
+    /// turn instructions determine whether the inbox sees raw replies
+    /// or "Sure! Here's a reply:" preambles. Each tone suffix is the
+    /// entire signal that distinguishes warm from direct from playful
+    /// outputs at inference time. Drift in any of these silently
+    /// changes draft style for every shipped user. Pinned by
+    /// `PromptBuilderTests.testSystemPromptBaseIsFrozen` and
+    /// `testSystemPromptToneSuffixesAreFrozen`.
+    enum SystemPrompt {
+        /// Common base attached to every tone variant. Sets the
+        /// "output-only" contract that suppresses model preambles.
+        static let base = """
         You are ReplyAI, a drafting assistant embedded in the user's messaging inbox. \
         You write the user's next reply in their own voice. Output ONLY the reply text \
         itself — no preamble, no apology, no meta-commentary. Keep replies concise and \
         conversational; these are text messages, not essays.
         """
+
+        static let warmSuffix    = " Use a warm, friendly tone. Light emoji are fine. Avoid sounding corporate."
+        static let directSuffix  = " Be direct. Short. Lowercase. Get to the point. No filler."
+        static let playfulSuffix = " Be playful and witty with dry humor; occasional emoji are welcome."
+    }
+
+    private static func rawSystemPrompt(tone: Tone) -> String {
         switch tone {
-        case .warm:
-            return base + " Use a warm, friendly tone. Light emoji are fine. Avoid sounding corporate."
-        case .direct:
-            return base + " Be direct. Short. Lowercase. Get to the point. No filler."
-        case .playful:
-            return base + " Be playful and witty with dry humor; occasional emoji are welcome."
+        case .warm:    return SystemPrompt.base + SystemPrompt.warmSuffix
+        case .direct:  return SystemPrompt.base + SystemPrompt.directSuffix
+        case .playful: return SystemPrompt.base + SystemPrompt.playfulSuffix
         }
     }
 

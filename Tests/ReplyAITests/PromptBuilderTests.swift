@@ -734,4 +734,64 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("\n- no worries\n"),
             "second voice example must render on its own line as `- no worries` — got prompt: \(prompt)")
     }
+
+    // MARK: - SystemPrompt freeze + route-through
+
+    /// Pin the system-prompt base. The `Output ONLY the reply text`
+    /// instruction is the entire signal that suppresses model
+    /// preambles ("Sure! Here's a reply:"). Drift here silently
+    /// changes every shipped user's draft style.
+    func testSystemPromptBaseIsFrozen() {
+        let expected = """
+        You are ReplyAI, a drafting assistant embedded in the user's messaging inbox. \
+        You write the user's next reply in their own voice. Output ONLY the reply text \
+        itself — no preamble, no apology, no meta-commentary. Keep replies concise and \
+        conversational; these are text messages, not essays.
+        """
+        XCTAssertEqual(PromptBuilder.SystemPrompt.base, expected)
+    }
+
+    /// Pin the per-tone suffixes. Each suffix is the entire signal
+    /// distinguishing draft style at inference time — drift to a
+    /// re-worded suffix changes every draft generated under that tone.
+    func testSystemPromptToneSuffixesAreFrozen() {
+        XCTAssertEqual(PromptBuilder.SystemPrompt.warmSuffix,
+                       " Use a warm, friendly tone. Light emoji are fine. Avoid sounding corporate.")
+        XCTAssertEqual(PromptBuilder.SystemPrompt.directSuffix,
+                       " Be direct. Short. Lowercase. Get to the point. No filler.")
+        XCTAssertEqual(PromptBuilder.SystemPrompt.playfulSuffix,
+                       " Be playful and witty with dry humor; occasional emoji are welcome.")
+    }
+
+    /// Route-through: every tone's `systemPrompt(tone:)` output must
+    /// be the base concatenated with the matching suffix, byte-for-
+    /// byte. Catches a refactor that defines the constants but
+    /// rebuilds the switch with a slightly-different inline string.
+    func testSystemPromptRoutesThroughBaseAndSuffix() {
+        let warm    = PromptBuilder.systemPrompt(tone: .warm)
+        let direct  = PromptBuilder.systemPrompt(tone: .direct)
+        let playful = PromptBuilder.systemPrompt(tone: .playful)
+        XCTAssertEqual(warm,    PromptBuilder.SystemPrompt.base + PromptBuilder.SystemPrompt.warmSuffix)
+        XCTAssertEqual(direct,  PromptBuilder.SystemPrompt.base + PromptBuilder.SystemPrompt.directSuffix)
+        XCTAssertEqual(playful, PromptBuilder.SystemPrompt.base + PromptBuilder.SystemPrompt.playfulSuffix)
+    }
+
+    /// Pin the partition invariant: the three suffixes are pairwise
+    /// distinct AND each one starts with a leading space. The leading
+    /// space is the only separator between base and suffix; drift to
+    /// a non-space-prefix suffix would silently produce
+    /// "essays.Use a warm…" with no separator.
+    func testSystemPromptToneSuffixesArePairwiseDistinctAndSpacePrefixed() {
+        let suffixes = [
+            PromptBuilder.SystemPrompt.warmSuffix,
+            PromptBuilder.SystemPrompt.directSuffix,
+            PromptBuilder.SystemPrompt.playfulSuffix,
+        ]
+        XCTAssertEqual(Set(suffixes).count, suffixes.count,
+            "tone suffixes must be pairwise distinct — collision merges two tones into one inference behavior")
+        for s in suffixes {
+            XCTAssertTrue(s.hasPrefix(" "),
+                "tone suffix must start with a space so concatenation produces `essays. Use…` not `essays.Use…` — got: \(s)")
+        }
+    }
 }
