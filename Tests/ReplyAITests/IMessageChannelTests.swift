@@ -2015,6 +2015,44 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
                        "seconds and nanoseconds encodings of the same instant must format identically")
     }
 
+    /// Pin a divergence between `formatTime` and `formatRelative` on
+    /// `appleDate: 0` (the chat.db sentinel for "no timestamp populated"):
+    ///
+    /// - `formatRelative(0)` returns `TimeFormat.noTimestampSentinel`
+    ///   (an empty string) — pinned by `testFormatRelativeZeroAppleDateReturnsEmptySentinel`.
+    /// - `formatTime(0)` has NO zero-guard. It evaluates
+    ///   `Date(timeIntervalSinceReferenceDate: 0)` (= 2001-01-01 UTC) and
+    ///   formats via the `h:mm a` pattern, producing a real time-of-day
+    ///   string. The exact rendering is timezone-dependent so we don't
+    ///   pin the literal output, but we DO pin two structural invariants:
+    ///   the result is non-empty AND contains at least one digit.
+    ///
+    /// The two callsites serve different ThreadRow surfaces (formatTime
+    /// for the always-rendered absolute time chip; formatRelative for the
+    /// rolling sidebar chip), and the divergence on `appleDate: 0` means
+    /// a chat.db row whose `message.date` is null/zero will render with
+    /// a real-looking time stamp via `formatTime` but a blank chip via
+    /// `formatRelative`. Drift toward harmonizing — adding a zero guard
+    /// to `formatTime`, or removing it from `formatRelative` — is a
+    /// deliberate UX call. Pin so the divergence shows up in code review
+    /// rather than as a quiet visual change.
+    func testFormatTimeZeroDoesNotEarlyReturnAndDivergesFromFormatRelative() {
+        let timeResult = IMessageChannel.formatTime(appleDate: 0)
+        XCTAssertFalse(timeResult.isEmpty,
+            "formatTime(0) must produce a non-empty string — there's no early-return guard for the zero sentinel; the formatter runs against 2001-01-01 verbatim")
+        XCTAssertTrue(timeResult.contains(where: { $0.isNumber }),
+            "formatTime(0) result must look like a time-of-day chip (contain at least one digit), got: '\(timeResult)'")
+
+        // Sibling: formatRelative DOES guard on zero. Cross-pin the
+        // divergence so harmonization on either side surfaces here.
+        XCTAssertEqual(IMessageChannel.formatRelative(appleDate: 0),
+                       IMessageChannel.TimeFormat.noTimestampSentinel,
+            "control: formatRelative(0) returns the empty noTimestampSentinel — drift toward 'always render a time' on this side would converge with formatTime and remove the divergence pinned here")
+        XCTAssertNotEqual(timeResult,
+                          IMessageChannel.TimeFormat.noTimestampSentinel,
+            "the cross-pin: formatTime(0) MUST diverge from formatRelative(0) — same input, different shapes — drift toward formatTime adopting a zero-guard would silently break this assertion")
+    }
+
     // MARK: - TimeFormat vocabulary pins (REP-hoist 2026-05-07)
     //
     // The four ThreadRow time-chip patterns (`timeOfDay`, `weekdayShort`,
