@@ -558,4 +558,58 @@ final class SlackHTTPClientTests: XCTestCase {
         XCTAssertEqual(url, "https://slack.com/api/chat.postMessage",
             "POST URL must equal the apiBase + endpoint exactly — drift here would surface as 404 errors in production only")
     }
+
+    // MARK: - Hoisted-constant pins
+    //
+    // The user-visible error copy + auth headers used to be inlined twice
+    // (once in `get`, once in `post`). They've been hoisted to
+    // `URLSessionSlackClient.ErrorMessage` and `.Header` so the two verbs
+    // share one source of truth. These tests pin the literal values so
+    // a typo in either struct can't silently degrade only one verb's
+    // user-facing copy or auth scheme.
+
+    func testErrorMessageLiteralsAreFrozen() {
+        XCTAssertEqual(
+            URLSessionSlackClient.ErrorMessage.unusableResponse,
+            "Slack didn't return a usable response. Check your connection and try again."
+        )
+        XCTAssertEqual(
+            URLSessionSlackClient.ErrorMessage.rateLimited,
+            "Slack is rate-limiting us right now. Wait a moment, then try again."
+        )
+        XCTAssertEqual(
+            URLSessionSlackClient.ErrorMessage.unexpected(status: 503),
+            "Slack returned an unexpected error (status 503). Try again shortly."
+        )
+    }
+
+    func testHeaderLiteralsAreFrozen() {
+        XCTAssertEqual(URLSessionSlackClient.Header.authorizationField, "Authorization")
+        XCTAssertEqual(URLSessionSlackClient.Header.contentTypeField,   "Content-Type")
+        XCTAssertEqual(URLSessionSlackClient.Header.contentTypeJSON,    "application/json; charset=utf-8")
+        XCTAssertEqual(URLSessionSlackClient.Header.bearer("xoxb-abc"), "Bearer xoxb-abc")
+    }
+
+    func testGetAndPostShareSameUnusableResponseCopy() async {
+        // Both verbs go through the same `handle(response:data:)` helper, so the
+        // exact error.localizedDescription emitted on a non-HTTPURLResponse must
+        // be identical for `get` and `post`. This is the regression class hoisting
+        // was meant to prevent (a typo in only one verb's copy).
+        let session = MockHTTPSession(returnsNonHTTPURLResponse: true)
+        let client = URLSessionSlackClient(session: session)
+
+        var getMessage: String?
+        var postMessage: String?
+        do { _ = try await client.get(endpoint: "auth.test", token: "t", params: [:]) }
+        catch let ChannelError.networkError(msg) { getMessage = msg }
+        catch { XCTFail("expected networkError, got \(error)") }
+        do { _ = try await client.post(endpoint: "chat.postMessage", token: "t", json: [:]) }
+        catch let ChannelError.networkError(msg) { postMessage = msg }
+        catch { XCTFail("expected networkError, got \(error)") }
+
+        XCTAssertNotNil(getMessage)
+        XCTAssertEqual(getMessage, postMessage,
+            "GET and POST must surface the same user-visible copy for the unusable-response failure mode")
+        XCTAssertEqual(getMessage, URLSessionSlackClient.ErrorMessage.unusableResponse)
+    }
 }

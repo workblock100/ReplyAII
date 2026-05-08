@@ -21,6 +21,31 @@ protocol SlackHTTPClient: Sendable {
 struct URLSessionSlackClient: SlackHTTPClient {
     private static let apiBase = "https://slack.com/api/"
 
+    /// User-visible error copy reused by both `get` and `post` for identical
+    /// failure modes (no usable response, 429, non-2xx default). Hoisted so
+    /// drift between the two call paths can't leave `get` saying one thing
+    /// and `post` saying another for the same condition. Pinned by
+    /// `SlackHTTPClientTests.testErrorMessageLiteralsAreFrozen`.
+    enum ErrorMessage {
+        static let unusableResponse = "Slack didn't return a usable response. Check your connection and try again."
+        static let rateLimited      = "Slack is rate-limiting us right now. Wait a moment, then try again."
+        static func unexpected(status: Int) -> String {
+            "Slack returned an unexpected error (status \(status)). Try again shortly."
+        }
+    }
+
+    /// HTTP request header constants. The bearer-token authorization header
+    /// is built by every Slack request; the content-type header is only used
+    /// by POST. Hoisting keeps the field name + value formatting consistent
+    /// across `get` and `post`. Pinned by
+    /// `SlackHTTPClientTests.testHeaderLiteralsAreFrozen`.
+    enum Header {
+        static let authorizationField = "Authorization"
+        static let contentTypeField   = "Content-Type"
+        static let contentTypeJSON    = "application/json; charset=utf-8"
+        static func bearer(_ token: String) -> String { "Bearer \(token)" }
+    }
+
     private let session: HTTPSessionProtocol
 
     init(session: HTTPSessionProtocol = URLSession.shared) {
@@ -40,22 +65,10 @@ struct URLSessionSlackClient: SlackHTTPClient {
             throw ChannelError.networkError("Could not build Slack API URL for endpoint: \(endpoint)")
         }
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(Header.bearer(token), forHTTPHeaderField: Header.authorizationField)
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ChannelError.networkError("Slack didn't return a usable response. Check your connection and try again.")
-        }
-        switch http.statusCode {
-        case 200...299:
-            return data
-        case 401:
-            throw ChannelError.authorizationDenied
-        case 429:
-            throw ChannelError.networkError("Slack is rate-limiting us right now. Wait a moment, then try again.")
-        default:
-            throw ChannelError.networkError("Slack returned an unexpected error (status \(http.statusCode)). Try again shortly.")
-        }
+        return try Self.handle(response: response, data: data)
     }
 
     func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
@@ -64,13 +77,21 @@ struct URLSessionSlackClient: SlackHTTPClient {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue(Header.bearer(token), forHTTPHeaderField: Header.authorizationField)
+        request.setValue(Header.contentTypeJSON, forHTTPHeaderField: Header.contentTypeField)
         request.httpBody = try JSONSerialization.data(withJSONObject: json)
 
         let (data, response) = try await session.data(for: request)
+        return try Self.handle(response: response, data: data)
+    }
+
+    /// Shared status-code dispatcher for `get` and `post`. Both endpoints
+    /// route 401 to `authorizationDenied`, 429 to a rate-limit message, and
+    /// other non-2xx codes to a generic message — keeping that decision in
+    /// one place ensures the two paths can't drift.
+    private static func handle(response: URLResponse, data: Data) throws -> Data {
         guard let http = response as? HTTPURLResponse else {
-            throw ChannelError.networkError("Slack didn't return a usable response. Check your connection and try again.")
+            throw ChannelError.networkError(ErrorMessage.unusableResponse)
         }
         switch http.statusCode {
         case 200...299:
@@ -78,9 +99,9 @@ struct URLSessionSlackClient: SlackHTTPClient {
         case 401:
             throw ChannelError.authorizationDenied
         case 429:
-            throw ChannelError.networkError("Slack is rate-limiting us right now. Wait a moment, then try again.")
+            throw ChannelError.networkError(ErrorMessage.rateLimited)
         default:
-            throw ChannelError.networkError("Slack returned an unexpected error (status \(http.statusCode)). Try again shortly.")
+            throw ChannelError.networkError(ErrorMessage.unexpected(status: http.statusCode))
         }
     }
 }
