@@ -24,9 +24,9 @@ final class StatsTests: XCTestCase {
         let stats = Stats(fileURL: tempURL())
         XCTAssertEqual(stats.snapshot(), Stats.Snapshot())
 
-        stats.recordRuleFired(action: "archive")
-        stats.recordRuleFired(action: "archive")
-        stats.recordRuleFired(action: "silentlyIgnore")
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
+        stats.recordRuleFired(action: Stats.RuleAction.silentlyIgnore)
         stats.recordDraftGenerated()
         stats.recordDraftGenerated()
         stats.recordDraftGenerated()
@@ -35,9 +35,9 @@ final class StatsTests: XCTestCase {
         stats.recordMessagesIndexed(8)
 
         let snap = stats.snapshot()
-        XCTAssertEqual(snap.rulesFiredByAction["archive"], 2)
-        XCTAssertEqual(snap.rulesFiredByAction["silentlyIgnore"], 1)
-        XCTAssertNil(snap.rulesFiredByAction["markDone"])
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 2)
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.silentlyIgnore], 1)
+        XCTAssertNil(snap.rulesFiredByAction[Stats.RuleAction.markDone])
         XCTAssertEqual(snap.draftsGenerated, 3)
         XCTAssertEqual(snap.draftsSent, 1)
         XCTAssertEqual(snap.messagesIndexed, 50)
@@ -114,9 +114,9 @@ final class StatsTests: XCTestCase {
         let url = tempURL()
 
         let first = Stats(fileURL: url)
-        first.recordRuleFired(action: "archive")
-        first.recordRuleFired(action: "archive")
-        first.recordRuleFired(action: "pin")
+        first.recordRuleFired(action: Stats.RuleAction.archive)
+        first.recordRuleFired(action: Stats.RuleAction.archive)
+        first.recordRuleFired(action: Stats.RuleAction.pin)
         first.recordDraftGenerated()
         first.recordDraftSent()
         first.recordMessagesIndexed(17)
@@ -129,8 +129,8 @@ final class StatsTests: XCTestCase {
         // Reload through a fresh instance — everything should survive.
         let second = Stats(fileURL: url)
         let reloaded = second.snapshot()
-        XCTAssertEqual(reloaded.rulesFiredByAction["archive"], 2)
-        XCTAssertEqual(reloaded.rulesFiredByAction["pin"], 1)
+        XCTAssertEqual(reloaded.rulesFiredByAction[Stats.RuleAction.archive], 2)
+        XCTAssertEqual(reloaded.rulesFiredByAction[Stats.RuleAction.pin], 1)
         XCTAssertEqual(reloaded.draftsGenerated, 1)
         XCTAssertEqual(reloaded.draftsSent, 1)
         XCTAssertEqual(reloaded.messagesIndexed, 17)
@@ -166,7 +166,7 @@ final class StatsTests: XCTestCase {
             queue.async {
                 for _ in 0..<iterations {
                     stats.recordDraftGenerated()
-                    stats.recordRuleFired(action: "archive")
+                    stats.recordRuleFired(action: Stats.RuleAction.archive)
                     stats.recordMessagesIndexed(1)
                 }
                 group.leave()
@@ -178,7 +178,7 @@ final class StatsTests: XCTestCase {
 
         let snap = stats.snapshot()
         XCTAssertEqual(snap.draftsGenerated, iterations * threads)
-        XCTAssertEqual(snap.rulesFiredByAction["archive"], iterations * threads)
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], iterations * threads)
         XCTAssertEqual(snap.messagesIndexed, iterations * threads)
     }
 
@@ -188,7 +188,7 @@ final class StatsTests: XCTestCase {
         let stats = Stats(fileURL: tempURL())
         stats.recordDraftGenerated()
         stats.recordDraftSent()
-        stats.recordRuleFired(action: "archive")
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
         stats.recordMessagesIndexed(10)
         stats.recordRuleLoadSkips(2)
 
@@ -239,7 +239,7 @@ final class StatsTests: XCTestCase {
         // diffs would otherwise be polluted by Dictionary's hash-order churn.
         let stats = Stats(fileURL: tempURL())
         stats.recordRuleFired(action: "snooze")
-        stats.recordRuleFired(action: "archive")
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
         stats.recordRuleFired(action: "mark-read")
 
         let logURL = tempURL("weekly-sorted-rules.md")
@@ -604,13 +604,13 @@ final class StatsConcurrentMixedCounterTests: XCTestCase {
         let iterations = 100
 
         DispatchQueue.concurrentPerform(iterations: iterations) { _ in
-            stats.recordRuleFired(action: "archive")
+            stats.recordRuleFired(action: Stats.RuleAction.archive)
             stats.recordMessagesIndexed(1)
             stats.incrementIndexed(channel: .imessage, count: 1)
         }
 
         let snap = stats.snapshot()
-        XCTAssertGreaterThanOrEqual(snap.rulesFiredByAction["archive"] ?? 0, iterations,
+        XCTAssertGreaterThanOrEqual(snap.rulesFiredByAction[Stats.RuleAction.archive] ?? 0, iterations,
                                     "all \(iterations) rule-fired increments must be reflected")
         XCTAssertGreaterThanOrEqual(snap.messagesIndexed, iterations,
                                     "all recordMessagesIndexed calls must be reflected")
@@ -683,7 +683,7 @@ final class StatsLifetimePersistenceTests: XCTestCase {
     func testLifetimeCountersSeedFromDisk() throws {
         let url = tempURL()
         let seed = Stats.Snapshot(
-            rulesFiredByAction: ["archive": 7],
+            rulesFiredByAction: [Stats.RuleAction.archive: 7],
             draftsGenerated: 12,
             draftsSent: 3,
             messagesIndexed: 500
@@ -693,7 +693,7 @@ final class StatsLifetimePersistenceTests: XCTestCase {
 
         let stats = Stats(fileURL: url)
         let snap = stats.snapshot()
-        XCTAssertEqual(snap.rulesFiredByAction["archive"], 7,
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 7,
                        "must seed rulesFiredByAction from disk on init")
         XCTAssertEqual(snap.draftsGenerated, 12,
                        "must seed draftsGenerated from disk on init")
@@ -730,11 +730,11 @@ final class StatsLifetimePersistenceTests: XCTestCase {
         let stats = Stats(fileURL: nil)
         stats.recordDraftGenerated()
         stats.recordDraftGenerated()
-        stats.recordRuleFired(action: "pin")
+        stats.recordRuleFired(action: Stats.RuleAction.pin)
 
         // In-memory counters still work correctly.
         XCTAssertEqual(stats.snapshot().draftsGenerated, 2)
-        XCTAssertEqual(stats.snapshot().rulesFiredByAction["pin"], 1)
+        XCTAssertEqual(stats.snapshot().rulesFiredByAction[Stats.RuleAction.pin], 1)
 
         // flushNow() must be a no-op — no crash and no files created.
         stats.flushNow()
@@ -896,7 +896,7 @@ extension StatsTests {
         let stats = Stats(fileURL: tempURL("snap-json-counters.json"))
         stats.recordDraftGenerated(tone: .warm)
         stats.recordDraftSent(tone: .warm)
-        stats.recordRuleFired(action: "pin")
+        stats.recordRuleFired(action: Stats.RuleAction.pin)
         stats.incrementIndexed(channel: .imessage, count: 3)
         let data = try JSONEncoder().encode(stats.snapshot())
         let obj = try XCTUnwrap(
@@ -1048,7 +1048,7 @@ final class StatsResetAndGuardTests: XCTestCase {
         let stats = Stats(fileURL: tempURL())
         stats.recordDraftGenerated()
         stats.recordDraftSent()
-        stats.recordRuleFired(action: "archive")
+        stats.recordRuleFired(action: Stats.RuleAction.archive)
         stats.recordMessagesIndexed(50)
 
         stats.resetIndexedCounters()
@@ -1058,7 +1058,7 @@ final class StatsResetAndGuardTests: XCTestCase {
                        "drafts counter must survive an indexed-counter reset")
         XCTAssertEqual(snap.draftsSent, 1,
                        "drafts-sent counter must survive an indexed-counter reset")
-        XCTAssertEqual(snap.rulesFiredByAction["archive"], 1,
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 1,
                        "rules-fired counter must survive an indexed-counter reset")
         XCTAssertEqual(snap.messagesIndexed, 0)
     }
@@ -1219,7 +1219,7 @@ final class StatsResetAndGuardTests: XCTestCase {
         let snap = stats.snapshot()
         XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 2)
         XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.pin],     1)
-        XCTAssertEqual(snap.rulesFiredByAction["archive"], 2,
+        XCTAssertEqual(snap.rulesFiredByAction[Stats.RuleAction.archive], 2,
             "constants must round-trip to the bare-string key — the snapshot dictionary is keyed on the raw value")
     }
 
