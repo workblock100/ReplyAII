@@ -15,6 +15,16 @@ final class DraftStore: Sendable {
     /// `DraftStoreTests.testFileExtensionIsFrozen`.
     static let fileExtension: String = "md"
 
+    /// On-disk directory name for the drafts folder, relative to
+    /// `~/Library/Application Support/ReplyAI/`. Hoisted so a future
+    /// migration (`drafts2/`, locale-specific subfolders) is a single
+    /// edit instead of grepping for "drafts" across the codebase, and
+    /// every existing install's draft files keep being found until the
+    /// edit is deliberate. Drift here orphans every shipped user's
+    /// drafts folder. Pinned by
+    /// `DraftStoreTests.testDirectoryNameIsFrozen`.
+    static let directoryName: String = "drafts"
+
     private let draftsDirectory: URL
 
     /// Production init uses ~/Library/Application Support/ReplyAI/drafts/.
@@ -29,7 +39,7 @@ final class DraftStore: Sendable {
             ).first!
             self.draftsDirectory = appSupport
                 .appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
-                .appendingPathComponent("drafts", isDirectory: true)
+                .appendingPathComponent(Self.directoryName, isDirectory: true)
         }
         try? FileManager.default.createDirectory(
             at: self.draftsDirectory,

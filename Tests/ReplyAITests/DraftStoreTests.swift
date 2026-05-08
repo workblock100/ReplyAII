@@ -440,4 +440,42 @@ final class DraftStoreTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: tempDir)
     }
+
+    // MARK: - Directory name pin (REP-hoist 2026-05-07)
+    //
+    // The directory name `drafts` is the path segment under
+    // `~/Library/Application Support/ReplyAI/` where every persisted
+    // draft lives. Drift here is a silent migration that orphans every
+    // shipped user's drafts folder — the install's old folder stays on
+    // disk while the new build creates an empty new one and shows no
+    // drafts in the composer pre-populate flow. Pin the literal so a
+    // rename is a deliberate test edit.
+
+    func testDirectoryNameIsFrozen() {
+        XCTAssertEqual(DraftStore.directoryName, "drafts",
+            "DraftStore.directoryName drift orphans every shipped user's drafts folder — the install's old folder stays on disk while the new build creates an empty new one")
+    }
+
+    func testProductionPathContainsDirectoryName() {
+        // The production init (no draftsDirectory override) must compose
+        // a path containing `Preferences.appSupportDirectoryName/<directoryName>/`.
+        // Tests can't directly inspect the production-init's draftsDirectory
+        // (it's private), but we can assert the directoryName constant ends
+        // up in the path component by writing a draft via production init,
+        // then enumerating App Support to see if a `drafts/` subdirectory
+        // was created. Skip if the writer can't reach App Support (sandbox).
+        let appSupport = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first
+        guard let appSupport else { return }
+        let expected = appSupport
+            .appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(DraftStore.directoryName, isDirectory: true)
+        // Trigger the production init path which creates the directory.
+        _ = DraftStore()
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: expected.path, isDirectory: &isDir)
+        XCTAssertTrue(exists && isDir.boolValue,
+            "production init must create `<AppSupport>/<\(Preferences.appSupportDirectoryName)>/\(DraftStore.directoryName)/` — drift here orphans every install's drafts folder")
+    }
 }
