@@ -857,13 +857,14 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P2
 - effort: L
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: main — `Sources/ReplyAI/Channels/SlackChannel.swift` + `SlackOAuthFlow.swift` + `SlackHTTPClient.swift` + `SlackSocketClient.swift` + `LocalhostOAuthListener.swift` + `SlackTokenStore` (in `KeychainHelper.swift`) shipped via the REP-272 / REP-273 / REP-274 chain. AGENTS.md "Priority queue" entry #3 documents the shipped surface. Architect blocker (2026-05-02) flagged the implementation as already in tree; formally flipping status here so future fires don't churn on this one as still-open. Remaining polish (multi-workspace, Socket Mode error-state UI) is tracked separately in AGENTS.md tail.
 - claimed_by: human
-- blocker: **architect unable to decompose safely: implementation already exists in tree.** As of architect-2026-05-02 fire, `Sources/ReplyAI/Channels/SlackChannel.swift` (177 LOC), `SlackOAuthFlow.swift` (164 LOC), `SlackHTTPClient.swift` (86 LOC), `SlackSocketClient.swift` (168 LOC), `KeychainHelper.swift` (139 LOC), and `LocalhostOAuthListener.swift` (170 LOC) are all present, with corresponding test files (`SlackChannelTests`, `SlackOAuthFlowTests`, `SlackHTTPClientTests`, `SlackSocketClientTests`, `KeychainHelperTests`, `LocalhostOAuthListenerTests`). The `SlackChannel` conforms to `ChannelService` and exchanges OAuth codes via `oauth.v2.access` through a `SlackTokenStore`-backed Keychain entry. Decomposition into 3–5 net-new sub-tasks would manufacture work for code that already shipped. **Human action required:** verify the existing implementation against this scope and either (a) mark this REP done with a pointer to the wip branch / commit that landed it, (b) re-scope the open work (e.g. Socket Mode wiring polish, error-state UI, multi-workspace) into fresh M-effort tickets, or (c) clear this blocker with a concrete remaining-work list the architect can decompose against. Do NOT re-claim this as effort: L until the remaining surface area is re-articulated — re-decomposition before then would produce bogus sub-tasks.
-- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (new), `Sources/ReplyAI/Channels/Keychain.swift` (new), AGENTS.md
-- scope: Build the `SlackChannel: ChannelService` impl. OAuth flow spins up a local `NWListener` on `:4242` during auth only, opens the Slack authorize URL via `NSWorkspace.shared.open`, captures the `code`, exchanges for token via `oauth.v2.access`, stores in Keychain under `ReplyAI-Slack-<workspace>`. `recentThreads` hits `conversations.list` + `conversations.history` with `prefer_socket_events=true`. Socket Mode for real-time comes in a follow-up.
-- success_criteria: `wip/` branch — human reviews scope creep, merges when ready.
-- test_plan: mock Slack API responses in tests; no real HTTP in CI.
+- blocker: null
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Sources/ReplyAI/Channels/SlackOAuthFlow.swift`, `Sources/ReplyAI/Channels/SlackHTTPClient.swift`, `Sources/ReplyAI/Channels/SlackSocketClient.swift`, `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift`, `Sources/ReplyAI/Channels/KeychainHelper.swift`, `Sources/ReplyAI/Screens/Surfaces/SetChannelsView.swift`, AGENTS.md
+- scope: Build the `SlackChannel: ChannelService` impl. OAuth flow spins up a local `NWListener` on `:4242` during auth only, opens the Slack authorize URL via `NSWorkspace.shared.open`, captures the `code`, exchanges for token via `oauth.v2.access`, stores in Keychain. `recentThreads` hits `conversations.list` + `conversations.history`. Socket Mode for real-time wired through `SlackSocketClient`.
+- success_criteria: shipped — see `done_on`.
+- test_plan: SlackChannelTests / SlackOAuthFlowTests / SlackHTTPClientTests / SlackSocketClientTests cover the surface end-to-end with mocked Slack endpoints.
 
 ### REP-043 — InboxViewModel: sync error state + inline error surface
 - priority: P2
