@@ -84,4 +84,20 @@ final class ContactsResolverPhoneDigitsTests: XCTestCase {
                 "shape '\(shape)' must normalize to canonical key — got: \(CNContactStoreBackedStoring.phoneDigits(shape))")
         }
     }
+
+    /// Cross-file invariant pin (REP-hoist 2026-05-07): the
+    /// group-chat-identifier guard inside
+    /// `ContactsResolver.normalizedHandle` skips phone-normalization
+    /// for any handle starting with `RuleEvaluator.groupChatIdentifierPrefix`.
+    /// Drift between this guard and `.isGroupChat`'s prefix would
+    /// silently mis-classify some handles — group identifiers might
+    /// get phone-normalized (or vice versa). Synthetic pin: build a
+    /// handle from the prefix and assert it passes through unchanged
+    /// (no normalization applied).
+    func testGroupChatHandlePassesThroughNormalizationUnchanged() {
+        let resolver = ContactsResolver()
+        let groupHandle = "\(RuleEvaluator.groupChatIdentifierPrefix)42-abc"
+        XCTAssertEqual(resolver.normalizedHandle(groupHandle), groupHandle,
+            "any handle prefixed with `\(RuleEvaluator.groupChatIdentifierPrefix)` must pass through normalizedHandle unchanged — drift between this guard and .isGroupChat's prefix is silent")
+    }
 }

@@ -181,8 +181,14 @@ final class ContactsResolver: @unchecked Sendable {
     /// Collapse E.164 variants to a 10-digit canonical form so `+14155551234`,
     /// `14155551234`, and `4155551234` all share the same cache entry.
     /// Non-phone handles (email addresses, group chat IDs) pass through unchanged.
+    /// Routes through `RuleEvaluator.groupChatIdentifierPrefix` so this guard
+    /// stays aligned with `.isGroupChat`'s definition of "is a group chat
+    /// identifier" — drift between them would silently mis-classify some
+    /// group handles for either group-chat rule firing or phone-normalization.
     internal func normalizedHandle(_ handle: String) -> String {
-        guard !handle.contains("@"), !handle.hasPrefix("chat") else { return handle }
+        guard !handle.contains("@"),
+              !handle.hasPrefix(RuleEvaluator.groupChatIdentifierPrefix)
+        else { return handle }
         let digits = handle.filter(\.isNumber)
         guard digits.count >= 10 else { return handle }
         if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
