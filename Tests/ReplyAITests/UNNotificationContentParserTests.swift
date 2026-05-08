@@ -26,9 +26,9 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "Alice",
             body: "Hey, what time is the meeting?",
             userInfo: [
-                "CKSenderID": "+15551234567",
-                "sender": "alice@example.com",
-                "CKChatIdentifier": "iMessage;-;+15551234567"
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "+15551234567",
+                UNNotificationContentParser.UserInfoKey.sender: "alice@example.com",
+                UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "iMessage;-;+15551234567"
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -45,7 +45,7 @@ final class UNNotificationContentParserTests: XCTestCase {
         let content = makeContent(
             title: "Fallback Title",
             body: "See you tomorrow",
-            userInfo: ["sender": "bob@example.com"]
+            userInfo: [UNNotificationContentParser.UserInfoKey.sender: "bob@example.com"]
         )
         let result = UNNotificationContentParser.parse(content)
         XCTAssertNotNil(result)
@@ -85,8 +85,8 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "",
             body: "Test",
             userInfo: [
-                "CKSenderID": "+15559876543",
-                "CKChatIdentifier": "iMessage;+;chat9876543210"
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "+15559876543",
+                UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "iMessage;+;chat9876543210"
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -98,8 +98,8 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "",
             body: "Test",
             userInfo: [
-                "CKSenderID": "+15559876543",
-                "CKChatGUID": "iMessage;-;+15559876543"
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "+15559876543",
+                UNNotificationContentParser.UserInfoKey.ckChatGUID: "iMessage;-;+15559876543"
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -111,7 +111,7 @@ final class UNNotificationContentParserTests: XCTestCase {
         let content = makeContent(
             title: "",
             body: "Test",
-            userInfo: ["CKSenderID": "+15550001111"]
+            userInfo: [UNNotificationContentParser.UserInfoKey.ckSenderID: "+15550001111"]
         )
         let result = UNNotificationContentParser.parse(content)
         XCTAssertNotNil(result)
@@ -129,8 +129,8 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "Title",
             body: "body",
             userInfo: [
-                "CKSenderID": "",
-                "sender": "real-sender@example.com"
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "",
+                UNNotificationContentParser.UserInfoKey.sender: "real-sender@example.com"
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -145,7 +145,7 @@ final class UNNotificationContentParserTests: XCTestCase {
         let content = makeContent(
             title: "Real Title",
             body: "body",
-            userInfo: ["sender": ""]
+            userInfo: [UNNotificationContentParser.UserInfoKey.sender: ""]
         )
         let result = UNNotificationContentParser.parse(content)
         XCTAssertEqual(result?.senderHandle, "Real Title")
@@ -162,9 +162,9 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "",
             body: "Test",
             userInfo: [
-                "CKSenderID": "+15550000000",
-                "CKChatIdentifier": "",
-                "CKChatGUID": "iMessage;-;+15550000000"
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "+15550000000",
+                UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "",
+                UNNotificationContentParser.UserInfoKey.ckChatGUID: "iMessage;-;+15550000000"
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -201,8 +201,8 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "TitleFallback",
             body: "msg",
             userInfo: [
-                "CKSenderID": NSNumber(value: 15551234567),  // numeric handle, not String
-                "sender":     NSNull()                       // explicit null, not String
+                UNNotificationContentParser.UserInfoKey.ckSenderID: NSNumber(value: 15551234567),  // numeric handle, not String
+                UNNotificationContentParser.UserInfoKey.sender:     NSNull()                       // explicit null, not String
             ]
         )
         let result = UNNotificationContentParser.parse(content)
@@ -216,8 +216,8 @@ final class UNNotificationContentParserTests: XCTestCase {
             title: "Alice",
             body: "msg",
             userInfo: [
-                "CKChatIdentifier": NSNumber(value: 42),  // not a String
-                "CKChatGUID":       NSNull()              // not a String
+                UNNotificationContentParser.UserInfoKey.ckChatIdentifier: NSNumber(value: 42),  // not a String
+                UNNotificationContentParser.UserInfoKey.ckChatGUID:       NSNull()              // not a String
             ]
         )
         let result = UNNotificationContentParser.parse(content)
