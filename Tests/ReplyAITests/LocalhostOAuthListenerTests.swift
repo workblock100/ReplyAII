@@ -539,4 +539,49 @@ final class LocalhostOAuthListenerTests: XCTestCase {
                        OAuthError.tokenExchangeFailedPrefix + "rejected",
             ".tokenExchangeFailed errorDescription must compose `tokenExchangeFailedPrefix + msg` byte-for-byte")
     }
+
+    // MARK: - Synthetic parse-URL host + listener-creation reason format
+
+    /// Pin the loopback host string used to feed captured request paths
+    /// through `URL(string:)` for query-item extraction. Drift to a
+    /// host that `URL(string:)` rejects (e.g. dropping the `http://`
+    /// scheme) silently makes every callback get dropped.
+    func testSyntheticParseURLHostIsFrozen() {
+        XCTAssertEqual(LocalhostOAuthListener.syntheticParseURLHost,
+                       "http://localhost")
+        // Synthesizing with a typical request path must produce a URL
+        // that URL(string:) accepts.
+        let url = URL(string: "\(LocalhostOAuthListener.syntheticParseURLHost)/?code=abc")
+        XCTAssertNotNil(url,
+            "synthetic host + path must produce a URL the parser can extract query items from")
+    }
+
+    /// Pin the parameterized listener-creation failure-reason format.
+    /// Embeds the requested port (only triage signal — was 4242 in
+    /// use?) and the underlying error description. Drift drops either
+    /// signal.
+    func testListenerCreationFailureFormatRoundTrips() {
+        struct Boom: Error, CustomStringConvertible {
+            var description: String { "address already in use" }
+        }
+        let reason = LocalhostOAuthListener.listenerCreationFailureReason(
+            port: 4242, error: Boom())
+        XCTAssertEqual(reason,
+                       "Could not create NWListener on port 4242: address already in use")
+        XCTAssertTrue(reason.contains("4242"),
+            "reason must surface the requested port so triage can confirm whether the port was occupied")
+    }
+
+    /// Pin the integer port appears in the reason regardless of value.
+    /// Catches a future refactor that surfaces the port as a hex form
+    /// or drops it.
+    func testListenerCreationFailureFormatEmbedsRawPort() {
+        struct Boom: Error {}
+        let reason1 = LocalhostOAuthListener.listenerCreationFailureReason(port: 0,    error: Boom())
+        let reason2 = LocalhostOAuthListener.listenerCreationFailureReason(port: 8080, error: Boom())
+        XCTAssertTrue(reason1.contains("port 0"),
+            "raw integer port (0) must appear in the reason — drift to hex or symbolic form loses triage signal")
+        XCTAssertTrue(reason2.contains("port 8080"),
+            "raw integer port (8080) must appear in the reason")
+    }
 }

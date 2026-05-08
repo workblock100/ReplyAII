@@ -47,6 +47,29 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     /// `LocalhostOAuthListenerTests.testCodeQueryParameterNameIsFrozen`.
     static let codeQueryParameterName = "code"
 
+    /// Synthetic URL host used to feed the captured request path through
+    /// `URL(string:)` + `URLComponents` for query-item extraction. The
+    /// listener captures the request line as `GET /?code=abc HTTP/1.1`
+    /// and only has the path; we synthesize a full URL with the loopback
+    /// host so URLComponents can parse it. Drift to a different host
+    /// (e.g. dropping the `http://` scheme) silently makes
+    /// `URL(string:)` return nil for every request and every callback
+    /// gets dropped. The port and path don't matter for this synthetic
+    /// — we only care that URLComponents accepts it.
+    static let syntheticParseURLHost = "http://localhost"
+
+    /// Format the listener-creation failure reason embedded in
+    /// `.listenerFailed(reason)`. Surfaces in the user toast prefixed
+    /// with `OAuthError.listenerFailedPrefix` ("Couldn't open the
+    /// local callback server: "). The format embeds the requested port
+    /// (the only signal a triage engineer has — was 4242 in use?) and
+    /// the underlying error description (e.g. "address already in
+    /// use"). Drift drops either signal. Pinned by
+    /// `LocalhostOAuthListenerTests.testListenerCreationFailureFormatRoundTrips`.
+    static func listenerCreationFailureReason(port: UInt16, error: Error) -> String {
+        "Could not create NWListener on port \(port): \(error)"
+    }
+
     private let preferredPort: UInt16
     private let timeout: TimeInterval
 
@@ -100,7 +123,8 @@ final class LocalhostOAuthListener: @unchecked Sendable {
         do {
             newListener = try NWListener(using: .tcp, on: nwPort)
         } catch {
-            finish(with: .failure(.listenerFailed("Could not create NWListener on port \(preferredPort): \(error)")))
+            finish(with: .failure(.listenerFailed(
+                Self.listenerCreationFailureReason(port: preferredPort, error: error))))
             return
         }
 
@@ -175,7 +199,7 @@ final class LocalhostOAuthListener: @unchecked Sendable {
             // a missing `code` param: it can't satisfy the token-exchange POST,
             // so silently drop and let the timeout govern instead of completing
             // with an empty string a downstream caller would have to re-validate.
-            guard let url = URL(string: "http://localhost\(rawPath)"),
+            guard let url = URL(string: "\(Self.syntheticParseURLHost)\(rawPath)"),
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
                   let code = components.queryItems?.first(where: { $0.name == Self.codeQueryParameterName })?.value,
                   !code.isEmpty
