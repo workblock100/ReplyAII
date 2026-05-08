@@ -3544,4 +3544,18 @@ final class InboxViewModelMessagesForThreadTests: XCTestCase {
         XCTAssertFalse(result.isEmpty,
             "without liveMessages, the fixture fallback must populate the detail pane (otherwise the demo flow shows an empty thread)")
     }
+
+    // MARK: - Incoming-notification time-label freeze
+
+    /// Pin the user-visible time-chip label applied to a thread when
+    /// an incoming UNNotification updates (or creates) it. Routes
+    /// through the hoisted constant so a copy edit ("now" → "Now",
+    /// "just now") is an intentional review surface — drift between
+    /// the refresh-existing and create-new code paths in
+    /// `applyIncomingNotification` is silent in user UX.
+    func testIncomingNotificationTimeLabelIsFrozen() {
+        XCTAssertEqual(InboxViewModel.incomingNotificationTimeLabel, "now")
+        XCTAssertFalse(InboxViewModel.incomingNotificationTimeLabel.isEmpty,
+            "an empty time label leaves the inbox row's time chip blank — every notification-driven row would render with no temporal cue")
+    }
 }

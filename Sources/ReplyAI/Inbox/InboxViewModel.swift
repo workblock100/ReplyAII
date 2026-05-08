@@ -439,6 +439,19 @@ final class InboxViewModel {
 
     // MARK: - Incoming notification capture (REP-235)
 
+    /// User-visible time-chip value applied to a thread when an
+    /// incoming UNNotification updates (or creates) it. The chat.db
+    /// sync layer subsequently overwrites this with a real formatted
+    /// timestamp, but until that sync fires the inbox row shows this
+    /// literal. Surfaces in the sidebar — drift to a different glyph
+    /// (lowercase "now", "Now", "just now") is a UX change. Used at
+    /// TWO call sites in `applyIncomingNotification` (refresh-existing
+    /// vs create-new); drift between the two would have a refreshed
+    /// row show one label while a brand-new row shows another.
+    /// Pinned by
+    /// `InboxViewModelTests.testIncomingNotificationTimeLabelIsFrozen`.
+    static let incomingNotificationTimeLabel: String = "now"
+
     /// `true` when a successful chat.db sync is active. When false, the
     /// UNNotification capture path is the only real-time source of thread data.
     var chatDBAvailable: Bool {
@@ -470,7 +483,7 @@ final class InboxViewModel {
             let t = threads[idx]
             threads[idx] = MessageThread(
                 id: t.id, channel: t.channel, name: t.name, avatar: t.avatar,
-                preview: preview, time: "now", unread: t.unread + 1,
+                preview: preview, time: InboxViewModel.incomingNotificationTimeLabel, unread: t.unread + 1,
                 pinned: t.pinned, contextCount: t.contextCount,
                 contextSummary: t.contextSummary, chatGUID: t.chatGUID,
                 hasAttachment: t.hasAttachment
@@ -484,7 +497,7 @@ final class InboxViewModel {
                 name: senderHandle,
                 avatar: senderHandle,
                 preview: preview,
-                time: "now",
+                time: InboxViewModel.incomingNotificationTimeLabel,
                 unread: 1
             ), at: 0)
         }
