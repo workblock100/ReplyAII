@@ -1058,4 +1058,43 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
         XCTAssertEqual(IMessageSender.smsServiceID, "SMS",
             "smsServiceID drift breaks the synthesized SMS-relay GUID format AND the SMS GUID validator simultaneously")
     }
+
+    // MARK: - chat-GUID format pin
+    //
+    // The chat-GUID wire format is `<service>;<style>;<identifier>` —
+    // semicolons at fixed positions, with a single-char style marker
+    // (`-` for 1:1, `+` for group). The synthesis path joins those
+    // fields back into a string; the validator splits an incoming GUID
+    // and checks each field. Drift between synthesis and validation
+    // means the validator no longer accepts what synthesis produces —
+    // every send fails `invalidChatGUID` immediately. Hoisted to
+    // `chatGUIDFieldSeparator`, `chatGUID1to1Marker`, `chatGUIDGroupMarker`,
+    // and the convenience `chatGUID1to1Separator` (`";-;"`) used by
+    // both synthesis sites. Pin the literals so a future "let's
+    // normalize to / instead of ;" lands deliberately.
+
+    func testChatGUIDDelimitersAreFrozen() {
+        XCTAssertEqual(IMessageSender.chatGUIDFieldSeparator, ";",
+            "chatGUIDFieldSeparator must remain `;` — it's the field delimiter Messages.app and chat.db both project")
+        XCTAssertEqual(IMessageSender.chatGUID1to1Separator, ";-;",
+            "chatGUID1to1Separator must equal `;-;` — drift desyncs synthesis from validation and rejects every send")
+    }
+
+    func testChatGUIDStyleMarkersAreFrozen() {
+        XCTAssertEqual(IMessageSender.chatGUID1to1Marker, "-",
+            "chatGUID1to1Marker must remain `-` — Messages.app encodes 1:1 chats with this marker, group chats with `+`")
+        XCTAssertEqual(IMessageSender.chatGUIDGroupMarker, "+",
+            "chatGUIDGroupMarker must remain `+` — drift desyncs the validator from real chat.db-projected GUIDs for group threads")
+    }
+
+    /// Round-trip pin: a GUID synthesized via the constants must validate
+    /// via the constants. Catches drift where synthesis changes shape but
+    /// validation doesn't (or vice versa).
+    func testSynthesisRoundTripsThroughValidation() throws {
+        let synth = "\(IMessageSender.iMessageServiceID)\(IMessageSender.chatGUID1to1Separator)+15551234567"
+        XCTAssertNoThrow(
+            try IMessageSender.validateChatGUID(synth, for: .imessage),
+            "synthesizing via the hoisted constants and re-validating via the same constants must round-trip"
+        )
+    }
 }

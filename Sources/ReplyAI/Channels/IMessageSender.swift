@@ -59,6 +59,33 @@ enum IMessageSender {
     /// as `iMessageServiceID` but on the SMS-relay path.
     static let smsServiceID = "SMS"
 
+    /// Field separator inside a chat GUID. Messages.app and chat.db both
+    /// project chat GUIDs as `<service>;<style>;<identifier>` — semicolons
+    /// at fixed positions. Used both for synthesis (joining the three
+    /// fields back into a string) and for validation (splitting an
+    /// incoming GUID before checking each field). Drift here means
+    /// validation no longer accepts what synthesis produces. Pinned by
+    /// `IMessageSenderTests.testChatGUIDDelimitersAreFrozen`.
+    static let chatGUIDFieldSeparator: Character = ";"
+
+    /// Style marker for a 1:1 chat GUID (e.g. `iMessage;-;+15551234567`).
+    /// Used in validation to confirm a GUID's middle field; synthesis
+    /// always emits 1:1-shaped GUIDs and therefore always uses this
+    /// marker. Pinned by
+    /// `IMessageSenderTests.testChatGUIDStyleMarkersAreFrozen`.
+    static let chatGUID1to1Marker: Character = "-"
+
+    /// Style marker for a group-chat GUID (e.g. `iMessage;+;chat1234567890`).
+    /// Validation accepts either marker but synthesis only ever emits the
+    /// 1:1 form — group sends require an existing chat.db-projected GUID.
+    static let chatGUIDGroupMarker: Character = "+"
+
+    /// Cached `;<1to1Marker>;` sandwich used by the synthesis path to
+    /// build a 1:1 GUID. Routes both `send(_:toChatIdentifier:)` and
+    /// `chatGUID(for:)` through one constant so a future syntax change
+    /// (e.g. Messages drops the leading `iMessage;` prefix) lands once.
+    static let chatGUID1to1Separator: String = ";-;"
+
     /// `errAEEventNotHandled` — transient. Messages.app accepted the
     /// AppleScript but couldn't dispatch the event (commonly during
     /// startup or iCloud sync). Triggers the `retryDelay` retry path.
@@ -111,7 +138,7 @@ enum IMessageSender {
             throw SendError.unsupported
         }
         let service = channel == .sms ? Self.smsServiceID : Self.iMessageServiceID
-        try sendRaw(text, chatGUID: "\(service);-;\(id)", channel: channel)
+        try sendRaw(text, chatGUID: "\(service)\(Self.chatGUID1to1Separator)\(id)", channel: channel)
     }
 
     // MARK: - Internal
@@ -124,7 +151,7 @@ enum IMessageSender {
     static func chatGUID(for thread: MessageThread) -> String {
         if let guid = thread.chatGUID, !guid.isEmpty { return guid }
         let service = thread.channel == .sms ? Self.smsServiceID : Self.iMessageServiceID
-        return "\(service);-;\(thread.id)"
+        return "\(service)\(Self.chatGUID1to1Separator)\(thread.id)"
     }
 
     private static func sendRaw(_ text: String, chatGUID: String, channel: Channel) throws {
@@ -222,18 +249,24 @@ enum IMessageSender {
     }
 
     private static func isValidIMessageGUID(_ guid: String) -> Bool {
-        let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        let parts = guid.split(separator: Self.chatGUIDFieldSeparator, maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return false }
         guard parts[0] == Substring(Self.iMessageServiceID) else { return false }
-        guard parts[1] == "+" || parts[1] == "-" else { return false }
+        guard parts[1].count == 1,
+              let style = parts[1].first,
+              style == Self.chatGUIDGroupMarker || style == Self.chatGUID1to1Marker
+        else { return false }
         return !parts[2].isEmpty
     }
 
     private static func isValidSMSGUID(_ guid: String) -> Bool {
-        let parts = guid.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        let parts = guid.split(separator: Self.chatGUIDFieldSeparator, maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return false }
         guard parts[0] == Substring(Self.smsServiceID) else { return false }
-        guard parts[1] == "+" || parts[1] == "-" else { return false }
+        guard parts[1].count == 1,
+              let style = parts[1].first,
+              style == Self.chatGUIDGroupMarker || style == Self.chatGUID1to1Marker
+        else { return false }
         return !parts[2].isEmpty
     }
 
