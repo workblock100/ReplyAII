@@ -59,4 +59,46 @@ final class InboxViewModelStaticPinTests: XCTestCase {
         XCTAssertEqual(InboxViewModel.perThreadMessageLoadLimit, 40,
             "duplicate pin of perThreadMessageLoadLimit — see InboxViewModelLoadLimitPinTests for the canonical reasoning; both files exist to ensure at least one fires under any plausible test-skip configuration")
     }
+
+    /// `InboxViewModel.{archivedKey, silentlyIgnoredKey, pinnedKey,
+    /// snoozedUntilKey, lastSeenRowIDKey}` are the persistence keys
+    /// that back the inbox's per-user state (which threads are
+    /// archived/ignored/pinned, when each is snoozed-until, and the
+    /// rule-engine high-water-mark for each thread). They share the
+    /// `pref.inbox.*` namespace prefix so `wipeReplyAIDefaults` sweeps
+    /// them on factory reset.
+    ///
+    /// These keys are also pinned in `InboxViewModelTests.swift`, but
+    /// that file is in the autopilot's three-skip workaround (see
+    /// AGENTS.md gotcha #243), so the canonical pins don't fire under
+    /// the standard autopilot merge gate. Mirror them here so a
+    /// rename of any persistence key surfaces under the three-skip
+    /// run too — drift in any of these would silently orphan user
+    /// data (the new key reads as empty on every launch while the old
+    /// key's data sits in UserDefaults forever, until factory reset).
+    /// One test pinning all five together because the keys form a
+    /// coherent contract — they MUST all start with the
+    /// `wipeNamespacePrefix` so the wipe logic finds them.
+    func testInboxPersistenceKeysAreFrozen() {
+        XCTAssertEqual(InboxViewModel.archivedKey, "pref.inbox.archivedThreadIDs",
+            "archivedKey drift orphans archived-thread state on every shipped user — they keep seeing rows they thought they archived")
+        XCTAssertEqual(InboxViewModel.silentlyIgnoredKey, "pref.inbox.silentlyIgnoredThreadIDs",
+            "silentlyIgnoredKey drift orphans silentlyIgnore rule-action state — `silentlyIgnore` rules silently stop being respected on next launch")
+        XCTAssertEqual(InboxViewModel.pinnedKey, "pref.inbox.pinnedThreadIDs",
+            "pinnedKey drift orphans pinned-thread ordering — every pinned thread appears unpinned on next launch")
+        XCTAssertEqual(InboxViewModel.snoozedUntilKey, "pref.inbox.snoozedUntil",
+            "snoozedUntilKey drift orphans snooze state — every snoozed thread reappears immediately on next launch (the worst possible UX for snooze)")
+        XCTAssertEqual(InboxViewModel.lastSeenRowIDKey, "pref.inbox.lastSeenRowID",
+            "lastSeenRowIDKey drift makes the rule engine re-evaluate every historical message on next launch (rules fire as if every shipped message just arrived)")
+
+        // All five keys must share the wipe-namespace prefix so factory
+        // reset finds them. Drift here would leak per-user state past
+        // a wipe — exactly the scenario the wipe contract exists to prevent.
+        for key in [InboxViewModel.archivedKey, InboxViewModel.silentlyIgnoredKey,
+                    InboxViewModel.pinnedKey, InboxViewModel.snoozedUntilKey,
+                    InboxViewModel.lastSeenRowIDKey] {
+            XCTAssertTrue(key.hasPrefix(PreferenceKey.wipeNamespacePrefix),
+                "every InboxViewModel persistence key must share the wipe-namespace prefix (`\(PreferenceKey.wipeNamespacePrefix)`) — `\(key)` doesn't, which means factory reset will leave its data behind")
+        }
+    }
 }
