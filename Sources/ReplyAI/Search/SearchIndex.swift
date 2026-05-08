@@ -47,6 +47,38 @@ actor SearchIndex {
         INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6);
         """
+
+        /// FTS5 virtual-table DDL for the `messages_fts` schema. The
+        /// column order (`thread_id`, `thread_name`, `sender`, `text`,
+        /// `time`, `channel`) is load-bearing — every INSERT/SELECT in
+        /// `SearchIndex` references columns by position via sqlite3
+        /// parameter binding, AND the `snippetTextColumnIndex`
+        /// constant assumes `text` is column index 3 (zero-indexed).
+        /// Reordering the columns silently produces snippets from the
+        /// wrong column AND writes column data into the wrong slots.
+        /// The tokenize spec `unicode61 remove_diacritics 2` is what
+        /// makes "café" and "cafe" match — drift in the tokenizer
+        /// name or the diacritic-folding level (1 vs 2) changes the
+        /// recall surface for every shipped user. The `IF NOT EXISTS`
+        /// clause makes init idempotent across re-launches; dropping
+        /// it would crash the second launch with `table already
+        /// exists`. Hoisted from the inline literal in
+        /// `createSchema()` so the DDL contract has a single named
+        /// source of truth and is independently pinnable from the
+        /// other SQL statements (which already live in this enum).
+        /// Pinned by
+        /// `SearchIndexTests.testCreateMessagesFTSTableDDLIsFrozen`.
+        static let createMessagesFTSTable = """
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+            thread_id   UNINDEXED,
+            thread_name,
+            sender,
+            text,
+            time        UNINDEXED,
+            channel     UNINDEXED,
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+        """
     }
 
     /// On-disk filename for the FTS5 search index. Sits under
@@ -343,18 +375,7 @@ actor SearchIndex {
 
     private func createSchema() {
         guard let db else { return }
-        let sql = """
-        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-            thread_id   UNINDEXED,
-            thread_name,
-            sender,
-            text,
-            time        UNINDEXED,
-            channel     UNINDEXED,
-            tokenize = 'unicode61 remove_diacritics 2'
-        );
-        """
-        sqlite3_exec(db, sql, nil, nil, nil)
+        sqlite3_exec(db, SQL.createMessagesFTSTable, nil, nil, nil)
     }
 
     // MARK: - Query translation

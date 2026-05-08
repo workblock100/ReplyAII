@@ -1769,6 +1769,75 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
             "insertRow column order must match the FTS5 schema; a reorder writes sender bytes into thread_name, etc.")
     }
 
+    /// `createMessagesFTSTable` is the FTS5 virtual-table DDL. Drift
+    /// in column names / column order silently breaks every INSERT
+    /// (which binds by position) AND every snippet query (which
+    /// references column index 3 = `text`). Drift in the tokenize
+    /// spec changes the recall surface — `unicode61` vs `porter` is
+    /// the difference between "Slack" / "slack" matching and stemming
+    /// "slacking" / "slack". Pin the literal byte-for-byte so any
+    /// schema edit lands deliberately.
+    func testCreateMessagesFTSTableDDLIsFrozen() {
+        let expected = """
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+            thread_id   UNINDEXED,
+            thread_name,
+            sender,
+            text,
+            time        UNINDEXED,
+            channel     UNINDEXED,
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+        """
+        XCTAssertEqual(SearchIndex.SQL.createMessagesFTSTable, expected,
+            "DDL drift would silently break INSERTs (positional binding) AND snippet queries (column-index 3 assumption) — every shipped install rebuilds an empty index on launch")
+    }
+
+    /// Cross-check: the DDL must reference the same `messages_fts`
+    /// table name the other SQL statements (truncate / delete /
+    /// insert) already pin. Otherwise createSchema could land a table
+    /// called `messages_fts_v2` while every writer still targets
+    /// `messages_fts` — index would always be empty.
+    func testCreateMessagesFTSTableDDLAndDMLAgreeOnTableName() {
+        let tableName = "messages_fts"
+        XCTAssertTrue(SearchIndex.SQL.createMessagesFTSTable.contains(tableName),
+            "createMessagesFTSTable DDL must declare the `\(tableName)` table — drift would land an empty index that no DML writer ever sees")
+        XCTAssertTrue(SearchIndex.SQL.truncateAll.contains(tableName),
+            "truncateAll DML must target the `\(tableName)` table the DDL declares")
+        XCTAssertTrue(SearchIndex.SQL.deleteByThreadID.contains(tableName),
+            "deleteByThreadID DML must target the `\(tableName)` table the DDL declares")
+        XCTAssertTrue(SearchIndex.SQL.insertRow.contains(tableName),
+            "insertRow DML must target the `\(tableName)` table the DDL declares")
+    }
+
+    /// Cross-check: DDL column-order must match the position the
+    /// `snippetTextColumnIndex` constant assumes (`text` is column
+    /// index 3, zero-indexed: `thread_id=0, thread_name=1, sender=2,
+    /// text=3, time=4, channel=5`). The existing
+    /// `testSnippetTextColumnIndexMatchesSchemaPosition` pins the
+    /// constant value; this pin grounds the same invariant in the
+    /// DDL itself, so a column-reorder refactor that updates the
+    /// constant but not the DDL (or vice versa) trips here.
+    func testCreateMessagesFTSTableDDLPlacesTextAtSnippetColumnIndex() {
+        let ddl = SearchIndex.SQL.createMessagesFTSTable
+        let columnsInOrder = ["thread_id", "thread_name", "sender", "text", "time", "channel"]
+        var lastUpper: String.Index? = nil
+        for (i, col) in columnsInOrder.enumerated() {
+            guard let r = ddl.range(of: col) else {
+                XCTFail("DDL missing expected column `\(col)` at position \(i)")
+                return
+            }
+            if let prev = lastUpper {
+                XCTAssertTrue(r.lowerBound > prev,
+                    "column `\(col)` must appear AFTER prior column in DDL — reorder breaks every positional INSERT")
+            }
+            lastUpper = r.upperBound
+        }
+        XCTAssertEqual(columnsInOrder.firstIndex(of: "text"),
+                       Int(SearchIndex.snippetTextColumnIndex),
+            "DDL column position of `text` must match snippetTextColumnIndex — drift produces snippets from the wrong column")
+    }
+
     /// `productionFileName` is the on-disk handle every install reads
     /// from. Drift is a silent migration — the install's old index
     /// stays on disk, the new build creates an empty new one, and
