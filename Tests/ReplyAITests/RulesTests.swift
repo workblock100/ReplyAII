@@ -361,6 +361,47 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(RuleEvaluator.defaultTone(for: rules, in: ctx), .direct)
     }
 
+    /// Pin: `defaultTone` iterates matched rules in priority order and
+    /// skips any rule whose action is NOT `.setDefaultTone`. The existing
+    /// `testDefaultToneFromRules` only exercises a case where the first
+    /// rule fails the predicate (so it never enters the action-type
+    /// switch). This pin covers the leg where the first MATCHING rule
+    /// has a non-tone action (`.pin`) and a subsequent matching rule
+    /// carries the tone — `defaultTone` must return the second rule's
+    /// tone, not nil and not "the first matched action's tone collapsed
+    /// to a default". Drift here would silently start ignoring tone-
+    /// rules whenever a higher-priority pin/archive/silentlyIgnore rule
+    /// happened to match the same context.
+    func testDefaultToneSkipsNonToneActionsInPriorityOrder() {
+        // Both rules match the slack-channel context; the first (pin) has
+        // higher priority. defaultTone must skip past it to find the
+        // setDefaultTone rule.
+        let rules = [
+            SmartRule(name: "pin-it",
+                      when: .channelIs(.slack),
+                      then: .pin,
+                      priority: 100),
+            SmartRule(name: "make-it-direct",
+                      when: .channelIs(.slack),
+                      then: .setDefaultTone(.direct),
+                      priority: 1),
+        ]
+        let ctx = RuleContext(
+            senderName: "x", senderHandle: "x", channel: .slack,
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
+        )
+        // Sanity: both rules matched, in priority order.
+        let matched = RuleEvaluator.matching(rules, in: ctx).map(\.name)
+        XCTAssertEqual(matched, ["pin-it", "make-it-direct"],
+                       "matching order is priority DESC — pin-it (priority 100) before make-it-direct (priority 1)")
+
+        // The actual pin: defaultTone walks past pin-it and returns
+        // make-it-direct's .direct tone.
+        XCTAssertEqual(RuleEvaluator.defaultTone(for: rules, in: ctx), .direct,
+                       "defaultTone must skip non-setDefaultTone actions and return the first matching tone — drift would silently break tone-rules whenever a higher-priority pin/archive rule matches the same context")
+    }
+
     // MARK: - Store
 
     @MainActor
