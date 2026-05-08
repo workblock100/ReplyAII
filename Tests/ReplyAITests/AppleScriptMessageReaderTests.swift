@@ -628,4 +628,59 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "clamp must route through Self.minimumMessageLimit; got: \(captured.source)"
         )
     }
+
+    // MARK: - Hoisted-constant pins
+    //
+    // The "||" inter-field delimiter, "missing value" sentinel, and
+    // "outgoing" direction value used to be inline literals scattered
+    // across the AppleScript heredocs and the Swift parsers. Drift
+    // between the AppleScript-side emitter and the Swift-side parser is
+    // silent: a delimiter desync produces single-field rows the parser
+    // ignores; a sentinel typo lets "missing value" leak into the inbox
+    // as a literal preview; a direction-value typo flips authorship for
+    // every parsed message. Hoisted to constants and pinned.
+
+    func testRowDelimiterIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.rowDelimiter, "||",
+            "rowDelimiter must equal `||` to match the literal embedded in the AppleScript heredocs — drift produces empty parses with no error")
+    }
+
+    func testMissingValueSentinelIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.missingValueSentinel, "missing value",
+            "AppleScript's `as text` coercion of a missing value yields the literal string `missing value` — drift here lets the sentinel leak into inbox previews as user-visible text")
+    }
+
+    func testOutgoingDirectionLiteralIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.outgoingDirectionValue, "outgoing",
+            "AppleScript's message direction property emits `outgoing`/`incoming` — drift here flips authorship for every parsed message")
+    }
+
+    /// Cross-check: the AppleScript heredocs use the *literal* "||" rather
+    /// than `\(Self.rowDelimiter)` interpolation (interpolating into a
+    /// quoted AppleScript string is risky around quote escaping). This test
+    /// exists so a future rename of the Swift-side constant doesn't desync
+    /// the parser from the still-literal emitter.
+    func testRecentChatsScriptUsesRowDelimiter() throws {
+        final class Captured: @unchecked Sendable { var source = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.recentChats()
+        XCTAssertTrue(captured.source.contains(AppleScriptMessageReader.rowDelimiter),
+            "AppleScript emitter must contain the same delimiter the Swift parser splits on")
+    }
+
+    func testMessagesForChatScriptUsesRowDelimiter() throws {
+        final class Captured: @unchecked Sendable { var source = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 5)
+        XCTAssertTrue(captured.source.contains(AppleScriptMessageReader.rowDelimiter),
+            "AppleScript emitter must contain the same delimiter the Swift parser splits on")
+    }
 }

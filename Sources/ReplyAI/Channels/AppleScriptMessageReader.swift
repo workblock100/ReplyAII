@@ -13,6 +13,35 @@ struct AppleScriptMessageReader: Sendable {
     /// `AppleScriptMessageReaderTests.testMessagesForChatMinimumLimitIsOne`.
     static let minimumMessageLimit: Int = 1
 
+    /// Inter-field delimiter for both AppleScript-emitted output rows and
+    /// the Swift parser's `components(separatedBy:)` split. The AppleScript
+    /// heredocs interpolate `\(rowDelimiter)` and the parser splits on the
+    /// same constant — drift between the emitter and the parser would
+    /// produce one-field rows containing the entire payload (parser sees
+    /// no delimiter) or empty rows (parser splits on a different separator
+    /// that doesn't appear). Either failure mode silently returns an
+    /// empty thread/message list with no error path. Pinned by
+    /// `AppleScriptMessageReaderTests.testRowDelimiterIsFrozen`.
+    static let rowDelimiter: String = "||"
+
+    /// AppleScript's `missing value` sentinel as it appears in the
+    /// emitted text after `as text` coercion. Used by the Swift parser to
+    /// drop rows where AppleScript leaked the sentinel through a script-
+    /// side fallback gap (e.g. a message with no body, or a 1:1 chat
+    /// whose `name` property is `missing value` and the participant
+    /// fallback also produced nothing). Drift here surfaces literal
+    /// "missing value" strings in inbox previews. Pinned by
+    /// `AppleScriptMessageReaderTests.testMissingValueSentinelIsFrozen`.
+    static let missingValueSentinel: String = "missing value"
+
+    /// AppleScript message-direction value that maps to `Message.Author.me`.
+    /// Anything else (typically "incoming") maps to `.them`. Drift in the
+    /// expected literal flips authorship for every parsed message — the
+    /// inbox would attribute every reply the user sent to the contact and
+    /// vice versa. Pinned by
+    /// `AppleScriptMessageReaderTests.testOutgoingDirectionLiteralIsFrozen`.
+    static let outgoingDirectionValue: String = "outgoing"
+
     /// Executes an AppleScript source string and returns the result as text.
     /// Injectable so tests can verify the script string and return mock data
     /// without touching Messages.app.
@@ -142,14 +171,14 @@ struct AppleScriptMessageReader: Sendable {
         for line in raw.split(separator: "\n", omittingEmptySubsequences: true) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
-            let parts = trimmed.components(separatedBy: "||")
+            let parts = trimmed.components(separatedBy: Self.rowDelimiter)
             let body = parts.count > 0 ? parts[0] : ""
             let dir  = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : "incoming"
             // AppleScript can leak "missing value" when a message has no
             // text body (e.g. a tapback or attachment-only message). Drop
             // those rather than surface a literal "missing value" string.
-            if body.isEmpty || body == "missing value" { continue }
-            let from: Message.Author = (dir.lowercased() == "outgoing") ? .me : .them
+            if body.isEmpty || body == Self.missingValueSentinel { continue }
+            let from: Message.Author = (dir.lowercased() == Self.outgoingDirectionValue) ? .me : .them
             out.append(Message(from: from, text: body, time: ""))
             if out.count >= limit { break }
         }
@@ -166,12 +195,12 @@ struct AppleScriptMessageReader: Sendable {
         for line in raw.split(separator: "\n", omittingEmptySubsequences: true) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
-            let parts = trimmed.components(separatedBy: "||")
+            let parts = trimmed.components(separatedBy: Self.rowDelimiter)
             var name    = parts.count > 0 ? parts[0].trimmingCharacters(in: .whitespaces) : trimmed
             let chatID  = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : nil
             var preview = parts.count > 2 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
             // Defensive: AppleScript can still leak "missing value" through edge paths.
-            if name.isEmpty || name == "missing value" {
+            if name.isEmpty || name == Self.missingValueSentinel {
                 if let id = chatID, !id.isEmpty {
                     name = Self.formatHandleFromChatID(id)
                 } else {
@@ -187,7 +216,7 @@ struct AppleScriptMessageReader: Sendable {
                 // readability. `+12014623980` -> `+1 (201) 462-3980`.
                 name = Self.prettyPhone(name)
             }
-            if preview == "missing value" { preview = "" }
+            if preview == Self.missingValueSentinel { preview = "" }
             if preview.isEmpty { preview = "—" }
             // Collapse newlines / extra whitespace in previews so they fit one row.
             preview = preview.replacingOccurrences(of: "\n", with: " ")
