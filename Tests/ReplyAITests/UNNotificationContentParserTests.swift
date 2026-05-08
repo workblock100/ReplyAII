@@ -245,4 +245,64 @@ final class UNNotificationContentParserTests: XCTestCase {
         XCTAssertEqual(UNNotificationContentParser.UserInfoKey.ckChatGUID, "CKChatGUID",
             "ckChatGUID drift breaks the fallback chatGUID resolution leg — older payloads only carry `CKChatGUID` and would silently lose thread identity")
     }
+
+    /// Pin that whitespace-only `content.title` is treated as a VALID
+    /// sender handle (NOT filtered to the nil-return path), as long as
+    /// it is non-empty by `String.isEmpty`. The parser checks
+    /// `!content.title.isEmpty` — a single space passes, but a zero-
+    /// length string falls through to nil. Surprising-but-safe: a
+    /// malformed iMessage notification with `title: " "` (single space)
+    /// and absent userInfo keys produces a thread whose senderHandle
+    /// is `" "`, which then matches an existing whitespace-keyed
+    /// thread or creates a fresh one. Drift toward
+    /// `.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty` would
+    /// silently change the resolution: that single-space title would
+    /// flip from "valid" to "fall through and return nil". The
+    /// present-but-empty empty-string case (already pinned by
+    /// `testEmptyCKSenderIDFallsBackToSenderKey` via the sender keys)
+    /// matches the senderHandle/sender code path, but the
+    /// title-fallback empty-string check has no separate test today.
+    /// Pin both legs together so a future "trim before isEmpty"
+    /// refactor surfaces here as a deliberate change.
+    func testWhitespaceOnlyTitleIsTreatedAsValidSender() {
+        let content = makeContent(
+            title: " ",  // single ASCII space
+            body: "body",
+            userInfo: [:]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertNotNil(result,
+            "whitespace-only title is non-empty by `isEmpty`; parse should NOT return nil — drift toward `.trimmingCharacters(.whitespacesAndNewlines).isEmpty` would silently change this to nil")
+        XCTAssertEqual(result?.senderHandle, " ",
+            "whitespace-only title must round-trip verbatim as senderHandle — drift toward trimming would either drop the whitespace (changing thread keying) or produce an empty handle that bypasses the InboxViewModel handle-match path")
+    }
+
+    /// Pin that an exactly-empty `content.title` (zero-length string)
+    /// AND absent sender keys causes `parse` to return nil. The body
+    /// of the resolution-order chain is `else if !content.title.isEmpty`
+    /// — drift toward `else if true` (always-true fallback) would
+    /// produce a parsed result with `senderHandle = ""` for every
+    /// malformed notification, silently bypassing the InboxViewModel's
+    /// handle-match path. The current `testBothSenderKeysMissingReturnsNil`
+    /// test sends `title: ""` together with absent keys, but doesn't
+    /// pin the empty-title contract specifically (it asserts the
+    /// negative result without distinguishing "title was empty" from
+    /// "title path skipped"). Add an assertion that doubles down on
+    /// the empty-title leg.
+    func testExactlyEmptyTitleWithNoSenderKeysReturnsNil() {
+        let content = makeContent(
+            title: "",
+            body: "body",
+            userInfo: [:]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertNil(result,
+            "empty title (zero-length) AND absent sender keys must return nil — drift toward `else { senderHandle = title }` (no isEmpty guard) would silently propagate empty handles into InboxViewModel")
+        // Sanity contrast vs the whitespace-only case above: that one
+        // returns a non-nil result, this one returns nil. Pinning both
+        // sides of the empty-vs-whitespace distinction.
+        let withSpace = makeContent(title: " ", body: "body", userInfo: [:])
+        XCTAssertNotNil(UNNotificationContentParser.parse(withSpace),
+            "control: a single-space title (non-empty by isEmpty) must not return nil — pinned by testWhitespaceOnlyTitleIsTreatedAsValidSender; mirrored here so both legs of the comparison live in one file")
+    }
 }
