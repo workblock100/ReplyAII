@@ -68,6 +68,18 @@ struct RuleContext: Sendable {
 /// same answer in tests, in CI, and at runtime. Lives in an `enum` (not
 /// a struct or class) to make instantiation a compile error.
 enum RuleEvaluator {
+    /// chat.db chat-id prefix that distinguishes group chats from 1:1
+    /// threads. Apple emits `chat1234567890` for group chats and either
+    /// `+14155551234` or `user@example.com` for 1:1 threads. The
+    /// `.isGroupChat` predicate hinges on this prefix exactly: drift to
+    /// e.g. `"group_"` (which Messages.app does NOT emit) would fire
+    /// the predicate on zero real threads, and silently break every
+    /// "auto-archive group chats" rule. Hoisted so a future schema
+    /// change in chat.db (or a non-iMessage channel that wants to
+    /// participate in `.isGroupChat`) lands on this constant. Pinned
+    /// by `RulesTests.testGroupChatPrefixIsFrozen`.
+    static let groupChatIdentifierPrefix = "chat"
+
     /// True if the predicate holds against `ctx`.
     /// - Parameter currentDate: The reference "now" for time-based predicates.
     ///   Defaults to `Date()`. Pass a fixed value in tests to avoid clock
@@ -103,7 +115,7 @@ enum RuleEvaluator {
             return !ctx.senderKnown
 
         case .isGroupChat:
-            return ctx.channel == .imessage && ctx.chatIdentifier.hasPrefix("chat")
+            return ctx.channel == .imessage && ctx.chatIdentifier.hasPrefix(Self.groupChatIdentifierPrefix)
 
         case .hasAttachment:
             return ctx.hasAttachment

@@ -3377,4 +3377,55 @@ final class SmartRuleSeedNamesTests: XCTestCase {
         XCTAssertTrue(RulesStore.Disk.fileName.hasSuffix(".json"),
             "rules disk format is JSON — drift away from .json silently orphans every existing install's rules.json")
     }
+
+    // MARK: - Group-chat predicate prefix pin (REP-hoist 2026-05-07)
+
+    /// `RuleEvaluator.groupChatIdentifierPrefix` is what
+    /// `.isGroupChat` matches against in `ctx.chatIdentifier`. Apple's
+    /// chat.db emits `chat1234567890` for group chats and either
+    /// `+14155551234` or `user@example.com` for 1:1 threads — the
+    /// predicate hinges on the `chat` prefix exactly. Drift to
+    /// `"group_"` (which Messages.app does NOT emit) would fire on
+    /// zero real threads and silently break every "auto-archive group
+    /// chats" rule. Pin the literal byte-for-byte.
+    func testGroupChatPrefixIsFrozen() {
+        XCTAssertEqual(RuleEvaluator.groupChatIdentifierPrefix, "chat",
+            "RuleEvaluator.groupChatIdentifierPrefix drift silently breaks every `.isGroupChat` predicate — Apple's chat.db emits `chat<digits>` for group threads")
+    }
+
+    /// Round-trip the predicate through a synthetic chat-id with the
+    /// hoisted prefix to confirm `.isGroupChat` actually wires through
+    /// the constant — catches a future refactor that defines the
+    /// constant but inlines a different literal in the matcher.
+    func testIsGroupChatRoutesThroughHoistedPrefix() {
+        let ctx = RuleContext(
+            senderName: "Group",
+            senderHandle: "Group",
+            channel: .imessage,
+            lastMessageText: "",
+            isUnread: false,
+            senderKnown: false,
+            chatIdentifier: "\(RuleEvaluator.groupChatIdentifierPrefix)42-abc"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.isGroupChat, in: ctx),
+            ".isGroupChat must match a synthetic `\(RuleEvaluator.groupChatIdentifierPrefix)`-prefixed chat-id — drift in the matcher vs the constant is silent")
+    }
+
+    /// Negative case: a 1:1 phone-style identifier must NOT match
+    /// `.isGroupChat`. Pin the polarity explicitly so a future
+    /// `hasPrefix → contains` typo (which would still match phone
+    /// numbers like `+1-chat-something`) shows up here.
+    func testIsGroupChatRejectsOneOnOneIdentifier() {
+        let ctx = RuleContext(
+            senderName: "+1-chat-not-group",
+            senderHandle: "+1-chat-not-group",
+            channel: .imessage,
+            lastMessageText: "",
+            isUnread: false,
+            senderKnown: false,
+            chatIdentifier: "+14155551234"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.isGroupChat, in: ctx),
+            ".isGroupChat must NOT match a 1:1 phone-style chat-id — a `contains` typo would silently misfire on group-named contacts")
+    }
 }
