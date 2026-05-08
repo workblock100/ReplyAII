@@ -958,6 +958,44 @@ final class DraftEngineTests: XCTestCase {
             "default confidence (1.0) must not be low — would render warning before any chunk arrives")
     }
 
+    /// Pin every field-level default on `DraftState()` together. Each
+    /// default carries a distinct UX promise that's only obvious from
+    /// the call site:
+    ///   * `text == ""` — composer renders a clean empty state before any
+    ///     chunk arrives. Drift to a placeholder string ("Loading…", "—")
+    ///     would silently show that copy through the actual text field.
+    ///   * `confidence == 1.0` — the high-confidence test above pins the
+    ///     boundary, but the literal value also matters: a future drift to
+    ///     `0.5` would still pass `isLowConfidence == false` while
+    ///     misreporting confidence to any future consumer that reads
+    ///     `confidence` directly (Settings stats, telemetry, etc.).
+    ///   * `isStreaming == false` — composer's streaming spinner is gated
+    ///     on this. Drift to `true` would render the spinner on every
+    ///     fresh state before the first token has actually started.
+    ///   * `isDone == false` — composer's "draft ready" affordances and
+    ///     the `cmp-tones` enabled state both gate on this. Drift to
+    ///     `true` would mark every fresh state as completed-and-ready,
+    ///     which lets the user "send" a blank draft.
+    ///   * `error == nil` — error banner gates on non-nil. Drift to a
+    ///     non-nil string would render an error toast on every fresh
+    ///     state before any LLM call has run.
+    /// One test pinning all five fields together so a refactor to
+    /// `DraftState`'s field defaults can't silently flip any of them
+    /// without a deliberate test edit.
+    func testDefaultDraftStateFieldDefaultsAreFrozen() {
+        let s = DraftEngine.DraftState()
+        XCTAssertEqual(s.text, "",
+            "default text must be empty — drift to a placeholder string would render that copy in every fresh composer")
+        XCTAssertEqual(s.confidence, 1.0, accuracy: 1e-9,
+            "default confidence must be 1.0 — drift would misreport confidence to telemetry / stats consumers even when isLowConfidence stays false")
+        XCTAssertFalse(s.isStreaming,
+            "default isStreaming must be false — drift to true would render the streaming spinner before any token arrives")
+        XCTAssertFalse(s.isDone,
+            "default isDone must be false — drift to true would let the user send a blank draft from a fresh state")
+        XCTAssertNil(s.error,
+            "default error must be nil — drift to a non-nil string would render an error banner on every fresh composer")
+    }
+
     /// Pin the literal value of `DraftState.lowConfidenceThreshold`.
     /// The behavioral tests above lock the boundary via 0.39/0.4/0.85
     /// confidence inputs, but a refactor that moved the literal cutoff
