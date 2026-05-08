@@ -151,6 +151,36 @@ final class UNNotificationContentParserTests: XCTestCase {
         XCTAssertEqual(result?.senderHandle, "Real Title")
     }
 
+    /// Pin the diagonal that the existing per-tier empty tests don't
+    /// cover: BOTH `ckSenderID` and `sender` are present-but-empty in
+    /// the same payload. Each isEmpty filter must skip its own tier
+    /// without short-circuiting via the prior filter — the chained
+    /// `if let ... !ckSender.isEmpty` / `else if let ... !sender.isEmpty`
+    /// pattern means the second filter fires only after the first
+    /// tier short-circuits, so a refactor that consolidates the two
+    /// guards or drops the `!ckSender.isEmpty` branch would not be
+    /// caught by `testEmptyCKSenderIDFallsBackToSenderKey` (which
+    /// short-circuits on a non-empty sender) nor by
+    /// `testEmptySenderFallsBackToTitle` (which never populates
+    /// ckSenderID). Realistic source: a service-extension that emits
+    /// empty strings for unknown fields instead of omitting the keys.
+    /// Mirrors the `NotificationCoordinator.resolveSenderHandle` both-
+    /// empty pin in `NotificationCoordinatorTests`; the two paths
+    /// share resolution order and now share this diagonal pin.
+    func testBothCKSenderIDAndSenderEmptyFallsBackToTitle() {
+        let content = makeContent(
+            title: "Real Title",
+            body: "body",
+            userInfo: [
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "",
+                UNNotificationContentParser.UserInfoKey.sender: ""
+            ]
+        )
+        let result = UNNotificationContentParser.parse(content)
+        XCTAssertEqual(result?.senderHandle, "Real Title",
+            "both Some(\"\") tiers must skip and fall to title — the chained-guard pattern means each filter only fires after the prior short-circuits, so the both-empty diagonal isn't covered by either single-tier-empty test")
+    }
+
     func testEmptyCKChatIdentifierIsNotFalledBack() {
         // Behavior pin: the chatGUID resolution uses `??`, which only
         // triggers fallback on nil — not on empty string. So an empty-
