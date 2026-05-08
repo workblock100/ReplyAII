@@ -47,7 +47,7 @@ final class SlackHTTPClientTests: XCTestCase {
         _ = try await client.get(endpoint: "conversations.list", token: "xoxb-my-token", params: [:])
 
         XCTAssertEqual(
-            session.capturedRequest?.value(forHTTPHeaderField: "Authorization"),
+            session.capturedRequest?.value(forHTTPHeaderField: URLSessionSlackClient.Header.authorizationField),
             "Bearer xoxb-my-token"
         )
     }
@@ -181,7 +181,7 @@ final class SlackHTTPClientTests: XCTestCase {
             json: ["channel": "C123", "text": "hi"]
         )
 
-        XCTAssertEqual(session.capturedRequest?.httpMethod, "POST")
+        XCTAssertEqual(session.capturedRequest?.httpMethod, URLSessionSlackClient.postHTTPMethod)
     }
 
     func testPostSetsBearerAuthAndJSONContentType() async throws {
@@ -195,8 +195,8 @@ final class SlackHTTPClientTests: XCTestCase {
         )
 
         let req = session.capturedRequest
-        XCTAssertEqual(req?.value(forHTTPHeaderField: "Authorization"), "Bearer xoxb-my-token")
-        XCTAssertEqual(req?.value(forHTTPHeaderField: "Content-Type"), "application/json; charset=utf-8")
+        XCTAssertEqual(req?.value(forHTTPHeaderField: URLSessionSlackClient.Header.authorizationField), URLSessionSlackClient.Header.bearer("xoxb-my-token"))
+        XCTAssertEqual(req?.value(forHTTPHeaderField: URLSessionSlackClient.Header.contentTypeField), URLSessionSlackClient.Header.contentTypeJSON)
     }
 
     func testPostSerializesJSONBody() async throws {
@@ -522,7 +522,7 @@ final class SlackHTTPClientTests: XCTestCase {
         let client = URLSessionSlackClient(session: session)
         _ = try await client.post(endpoint: "chat.postMessage", token: "t", json: ["text": "hi"])
         XCTAssertEqual(
-            session.capturedRequest?.value(forHTTPHeaderField: "Content-Type"),
+            session.capturedRequest?.value(forHTTPHeaderField: URLSessionSlackClient.Header.contentTypeField),
             "application/json; charset=utf-8",
             "Content-Type must include charset=utf-8 — Slack rejects bare application/json on some endpoints"
         )
