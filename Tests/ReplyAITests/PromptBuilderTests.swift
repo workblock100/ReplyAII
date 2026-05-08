@@ -32,7 +32,7 @@ final class PromptBuilderTests: XCTestCase {
         let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: history)
 
         XCTAssertTrue(prompt.contains("Bob"), "Sender name missing from prompt")
-        XCTAssertTrue(prompt.contains("iMessage"), "Channel label missing from prompt")
+        XCTAssertTrue(prompt.contains(Channel.imessage.label), "Channel label missing from prompt")
         XCTAssertTrue(prompt.contains("hey there"), "Message text missing from prompt")
         XCTAssertTrue(prompt.contains("you around?"), "Second message missing from prompt")
     }
