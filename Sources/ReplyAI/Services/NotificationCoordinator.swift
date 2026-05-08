@@ -37,6 +37,20 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     static let categoryID    = "REPLYAI_THREAD"
     static let replyActionID = "REPLY"
 
+    /// User-visible strings used to construct the inline-reply notification
+    /// action. macOS shows these in the system notification chrome — they
+    /// are the only ReplyAI copy a user sees from the notification surface
+    /// when ReplyAI itself isn't focused. Hoisted from the inline literals
+    /// in `setUp()` so the copy review surface lives in one place and a
+    /// future copy edit doesn't have to grep for the strings inside a
+    /// UNTextInputNotificationAction constructor. Pinned by
+    /// `NotificationCoordinatorTests.testInlineReplyActionStringsAreFrozen`.
+    enum InlineReplyAction {
+        static let title       = "Reply"
+        static let buttonTitle = "Send"
+        static let placeholder = "Your reply…"
+    }
+
     /// Presentation options returned to UN when a message notification arrives
     /// while the app is foregrounded. `.banner` ensures the user still sees the
     /// notification (without it, foregrounded notifications are silently
@@ -78,10 +92,10 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     func setUp() async {
         let replyAction = UNTextInputNotificationAction(
             identifier: Self.replyActionID,
-            title: "Reply",
+            title: InlineReplyAction.title,
             options: [],
-            textInputButtonTitle: "Send",
-            textInputPlaceholder: "Your reply…"
+            textInputButtonTitle: InlineReplyAction.buttonTitle,
+            textInputPlaceholder: InlineReplyAction.placeholder
         )
         let category = UNNotificationCategory(
             identifier: Self.categoryID,

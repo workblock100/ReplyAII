@@ -648,4 +648,21 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertEqual(NotificationCoordinator.replyActionID, "REPLY",
             "replyActionID is persisted in scheduled notifications — renaming requires a migration")
     }
+
+    // MARK: - Inline-reply UI string pin
+    //
+    // The notification action title, send-button title, and text-input
+    // placeholder are the only ReplyAI copy a user sees from the system
+    // notification surface when ReplyAI itself isn't focused. Hoisted
+    // from the inline literals previously inside the
+    // UNTextInputNotificationAction constructor in setUp() so the copy
+    // review surface lives in one place. Pin the literals so a copy
+    // edit during a future polish pass is a deliberate change against
+    // the test, not a silent change inside an init call.
+
+    func testInlineReplyActionStringsAreFrozen() {
+        XCTAssertEqual(NotificationCoordinator.InlineReplyAction.title,       "Reply")
+        XCTAssertEqual(NotificationCoordinator.InlineReplyAction.buttonTitle, "Send")
+        XCTAssertEqual(NotificationCoordinator.InlineReplyAction.placeholder, "Your reply…")
+    }
 }
