@@ -27,6 +27,57 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
     /// Pinned by `MLXDraftServiceTests.testDefaultDraftConfidenceIsZeroPointEightFive`.
     static let defaultDraftConfidence: Double = 0.85
 
+    /// User-visible progress copy emitted before the download starts so
+    /// the composer banner reads as "we know we're slow, we're working
+    /// on it" rather than as a frozen UI. Hoisted from the inline yield
+    /// site so the wording lives next to the other loadProgress strings
+    /// instead of buried in a continuation closure. Pinned by
+    /// `MLXDraftServiceTests`'s `*PreparingMessage*` cluster — drift
+    /// here is the only signal a user has during the 0%-progress window.
+    static let preparingMessage = "Preparing on-device model…"
+
+    /// User-visible progress copy emitted *after* download completes,
+    /// while MLX maps weights into memory. Distinct from the prepare
+    /// message so the user sees forward progress (download ✓ → warm)
+    /// rather than a stale "preparing" banner during the ~3-5s warmup.
+    /// Pinned by `MLXDraftServiceTests`'s `*WarmingMessage*` cluster.
+    static let warmingMessage = "Warming weights…"
+
+    /// Format the user-visible "Downloading model · X of Y" copy. The
+    /// inline interpolation it replaced lived inside a `progressHandler`
+    /// closure that fires on a background queue at high frequency —
+    /// hoisting moves the format to a single source of truth so a future
+    /// "let's localize this" / "let's add a checksum" edit lands once.
+    /// Pinned by `MLXDraftServiceTests`'s `*DownloadingMessage*` cluster.
+    static func downloadingMessage(completedBytes: Int64, totalBytes: Int64) -> String {
+        "Downloading model · \(formatBytes(completedBytes)) of \(formatBytes(totalBytes))"
+    }
+
+    /// Fallback download copy when the server doesn't advertise a
+    /// `Content-Length` (Hugging Face does, but the macro-generated
+    /// `Progress` can briefly report `totalUnitCount == 0` before the
+    /// first chunk lands). The percentage form keeps the banner
+    /// changing — silent banners look hung. Pinned by
+    /// `MLXDraftServiceTests`'s `*DownloadingMessageFraction*` cluster.
+    static func downloadingMessage(fraction: Double) -> String {
+        "Downloading model · \(Int(fraction * 100))%"
+    }
+
+    /// Apple-style byte formatter for `downloadingMessage`. Threshold
+    /// at 1024 MiB matches the human convention "anything over 1 GB
+    /// reads in GB"; the `%.1f` precision for GB and `%.0f` for MB is
+    /// the same shape the system Storage settings use. Drift here
+    /// either makes the banner read "1023 MB" instead of "1.0 GB"
+    /// (jumpy) or "0.5 GB" instead of "512 MB" (over-precise for small
+    /// downloads). Pinned by `MLXDraftServiceTests`'s `*FormatBytes*`
+    /// cluster.
+    static func formatBytes(_ bytes: Int64) -> String {
+        let mib = Double(bytes) / (1024 * 1024)
+        return mib > 1024
+            ? String(format: "%.1f GB", mib / 1024)
+            : String(format: "%.0f MB", mib)
+    }
+
     /// Package-internal so tests can pin the production default after a
     /// no-arg init (see `MLXDraftServiceTests.testDefaultModelIDIsLlama32_3BInstruct4bit`).
     let modelID: String
@@ -53,30 +104,24 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
                     // than staring at an empty composer for 30s.
                     if !hasCachedContainer {
                         continuation.yield(DraftChunk(
-                            kind: .loadProgress(fraction: 0, message: "Preparing on-device model…")
+                            kind: .loadProgress(fraction: 0, message: MLXDraftService.preparingMessage)
                         ))
                     }
 
                     let container = try await ensureContainer { progress in
                         let fraction = progress.fractionCompleted
-                        let mb: (Int64) -> String = { bytes in
-                            let mib = Double(bytes) / (1024 * 1024)
-                            return mib > 1024
-                                ? String(format: "%.1f GB", mib / 1024)
-                                : String(format: "%.0f MB", mib)
-                        }
-                        let msg: String
-                        if progress.totalUnitCount > 0 {
-                            msg = "Downloading model · \(mb(progress.completedUnitCount)) of \(mb(progress.totalUnitCount))"
-                        } else {
-                            msg = "Downloading model · \(Int(fraction * 100))%"
-                        }
+                        let msg: String = progress.totalUnitCount > 0
+                            ? MLXDraftService.downloadingMessage(
+                                completedBytes: progress.completedUnitCount,
+                                totalBytes: progress.totalUnitCount
+                              )
+                            : MLXDraftService.downloadingMessage(fraction: fraction)
                         continuation.yield(DraftChunk(kind: .loadProgress(fraction: fraction, message: msg)))
                     }
                     if Task.isCancelled { continuation.finish(); return }
 
                     continuation.yield(DraftChunk(
-                        kind: .loadProgress(fraction: 1, message: "Warming weights…")
+                        kind: .loadProgress(fraction: 1, message: MLXDraftService.warmingMessage)
                     ))
 
                     let session = ChatSession(container, instructions: PromptBuilder.systemPrompt(tone: tone))
