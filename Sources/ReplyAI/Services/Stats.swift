@@ -158,6 +158,18 @@ final class Stats: @unchecked Sendable {
     /// counters. Pinned by
     /// `StatsTests.testRuleActionConstantsAreFrozen` and the
     /// `*RoutesThroughRuleActionConstant` cluster.
+    ///
+    /// **Cross-vocabulary divergence**: this Stats vocabulary uses
+    /// camelCase (`silentlyIgnore`, `markDone`, `setDefaultTone`),
+    /// while `RuleAction`'s rules.json Codable form uses snake_case
+    /// (`silently_ignore`, `mark_done`, `set_default_tone` — see
+    /// `SmartRule.swift:RuleAction.Kind`). The two predate each other
+    /// and serve different files; harmonizing would orphan every
+    /// shipped user's persisted stats.json. The intentional
+    /// divergence is pinned by
+    /// `StatsTests.testStatsRuleActionConstantsDivergeFromRulesJSONSnakeCase`
+    /// so a future "consistency fix" surfaces as a deliberate change
+    /// with a migration plan, not a silent rename.
     enum RuleAction {
         static let archive          = "archive"
         static let silentlyIgnore   = "silentlyIgnore"

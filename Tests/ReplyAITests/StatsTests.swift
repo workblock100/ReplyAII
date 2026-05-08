@@ -1222,4 +1222,42 @@ final class StatsResetAndGuardTests: XCTestCase {
         XCTAssertEqual(snap.rulesFiredByAction["archive"], 2,
             "constants must round-trip to the bare-string key — the snapshot dictionary is keyed on the raw value")
     }
+
+    /// Pin the cross-vocabulary divergence between Stats counters
+    /// (camelCase, used in the on-disk stats.json) and the
+    /// rules.json schema's RuleAction Codable form (snake_case,
+    /// pinned by `RulesTests.testActionKindDiscriminatorsAreStable`).
+    /// Three of the five action names diverge between the two
+    /// vocabularies on purpose — the camelCase form predates the
+    /// snake_case rules.json schema and renaming Stats keys would
+    /// orphan every existing user's persisted stats.json. A
+    /// well-meaning "consistency fix" that aligns the two would
+    /// pass both vocabularies' individual pins (Stats round-trip
+    /// + rules.json kind discriminators) while silently splitting
+    /// historical counters across two keys on every shipped user's
+    /// stats file. Pin asserts the divergence so a future
+    /// harmonization refactor surfaces here as a deliberate change
+    /// with a migration plan attached.
+    func testStatsRuleActionConstantsDivergeFromRulesJSONSnakeCase() {
+        // Three actions whose camelCase Stats key differs from the
+        // snake_case rules.json kind. Pin the inequality, not just
+        // the values — so a future build that aligns either side
+        // surfaces here.
+        XCTAssertNotEqual(Stats.RuleAction.silentlyIgnore, "silently_ignore",
+            "Stats counters use camelCase 'silentlyIgnore' on disk; rules.json uses snake_case 'silently_ignore' — a future consistency refactor must migrate stats.json before flipping either side")
+        XCTAssertNotEqual(Stats.RuleAction.markDone, "mark_done",
+            "Stats counters use camelCase 'markDone' on disk; rules.json uses snake_case 'mark_done' — divergence is intentional, not a bug")
+        XCTAssertNotEqual(Stats.RuleAction.setDefaultTone, "set_default_tone",
+            "Stats counters use camelCase 'setDefaultTone' on disk; rules.json uses snake_case 'set_default_tone' — divergence is intentional, not a bug")
+
+        // Two actions whose names happen to coincide across both
+        // vocabularies (single-word identifiers, no camelCase to
+        // diverge from). Pin the equality so a future "let's at
+        // least normalize the diverging ones" partial harmonization
+        // doesn't accidentally unify the wrong direction here.
+        XCTAssertEqual(Stats.RuleAction.archive, "archive",
+            "single-word 'archive' coincides across both vocabularies — Stats and rules.json agree by accident, not by design")
+        XCTAssertEqual(Stats.RuleAction.pin, "pin",
+            "single-word 'pin' coincides across both vocabularies — Stats and rules.json agree by accident, not by design")
+    }
 }
