@@ -219,17 +219,37 @@ enum OAuthError: LocalizedError, Sendable, Equatable {
     /// Token exchange POST returned `{"ok":false}` or a network error.
     case tokenExchangeFailed(String)
 
+    /// User-visible toast copy for `.timeout`. Hoisted from the inline
+    /// literal so a copy review can edit "Open the Slack app and try
+    /// again" in one place rather than inside a switch arm. Settings
+    /// → Channels' duplicate-banner suppression compares OAuthError
+    /// values with `==` not on this string, so the constant only
+    /// affects display, not the equatable contract.
+    static let timeoutToast = "Slack didn't respond. Open the Slack app and try again, or check your internet connection."
+
+    /// Hoisted prefix for `.listenerFailed` — `Couldn't open the local
+    /// callback server: <msg>` is the format. The associated value is
+    /// appended after this prefix verbatim. Pinning the prefix
+    /// independently catches a future copy edit that drops the colon
+    /// or rephrases the leading clause without touching tests that
+    /// only check `.contains(<some keyword>)`.
+    static let listenerFailedPrefix = "Couldn't open the local callback server: "
+
+    /// Hoisted prefix for `.tokenExchangeFailed` — `Slack rejected the
+    /// connection: <msg>` is the format.
+    static let tokenExchangeFailedPrefix = "Slack rejected the connection: "
+
     /// Without LocalizedError conformance, Settings → Channels would show
     /// the generic "The operation couldn't be completed" CFString fallback
     /// when Slack connect fails — useless for users trying to triage.
     var errorDescription: String? {
         switch self {
         case .timeout:
-            "Slack didn't respond. Open the Slack app and try again, or check your internet connection."
+            Self.timeoutToast
         case .listenerFailed(let msg):
-            "Couldn't open the local callback server: \(msg)"
+            "\(Self.listenerFailedPrefix)\(msg)"
         case .tokenExchangeFailed(let msg):
-            "Slack rejected the connection: \(msg)"
+            "\(Self.tokenExchangeFailedPrefix)\(msg)"
         }
     }
 }

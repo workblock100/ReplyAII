@@ -495,4 +495,48 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertEqual(LocalhostOAuthListener.codeQueryParameterName, "code",
             "OAuth 2 §4.1.2 specifies the authorization code is delivered under the `code` query parameter — drift here silently drops every callback")
     }
+
+    // MARK: - OAuthError toast vocabulary pins (REP-hoist 2026-05-07)
+
+    /// The three OAuthError toasts surface in Settings → Channels
+    /// when Slack connect fails. Hoisting the literals lets copy
+    /// review land in named constants rather than inside a switch
+    /// arm, and pinning each independently catches a future drift
+    /// between switch and constant.
+
+    func testOAuthErrorTimeoutToastCopyIsFrozen() {
+        XCTAssertEqual(OAuthError.timeoutToast,
+                       "Slack didn't respond. Open the Slack app and try again, or check your internet connection.",
+            "timeoutToast literal must not drift — `Open the Slack app and try again` is the actionable verb the user needs")
+    }
+
+    func testOAuthErrorListenerFailedPrefixIsFrozen() {
+        XCTAssertEqual(OAuthError.listenerFailedPrefix, "Couldn't open the local callback server: ",
+            "listenerFailedPrefix literal must not drift — the trailing colon-space is what visually separates the prefix from the dynamic message")
+    }
+
+    func testOAuthErrorTokenExchangeFailedPrefixIsFrozen() {
+        XCTAssertEqual(OAuthError.tokenExchangeFailedPrefix, "Slack rejected the connection: ",
+            "tokenExchangeFailedPrefix literal must not drift — `Slack rejected the connection` is the user-visible cause")
+    }
+
+    /// Routing pins: each case's `errorDescription` must wire through
+    /// the hoisted constant.
+    func testOAuthErrorTimeoutRoutesThroughHoistedConstant() {
+        XCTAssertEqual(OAuthError.timeout.errorDescription,
+                       OAuthError.timeoutToast,
+            ".timeout errorDescription must equal timeoutToast byte-for-byte — drift between switch and constant is silent")
+    }
+
+    func testOAuthErrorListenerFailedRoutesThroughHoistedPrefix() {
+        XCTAssertEqual(OAuthError.listenerFailed("xyz").errorDescription,
+                       OAuthError.listenerFailedPrefix + "xyz",
+            ".listenerFailed errorDescription must compose `listenerFailedPrefix + msg` byte-for-byte — drift in the prefix or the colon-space is silent")
+    }
+
+    func testOAuthErrorTokenExchangeFailedRoutesThroughHoistedPrefix() {
+        XCTAssertEqual(OAuthError.tokenExchangeFailed("rejected").errorDescription,
+                       OAuthError.tokenExchangeFailedPrefix + "rejected",
+            ".tokenExchangeFailed errorDescription must compose `tokenExchangeFailedPrefix + msg` byte-for-byte")
+    }
 }
