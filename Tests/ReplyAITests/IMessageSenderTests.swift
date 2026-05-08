@@ -105,6 +105,41 @@ final class IMessageSenderTests: XCTestCase {
         }
     }
 
+    /// Pin: the SMS branch of `chatGUID(for:)`. When `thread.channel ==
+    /// .sms` and `chatGUID` is nil/empty, synthesis routes through
+    /// `Self.smsServiceID` ("SMS"), NOT the iMessage fallback. The
+    /// existing testChatGUIDSynthesisPrefixIsIMessageForNonSMSChannels
+    /// covers the four non-iMessage non-SMS channels, but skips the
+    /// SMS leg because the production code intentionally treats SMS
+    /// differently. The legacy `send(_:toChatIdentifier:channel:)` path
+    /// has its own SMS pin (search "SMS;-;+15551234567") but that's a
+    /// different code path. Pin the `chatGUID(for: thread)` SMS-branch
+    /// synthesis explicitly so a future "merge SMS into iMessage
+    /// fallback" refactor surfaces here as a deliberate edit.
+    func testChatGUIDSynthesisPrefixIsSMSForSMSChannelWhenGUIDAbsent() {
+        let smsThread = MessageThread(
+            id: "+15551234567", channel: .sms, name: "Phone",
+            avatar: "P", preview: "", time: "", chatGUID: nil
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: smsThread),
+            "SMS;-;+15551234567",
+            "SMS-channel synthesis must use the `SMS;-;` prefix, not the iMessage fallback — drift would silently mis-address the AppleScript send to the wrong service"
+        )
+
+        // Sibling: empty-string chatGUID also routes through the SMS
+        // branch (filtered by `!guid.isEmpty`).
+        let smsThreadEmpty = MessageThread(
+            id: "+15559998888", channel: .sms, name: "Phone",
+            avatar: "P", preview: "", time: "", chatGUID: ""
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: smsThreadEmpty),
+            "SMS;-;+15559998888",
+            "empty chatGUID on an SMS channel must still pick the SMS prefix — the channel decides the prefix, not the (filtered) chatGUID"
+        )
+    }
+
     func testEmptyChatGUIDStringTreatedAsNil() {
         // COALESCE(c.guid, '') in IMessageChannel can surface "" for
         // freak rows; the sender should ignore empties and synthesize.
