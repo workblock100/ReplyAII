@@ -14,7 +14,7 @@ final class StatsTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func tempURL(_ name: String = "stats.json") -> URL {
+    private func tempURL(_ name: String = Stats.productionFileName) -> URL {
         tempDir.appendingPathComponent(name)
     }
 
@@ -512,7 +512,7 @@ final class StatsAcceptanceRateTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func tempURL(_ name: String = "stats.json") -> URL {
+    private func tempURL(_ name: String = Stats.productionFileName) -> URL {
         tempDir.appendingPathComponent(name)
     }
 
@@ -674,7 +674,7 @@ final class StatsLifetimePersistenceTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func tempURL(_ name: String = "stats.json") -> URL {
+    private func tempURL(_ name: String = Stats.productionFileName) -> URL {
         tempDir.appendingPathComponent(name)
     }
 
@@ -761,7 +761,7 @@ final class StatsFlushNowTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func tempURL(_ name: String = "stats.json") -> URL {
+    private func tempURL(_ name: String = Stats.productionFileName) -> URL {
         tempDir.appendingPathComponent(name)
     }
 
@@ -1016,7 +1016,7 @@ final class StatsResetAndGuardTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func tempURL(_ name: String = "stats.json") -> URL {
+    private func tempURL(_ name: String = Stats.productionFileName) -> URL {
         tempDir.appendingPathComponent(name)
     }
 
