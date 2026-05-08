@@ -207,6 +207,44 @@ final class ShortcutsExportHandlerTests: XCTestCase {
         XCTAssertEqual(exports[0].thread.time, "3:42 PM")
     }
 
+    /// Pin `thread.time` when the payload has no messages at all (either
+    /// `messages: []` or the field omitted). The fallback chain inside
+    /// `DTO.toExport` is `messages?.last?.time ?? ""` — both branches
+    /// resolve to the empty string here. Drift toward a sentinel like
+    /// `"now"` or `"—"` would silently put non-empty time-chip copy on
+    /// every Shortcut-exported thread that arrived with zero messages
+    /// (a rare but legitimate state — e.g. a contact the user hasn't
+    /// chatted with yet but wanted to seed the sidebar with). The
+    /// inbox renders `thread.time` directly into the row's time chip,
+    /// so a non-empty sentinel would make those rows misrepresent
+    /// freshness.
+    func testThreadTimeIsEmptyWhenMessagesArrayIsEmpty() throws {
+        let json = #"[ { "id": "x", "displayName": "Maya", "channel": "imessage", "messages": [] } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.time, "",
+            "empty messages array must produce thread.time = \"\" — drift toward a sentinel would put non-empty time-chip copy on every empty-message Shortcut export")
+    }
+
+    /// Pin the same `thread.time = ""` outcome when the `messages` field
+    /// is omitted entirely from the payload. The two branches of the
+    /// `messages?.last?.time` fallback chain (nil-array via missing
+    /// field, vs empty-array) MUST converge on the same empty-string
+    /// fallback — drift between the two would surface as "this Shortcut
+    /// export shows a stale time chip but that one shows blank" for
+    /// users who notice the difference.
+    func testThreadTimeIsEmptyWhenMessagesFieldOmitted() throws {
+        let json = #"[ { "id": "x", "displayName": "Solo", "channel": "imessage" } ]"#
+        let url = try makeURL(payload: json)
+
+        let exports = try ShortcutsExportHandler.parse(url: url)
+
+        XCTAssertEqual(exports[0].thread.time, "",
+            "missing messages field must produce thread.time = \"\" — drift between the missing-field branch and the empty-array branch would desync time-chip behavior across two equivalent payload shapes")
+    }
+
     func testAvatarUsesFirstCharOfDisplayName() throws {
         // Avatar initial is the first grapheme — pinned so a refactor that
         // accidentally drops the prefix(1) call (e.g. switching to the full
