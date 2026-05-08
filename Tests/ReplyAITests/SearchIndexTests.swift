@@ -1676,4 +1676,34 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
         XCTAssertEqual(SearchIndex.snippetTextColumnIndex, 3,
             "snippetTextColumnIndex must remain the FTS5 column index of `text` in messages_fts (thread_id=0, thread_name=1, sender=2, text=3, time=4, channel=5) — drift produces snippets from the wrong column")
     }
+
+    // MARK: - SQL statement pin
+    //
+    // Transaction strings, the truncate, the per-thread delete, and the
+    // INSERT used to be re-typed inline at every writer (rebuild + upsert
+    // + clear + delete). Drift between writers is silent corruption: an
+    // INSERT that binds 6 columns vs 5 raises a parse error only at
+    // runtime; a DELETE that drops the WHERE clause nukes the entire
+    // index from one code path while another path still operates
+    // surgically. Hoisted to `SearchIndex.SQL`; pin freezes the literals.
+
+    func testSQLStatementsAreFrozen() {
+        XCTAssertEqual(SearchIndex.SQL.beginTransaction,    "BEGIN")
+        XCTAssertEqual(SearchIndex.SQL.commitTransaction,   "COMMIT")
+        XCTAssertEqual(SearchIndex.SQL.rollbackTransaction, "ROLLBACK")
+        XCTAssertEqual(SearchIndex.SQL.truncateAll,         "DELETE FROM messages_fts",
+            "truncateAll must NOT carry a WHERE clause — drift here would silently downgrade clear() into a per-thread delete")
+        XCTAssertEqual(SearchIndex.SQL.deleteByThreadID,    "DELETE FROM messages_fts WHERE thread_id = ?1;",
+            "deleteByThreadID must carry the WHERE clause — drift here would silently nuke the entire index on every upsert/delete call")
+
+        // INSERT must list the same 6 columns in the same order — sqlite3
+        // binds parameters by index, so a column reorder silently writes
+        // sender into thread_name, channel into text, etc.
+        let expectedInsert = """
+        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
+        """
+        XCTAssertEqual(SearchIndex.SQL.insertRow, expectedInsert,
+            "insertRow column order must match the FTS5 schema; a reorder writes sender bytes into thread_name, etc.")
+    }
 }

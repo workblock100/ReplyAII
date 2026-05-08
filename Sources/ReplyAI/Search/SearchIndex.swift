@@ -27,6 +27,28 @@ actor SearchIndex {
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
     )
 
+    /// SQL statement vocabulary. The INSERT and per-thread DELETE used to
+    /// be re-typed inline at every call site (rebuild + upsert + clear +
+    /// delete). Drift between the writers — e.g. one INSERT bound 6
+    /// columns, the other 5; or one DELETE missed the WHERE clause and
+    /// nuked the whole index — is the kind of silent corruption that's
+    /// hard to spot in code review and surfaces as "search returns
+    /// nothing" or "search returns rows from archived threads" only at
+    /// runtime. Hoisted to a `SQL` enum so every writer threads through
+    /// one source of truth. Pinned by
+    /// `SearchIndexTests.testSQLStatementsAreFrozen`.
+    enum SQL {
+        static let beginTransaction      = "BEGIN"
+        static let commitTransaction     = "COMMIT"
+        static let rollbackTransaction   = "ROLLBACK"
+        static let truncateAll           = "DELETE FROM messages_fts"
+        static let deleteByThreadID      = "DELETE FROM messages_fts WHERE thread_id = ?1;"
+        static let insertRow             = """
+        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
+        """
+    }
+
     /// - Parameter databaseURL: Path for the on-disk SQLite file.
     ///   Pass `nil` (the default) for an in-memory database — suitable for
     ///   tests where isolation matters more than persistence.
@@ -61,19 +83,15 @@ actor SearchIndex {
     /// in-memory page cache.
     func rebuild(from messagesByThread: [String: [Message]], threads: [MessageThread]) {
         guard let db else { return }
-        sqlite3_exec(db, "BEGIN", nil, nil, nil)
-        sqlite3_exec(db, "DELETE FROM messages_fts", nil, nil, nil)
+        sqlite3_exec(db, SQL.beginTransaction, nil, nil, nil)
+        sqlite3_exec(db, SQL.truncateAll, nil, nil, nil)
 
         let namesByID    = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.name) })
         let channelsByID = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.channel.rawValue) })
 
-        let insertSQL = """
-        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
-        """
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
-            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+        guard sqlite3_prepare_v2(db, SQL.insertRow, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_exec(db, SQL.rollbackTransaction, nil, nil, nil)
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -97,7 +115,7 @@ actor SearchIndex {
             }
         }
 
-        sqlite3_exec(db, "COMMIT", nil, nil, nil)
+        sqlite3_exec(db, SQL.commitTransaction, nil, nil, nil)
     }
 
     /// Wipes the entire index and resets the per-channel indexed-message
@@ -106,7 +124,7 @@ actor SearchIndex {
     /// history.
     func clear(stats: Stats? = nil) {
         guard let db else { return }
-        sqlite3_exec(db, "DELETE FROM messages_fts", nil, nil, nil)
+        sqlite3_exec(db, SQL.truncateAll, nil, nil, nil)
         stats?.resetIndexedCounters()
     }
 
@@ -120,7 +138,7 @@ actor SearchIndex {
         guard let db else { return }
         guard !threadID.isEmpty else { return }
         var del: OpaquePointer?
-        if sqlite3_prepare_v2(db, "DELETE FROM messages_fts WHERE thread_id = ?1;", -1, &del, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, SQL.deleteByThreadID, -1, &del, nil) == SQLITE_OK {
             sqlite3_bind_text(del, 1, threadID, -1, Self.SQLITE_TRANSIENT)
             sqlite3_step(del)
         }
@@ -139,22 +157,18 @@ actor SearchIndex {
     func upsert(thread: MessageThread, messages: [Message]) {
         guard let db else { return }
         guard !thread.id.isEmpty else { return }
-        sqlite3_exec(db, "BEGIN", nil, nil, nil)
+        sqlite3_exec(db, SQL.beginTransaction, nil, nil, nil)
 
         var del: OpaquePointer?
-        if sqlite3_prepare_v2(db, "DELETE FROM messages_fts WHERE thread_id = ?1;", -1, &del, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, SQL.deleteByThreadID, -1, &del, nil) == SQLITE_OK {
             sqlite3_bind_text(del, 1, thread.id, -1, Self.SQLITE_TRANSIENT)
             sqlite3_step(del)
         }
         sqlite3_finalize(del)
 
-        let insertSQL = """
-        INSERT INTO messages_fts (thread_id, thread_name, sender, text, time, channel)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6);
-        """
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK else {
-            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+        guard sqlite3_prepare_v2(db, SQL.insertRow, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_exec(db, SQL.rollbackTransaction, nil, nil, nil)
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -172,7 +186,7 @@ actor SearchIndex {
             sqlite3_step(stmt)
         }
 
-        sqlite3_exec(db, "COMMIT", nil, nil, nil)
+        sqlite3_exec(db, SQL.commitTransaction, nil, nil, nil)
 
         if !messages.isEmpty {
             Stats.shared.incrementIndexed(channel: thread.channel, count: messages.count)
