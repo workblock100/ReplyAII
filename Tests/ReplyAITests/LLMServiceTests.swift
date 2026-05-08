@@ -143,6 +143,35 @@ final class LLMServiceTests: XCTestCase {
             "single word with no delimiters must emit one token, not split per-char")
     }
 
+    /// All-delimiter inputs (a string consisting entirely of split chars)
+    /// must produce one single-character token per delimiter, NOT collapse
+    /// to a single multi-char token and NOT drop empty tokens. The contract
+    /// matters for the streaming composer: each yielded chunk arrives in
+    /// the user's pacing, so a 3-space prefix should arrive as three
+    /// successive space chunks rather than as a single instant 3-space
+    /// blob (or, worse, get swallowed entirely). The existing consecutive-
+    /// space pin covers the *between-words* case ("a  b"); this fills the
+    /// pure-whitespace gap. A future "merge consecutive whitespace" or
+    /// "strip leading delimiters" refactor flips this and should surface
+    /// here as a deliberate edit.
+    func testTokenizerAllSpacesProducesOneTokenPerSpace() {
+        XCTAssertEqual(StubLLMService.tokenize("   "), [" ", " ", " "],
+            "an all-spaces input must emit N single-space tokens, not collapse to one")
+        XCTAssertEqual(StubLLMService.tokenize("   ").joined(), "   ",
+            "joined() must round-trip the original byte-for-byte (chunk-pacing UX depends on this)")
+        XCTAssertEqual(StubLLMService.tokenize(" "), [" "],
+            "a one-space input must emit exactly one single-space token")
+    }
+
+    func testTokenizerAllNewlinesProducesOneTokenPerNewline() {
+        XCTAssertEqual(StubLLMService.tokenize("\n\n"), ["\n", "\n"],
+            "an all-newlines input must emit N single-newline tokens, not collapse to one")
+        XCTAssertEqual(StubLLMService.tokenize("\n\n").joined(), "\n\n",
+            "joined() must round-trip the original byte-for-byte")
+        XCTAssertEqual(StubLLMService.tokenize("\n"), ["\n"],
+            "a one-newline input must emit exactly one single-newline token")
+    }
+
     // MARK: - Production timing defaults
     //
     // `StubLLMService(tokenDelay:initialDelay:)` defaults control the
