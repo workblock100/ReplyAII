@@ -2168,4 +2168,59 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
                        IMessageChannel.FDADenialErrorMessageSubstring.unableToOpen.lowercased(),
             "unableToOpen substring must already be lowercase — match site case-folds the haystack only")
     }
+
+    /// `sqliteBusyRetryDelay` is the wait between an SQLITE_BUSY open
+    /// and the single retry. macOS Messages holds a write lock during
+    /// iCloud sync; one short re-attempt rides it out without
+    /// hammering SQLite. Drift up adds visible inbox-open lag for
+    /// every iCloud-syncing user; drift down (e.g. 0.0) collapses
+    /// the retry into back-to-back open calls that almost always hit
+    /// the same lock. Pin the value so the cadence is a deliberate
+    /// edit.
+    func testSQLiteBusyRetryDelayIsOneHundredMilliseconds() {
+        XCTAssertEqual(IMessageChannel.sqliteBusyRetryDelay, 0.1, accuracy: 1e-9,
+            "sqliteBusyRetryDelay drift either adds visible inbox-open lag or collapses the retry into back-to-back hits on the same lock")
+    }
+
+    /// `fdaPermissionDeniedHint` is the recovery prose surfaced via
+    /// `ChannelError.permissionDenied(hint:)` when chat.db open fails
+    /// with a TCC/Full-Disk-Access denial. The prose names the
+    /// macOS settings path verbatim — drift to a different verb or
+    /// path name (e.g. "Privacy & Security → Files and Folders",
+    /// which exists but does NOT cover chat.db) sends the user to
+    /// the wrong settings page. Pin byte-for-byte so a copy edit
+    /// lands in code review with intent.
+    func testFDAPermissionDeniedHintIsFrozen() {
+        let expected = """
+            ReplyAI can't read your Messages database yet. Grant Full Disk Access in \
+            System Settings → Privacy & Security → Full Disk Access, then try again.
+            """
+        XCTAssertEqual(IMessageChannel.fdaPermissionDeniedHint, expected,
+            "FDA permission-denied hint drift sends users to the wrong macOS settings page — they can't recover from the FDA-denied state")
+        // Sub-substring sanity: every load-bearing token from the
+        // recovery prose appears verbatim. Catches a refactor that
+        // updates the constant in one place but the test literal in
+        // another (the byte-for-byte pin above would still pass).
+        XCTAssertTrue(IMessageChannel.fdaPermissionDeniedHint.contains("Full Disk Access"),
+            "recovery prose must name the exact `Full Disk Access` macOS feature — generic copy lets users guess")
+        XCTAssertTrue(IMessageChannel.fdaPermissionDeniedHint.contains("System Settings"),
+            "recovery prose must name `System Settings` (Apple renamed from `System Preferences` in macOS 13)")
+    }
+
+    /// `openErrorMessage(_ msg:)` is the discriminator-prefixed format
+    /// embedded in `ChannelError.databaseError(code:message:)` for
+    /// open failures that aren't FDA-denial or SQLITE_NOTADB. The
+    /// `Can't open chat.db: ` prefix is what triage engineers grep
+    /// for in support logs. Drift drops the discriminator and makes
+    /// open-failure toasts indistinguishable from query-failure
+    /// toasts.
+    func testOpenErrorMessageFormat() {
+        XCTAssertEqual(
+            IMessageChannel.openErrorMessage("disk I/O error"),
+            "Can't open chat.db: disk I/O error",
+            "openErrorMessage format `Can't open chat.db: <msg>` is the support-log grep target — drift collapses open-failure into query-failure toasts")
+        XCTAssertTrue(
+            IMessageChannel.openErrorMessage("x").hasPrefix("Can't open chat.db: "),
+            "prefix `Can't open chat.db: ` is the discriminator triage greps on")
+    }
 }

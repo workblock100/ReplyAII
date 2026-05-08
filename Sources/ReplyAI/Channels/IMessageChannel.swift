@@ -148,6 +148,48 @@ struct IMessageChannel: ChannelService {
         static let unableToOpen  = "unable to open"
     }
 
+    /// Delay between an `SQLITE_BUSY` open and the single retry. macOS
+    /// Messages holds a write lock on `chat.db` during iCloud sync;
+    /// one short re-attempt rides it out without spamming the SQLite
+    /// engine. Drift up turns the inbox-open path noticeably laggy
+    /// for every iCloud-syncing user; drift down (e.g. 0.0) collapses
+    /// the retry into back-to-back open calls that almost-always hit
+    /// the same lock. Hoisted from the inline `Thread.sleep(forTimeInterval: 0.1)`
+    /// in `openReadOnly` so the cadence is pin-able. Pinned by
+    /// `IMessageChannelTests.testSQLiteBusyRetryDelayIsOneHundredMilliseconds`.
+    static let sqliteBusyRetryDelay: TimeInterval = 0.1
+
+    /// User-visible recovery prose surfaced via
+    /// `ChannelError.permissionDenied(hint:)` when chat.db open fails
+    /// with a TCC/Full-Disk-Access denial signal (SQLITE_AUTH or one
+    /// of the `FDADenialErrorMessageSubstring` matches). This is the
+    /// only path ReplyAI gives users out of the FDA-denied state —
+    /// the prose names the macOS settings path verbatim so the user
+    /// can navigate without guessing. Drift to a different path name
+    /// or a different action verb (e.g. "Privacy & Security → Files
+    /// and Folders" — which exists but does NOT cover chat.db) sends
+    /// users to the wrong settings page and they can't recover.
+    /// Hoisted from the inline multi-line literal in `openReadOnly`
+    /// so a copy edit lands on a named constant instead of buried
+    /// in an error-throw site. Pinned by
+    /// `IMessageChannelTests.testFDAPermissionDeniedHintIsFrozen`.
+    static let fdaPermissionDeniedHint = """
+        ReplyAI can't read your Messages database yet. Grant Full Disk Access in \
+        System Settings → Privacy & Security → Full Disk Access, then try again.
+        """
+
+    /// Format the generic open-error message embedded in
+    /// `ChannelError.databaseError(code:message:)`. Surfaces in the
+    /// inbox banner when chat.db open fails with anything other than
+    /// the FDA-denial path or SQLITE_NOTADB. The format embeds the
+    /// SQLite errmsg verbatim — a triage engineer reading the toast
+    /// or a support log greps the prefix to find the open-failure
+    /// path. Drift drops the discriminator. Pinned by
+    /// `IMessageChannelTests.testOpenErrorMessageFormat`.
+    static func openErrorMessage(_ msg: String) -> String {
+        "Can't open chat.db: \(msg)"
+    }
+
     /// Optional name-resolver that translates phone/email handles to
     /// contact names. Injected from the ViewModel so we don't couple
     /// channel code to Contacts framework directly.
@@ -506,7 +548,7 @@ struct IMessageChannel: ChannelService {
             // SQLITE_BUSY is common while macOS Messages holds a write lock
             // during iCloud sync. One short retry is enough to ride it out.
             sqlite3_close(db)
-            Thread.sleep(forTimeInterval: 0.1)
+            Thread.sleep(forTimeInterval: Self.sqliteBusyRetryDelay)
             (rc, db) = dbOpener(path, flags)
         }
 
@@ -526,12 +568,9 @@ struct IMessageChannel: ChannelService {
             if rc == SQLITE_AUTH
                 || lowerMsg.contains(FDADenialErrorMessageSubstring.authorization)
                 || lowerMsg.contains(FDADenialErrorMessageSubstring.unableToOpen) {
-                throw ChannelError.permissionDenied(hint: """
-                    ReplyAI can't read your Messages database yet. Grant Full Disk Access in \
-                    System Settings → Privacy & Security → Full Disk Access, then try again.
-                    """)
+                throw ChannelError.permissionDenied(hint: Self.fdaPermissionDeniedHint)
             }
-            throw ChannelError.databaseError(code: rc, message: "Can't open chat.db: \(msg)")
+            throw ChannelError.databaseError(code: rc, message: Self.openErrorMessage(msg))
         }
         return db!
     }
