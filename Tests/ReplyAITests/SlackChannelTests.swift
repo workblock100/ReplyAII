@@ -1056,6 +1056,129 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(SlackChannel.channelDisplayPrefix, "#",
             "Slack's display convention prepends `#` to channel names — drift makes channel rows indistinguishable from DM rows")
     }
+
+    // MARK: - parseThreads field-default pins
+
+    /// Pin the constant `MessageThread` defaults that `parseThreads`
+    /// emits regardless of the Slack response shape: `pinned == false`,
+    /// `time == ""`, `contextCount == 0`, `contextSummary == nil`,
+    /// `hasAttachment == false`. Slack's `conversations.list` payload
+    /// has no native concept matching any of these — `pinned` would
+    /// require a separate `stars.list` call, `time` needs the latest
+    /// message timestamp from `conversations.history`, `contextCount`
+    /// is a chat.db column, etc. Drift toward "let's surface
+    /// `c.is_starred` as pinned" or "let's compute time from a side
+    /// channel" would silently change inbox sidebar rendering for
+    /// every Slack thread. Pinning the defaults makes any such cross-
+    /// cutting addition land deliberately, with a deliberate sidebar-
+    /// rendering review.
+    func testRecentThreadsEmitsConstantInboxFieldDefaults() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C1", "name": "general", "is_channel": true, "unread_count": 3},
+                {"id": "D2", "is_im": true, "user_display_name": "Maya"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 2)
+        for t in threads {
+            XCTAssertFalse(t.pinned,
+                "Slack threads must surface pinned=false (Slack's stars are a separate API surface) — drift toward c.is_starred would silently rearrange the sidebar")
+            XCTAssertEqual(t.time, "",
+                "Slack threads must surface time=\"\" from parseThreads — the per-message timestamps live in conversations.history; drift to e.g. workspace timezone here would couple the sidebar to a side-channel fetch")
+            XCTAssertEqual(t.contextCount, 0,
+                "Slack threads have contextCount=0 by default — chat.db's contextCount column is iMessage-specific; drift here would leak fixture-style numbers into real Slack rows")
+            XCTAssertNil(t.contextSummary,
+                "Slack threads must have contextSummary=nil — view layer treats nil as `hide context card`; a Slack-side default would surface the placeholder summary card on every row")
+            XCTAssertFalse(t.hasAttachment,
+                "Slack threads must surface hasAttachment=false at the thread level (Slack's attachment signal is per-message under .files); drift would mis-route the rule engine's hasAttachment predicate")
+        }
+    }
+
+    /// Pin that `parseThreads` always emits `chatGUID == c.id`. Slack's
+    /// channel/DM ID is the route key for `conversations.history` and
+    /// `chat.postMessage` — `chatGUID` is what InboxViewModel hands back
+    /// to `messages(forThreadID:)` and `send(text:toThreadID:)` later
+    /// in the lifecycle. Drift to e.g. `\(c.id)@\(workspaceName)` for
+    /// multi-workspace disambiguation would break the round-trip
+    /// silently: messages would still load (chatGUID is parsed off the
+    /// thread, not built fresh), but a future fix that re-derives the
+    /// route from `chatGUID` would split on `@` and corrupt the call.
+    /// `testRecentThreadsChatGUIDIsConversationID` covers the happy
+    /// path; pin separately that the conversation ID survives even
+    /// when the display name diverges from the ID (workspace-wide
+    /// channels with dotted names, IDs that include the `D` / `C`
+    /// prefix, etc.).
+    func testRecentThreadsChatGUIDPersistsConversationIDIndependentOfDisplayName() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C123ABC", "name": "design.crit.v3", "is_channel": true},
+                {"id": "D456XYZ", "is_im": true, "user_display_name": "Maya Chen"},
+                {"id": "G789MNP", "name": "alpha,beta,gamma"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 3)
+        XCTAssertEqual(threads[0].chatGUID, "C123ABC",
+            "channel chatGUID must be raw Slack ID even when name has dots/special chars in the display string")
+        XCTAssertEqual(threads[0].name, "#design.crit.v3",
+            "control: display name routes through #-prefix even with dots")
+        XCTAssertEqual(threads[1].chatGUID, "D456XYZ",
+            "DM chatGUID must be the `D…` ID, not the user_display_name")
+        XCTAssertEqual(threads[2].chatGUID, "G789MNP",
+            "non-IM/non-channel fallback (group DM `G…`) must still pin chatGUID to the raw ID")
+    }
+
+    // MARK: - parseMessages field-default pins
+
+    /// Pin the constant `Message` defaults that `parseMessages` emits
+    /// regardless of Slack message shape: `rowID == 0`, `isRead == true`.
+    /// `rowID` is a chat.db-specific column (Slack messages have `ts`,
+    /// not a row ID) — drift toward "let's hash `ts` into rowID for
+    /// dedup" silently couples Slack messages to the chat.db `>= rowID`
+    /// rule-engine cursor, which would skip arbitrary windows. `isRead`
+    /// defaults to true because Slack tracks read state per-channel
+    /// (via `conversations.mark`), not per-message — drift toward
+    /// `false` for incoming messages would surface every newly-loaded
+    /// Slack message as unread in the inbox count, even ones the user
+    /// already read in the Slack desktop app.
+    func testMessagesEmitsConstantPerMessageFieldDefaults() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "1700000020.0001", "user": "U999", "text": "second"},
+                {"ts": "1700000010.0001", "user": "U999", "text": "first"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 2)
+        for m in msgs {
+            XCTAssertEqual(m.rowID, 0,
+                "Slack messages must surface rowID=0 — drift toward hashing ts into rowID would silently couple Slack to chat.db's `> sinceRowID` cursor and skip arbitrary windows")
+            XCTAssertTrue(m.isRead,
+                "Slack messages default to isRead=true — Slack tracks read state per-channel (conversations.mark), not per-message; drift toward false would surface every freshly-loaded message as unread, breaking inbox count parity with the Slack desktop app")
+        }
+    }
 }
 
 // MARK: - Test doubles
