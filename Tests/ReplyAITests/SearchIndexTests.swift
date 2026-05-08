@@ -1734,4 +1734,25 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
         XCTAssertTrue(url.path.contains(Preferences.appSupportDirectoryName),
             "search.db must sit inside `\(Preferences.appSupportDirectoryName)/` so factory-reset wipes it as part of the directory sweep — got: \(url.path)")
     }
+
+    /// `outgoingSenderLabel` is what `m.from == .me` rows write into
+    /// the FTS5 `sender` column. The label is duplicated at TWO call
+    /// sites (`rebuild` + `upsert`) — drift between them would
+    /// silently mix conventions, with full-rebuild rows tagged one
+    /// way and per-thread-upsert rows the other. Pin the literal.
+    func testOutgoingSenderLabelIsFrozen() {
+        XCTAssertEqual(SearchIndex.outgoingSenderLabel, "me",
+            "outgoingSenderLabel drift mixes conventions between full-rebuild and per-thread-upsert paths")
+    }
+
+    /// And the label must equal `PromptBuilder.Template.speakerSelf`
+    /// so a future search feature like `from:me hello` matches the
+    /// same speaker label the LLM prompt uses. Currently they coincide
+    /// at `"me"`. Pin the cross-file invariant explicitly so a future
+    /// rename in either place trips here.
+    func testOutgoingSenderLabelEqualsPromptBuilderSpeakerSelf() {
+        XCTAssertEqual(SearchIndex.outgoingSenderLabel,
+                       PromptBuilder.Template.speakerSelf,
+            "search-index outgoing-sender label must match PromptBuilder.Template.speakerSelf — drift desyncs `from:me` search from prompt formatting")
+    }
 }

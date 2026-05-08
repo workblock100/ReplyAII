@@ -59,6 +59,19 @@ actor SearchIndex {
     /// `SearchIndexTests.testProductionFileNameIsSearchDb`.
     static let productionFileName = "search.db"
 
+    /// Sender column value for outgoing messages — what `m.from == .me`
+    /// rows write into the FTS5 `sender` column. The `⌘K` palette can
+    /// query this by typing `from:me hello` (a search-index feature
+    /// that's planned but not yet shipped); drift between the sender
+    /// column literal here and the equivalent in PromptBuilder
+    /// (`Template.speakerSelf = "me"`) would silently desync prompt
+    /// formatting from search index. Hoisted as a sibling so a future
+    /// "rename to user" decision lands in both places. Used at TWO
+    /// call sites (`rebuild` + `upsert`) — drift between the two
+    /// would silently mix conventions across full-rebuild and
+    /// per-thread-upsert paths.
+    static let outgoingSenderLabel = "me"
+
     /// - Parameter databaseURL: Path for the on-disk SQLite file.
     ///   Pass `nil` (the default) for an in-memory database — suitable for
     ///   tests where isolation matters more than persistence.
@@ -116,7 +129,7 @@ actor SearchIndex {
                 sqlite3_reset(stmt)
                 sqlite3_bind_text(stmt, 1, threadID,   -1, Self.SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 2, threadName, -1, Self.SQLITE_TRANSIENT)
-                let sender = m.from == .me ? "me" : threadName
+                let sender = m.from == .me ? Self.outgoingSenderLabel : threadName
                 sqlite3_bind_text(stmt, 3, sender,     -1, Self.SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 4, m.text,     -1, Self.SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 5, m.time,     -1, Self.SQLITE_TRANSIENT)
@@ -188,7 +201,7 @@ actor SearchIndex {
             sqlite3_reset(stmt)
             sqlite3_bind_text(stmt, 1, thread.id,   -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 2, thread.name, -1, Self.SQLITE_TRANSIENT)
-            let sender = m.from == .me ? "me" : thread.name
+            let sender = m.from == .me ? Self.outgoingSenderLabel : thread.name
             sqlite3_bind_text(stmt, 3, sender,      -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 4, m.text,      -1, Self.SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 5, m.time,      -1, Self.SQLITE_TRANSIENT)
