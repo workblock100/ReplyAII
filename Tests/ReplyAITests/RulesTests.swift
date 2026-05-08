@@ -3214,7 +3214,7 @@ final class RulesStoreDefaultFileURLTests: XCTestCase {
     func testDefaultFileURLLivesUnderReplyAIDirectory() {
         let url = RulesStore.defaultFileURL()
         let parent = url.deletingLastPathComponent().lastPathComponent
-        XCTAssertEqual(parent, "ReplyAI",
+        XCTAssertEqual(parent, Preferences.appSupportDirectoryName,
                        "rules.json must live alongside stats.json in ReplyAI/; factory-reset relies on a single directory sweep")
     }
 

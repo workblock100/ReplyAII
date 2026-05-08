@@ -972,7 +972,7 @@ final class StatsDefaultFileURLTests: XCTestCase {
     func testDefaultFileURLLivesUnderReplyAIDirectory() {
         let url = Stats.defaultFileURL()
         let parent = url.deletingLastPathComponent().lastPathComponent
-        XCTAssertEqual(parent, "ReplyAI",
+        XCTAssertEqual(parent, Preferences.appSupportDirectoryName,
                        "stats.json must live in the ReplyAI/ application-support folder so factory-reset can sweep the whole directory")
     }
 

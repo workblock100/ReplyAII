@@ -1683,7 +1683,7 @@ final class SearchIndexProductionDatabaseURLTests: XCTestCase {
     func testProductionDatabaseURLLivesUnderReplyAIDirectory() {
         let url = SearchIndex.productionDatabaseURL()
         let parent = url.deletingLastPathComponent().lastPathComponent
-        XCTAssertEqual(parent, "ReplyAI",
+        XCTAssertEqual(parent, Preferences.appSupportDirectoryName,
                        "search.db must sit in ReplyAI/ so factory-reset can wipe the index along with stats and rules in a single directory sweep")
     }
 

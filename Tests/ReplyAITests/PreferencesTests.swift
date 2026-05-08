@@ -906,7 +906,7 @@ final class PreferencesLastThreadsCacheURLTests: XCTestCase {
     func testLastThreadsCacheURLLivesUnderReplyAIDirectory() {
         let url = Preferences.lastThreadsCacheURL
         let parent = url.deletingLastPathComponent().lastPathComponent
-        XCTAssertEqual(parent, "ReplyAI",
+        XCTAssertEqual(parent, Preferences.appSupportDirectoryName,
                        "thread cache must sit in ReplyAI/ alongside stats.json and rules.json so factory-reset wipes it as part of the directory sweep")
     }
 
