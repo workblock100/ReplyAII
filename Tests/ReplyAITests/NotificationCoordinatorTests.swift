@@ -518,6 +518,67 @@ final class NotificationCoordinatorTests: XCTestCase {
             "thread preview must update when matched via CKChatGUID fallback")
     }
 
+    /// Companion pin for the present-but-WHITESPACE-only chatGUID case.
+    /// `handleIncomingNotification` normalizes via `(chatGUID?.isEmpty
+    /// == false) ? chatGUID : nil` — that guard only catches the
+    /// zero-length empty string. A single-space `chatGUID = " "` passes
+    /// the `!isEmpty` check and propagates verbatim into
+    /// `applyIncomingNotification`, where the chatGUID-keyed branch
+    /// uses EXACT equality and " " almost never matches a real
+    /// chat.db-emitted GUID (those start with `iMessage;` or `SMS;`).
+    ///
+    /// Result: a malformed iMessage payload with a whitespace-only
+    /// `userInfo["CKChatIdentifier"]` does NOT collapse onto the
+    /// senderHandle/name fallback the way an empty string does. Instead
+    /// the chatGUID-keyed branch fails to find a match and creates a
+    /// new thread — which DUPLICATES the existing one keyed by name.
+    ///
+    /// Surprising-but-bad: this is a residual edge of the present-but-
+    /// empty bug class that the empty-string fix (the sibling test)
+    /// only partially closed. Pin the current duplicate-creation
+    /// behavior so a future "trim before normalize" tightening — the
+    /// correct fix — surfaces here as a deliberate change. Mirrors
+    /// the IMessageSender pin
+    /// `testWhitespaceOnlyChatGUIDPassesThroughVerbatimNotSynthesized`
+    /// — same drift class, same residual edge, on a sibling code path.
+    func testWhitespaceOnlyChatGUIDPassesThroughVerbatimAndProducesDuplicate() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+        // Seed a thread with NO chatGUID — same shape as the empty-
+        // string sibling pin uses (the realistic shape for a thread
+        // created from a previous notification before chat.db sync runs).
+        inbox.threads = [
+            MessageThread(id: "t-ws", channel: .imessage, name: "Dave",
+                          avatar: "D", preview: "previous", time: "11:00",
+                          chatGUID: nil)
+        ]
+
+        coordinator.handleIncomingNotification(
+            categoryID: "com.apple.iMessage",
+            senderHandle: "Dave",
+            preview: "newer",
+            chatGUID: " "   // single space — non-empty by .isEmpty
+        )
+
+        // Whitespace-only chatGUID propagates verbatim (it does NOT
+        // normalize to nil), so applyIncomingNotification routes
+        // through the chatGUID-keyed branch and uses EXACT equality.
+        // " " does NOT match the seeded thread's nil chatGUID, AND the
+        // name-keyed fallback only fires when chatGUID is nil — so a
+        // fresh duplicate thread is inserted at the front.
+        XCTAssertEqual(inbox.threads.count, 2,
+            "whitespace-only chatGUID currently propagates verbatim and produces a duplicate thread — drift toward `.trimmingCharacters().isEmpty == false` would normalize ` ` to nil and collapse onto the name-keyed fallback (count would go to 1)")
+        // The newer thread sits at index 0 (insert(at: 0) path).
+        XCTAssertEqual(inbox.threads.first?.name, "Dave",
+            "duplicate thread keys off senderHandle as the name")
+        XCTAssertEqual(inbox.threads.first?.preview, "newer",
+            "duplicate thread carries the new preview")
+        XCTAssertEqual(inbox.threads.last?.preview, "previous",
+            "original seeded thread is unchanged — its preview did NOT update because the name-fallback path didn't run")
+    }
+
     func testEmptyChatGUIDFallsBackToSenderHandleMatching() {
         // Regression pin for the present-but-empty chatGUID bug: a malformed
         // notification with `userInfo["CKChatIdentifier"] = ""` previously
