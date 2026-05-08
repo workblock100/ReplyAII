@@ -295,4 +295,16 @@ final class MessagesAppActivationObserverTests: XCTestCase {
                        "com.apple.MobileSMS",
                        "drift here breaks both activation callbacks AND AccessibilityAPIReader PID lookup — the bundle ID is published by Apple and must match exactly")
     }
+
+    /// Pin the dispatch-queue label. Visible in Instruments / sample
+    /// traces as the only signal distinguishing this observer's
+    /// debounce queue from any other dispatch queue. Sibling to
+    /// `ChatDBWatcher.dispatchQueueLabel` — both share the
+    /// `co.replyai.` reverse-DNS prefix.
+    func testDispatchQueueLabelIsFrozen() {
+        XCTAssertEqual(MessagesAppActivationObserver.dispatchQueueLabel,
+                       "co.replyai.messages-activation")
+        XCTAssertTrue(MessagesAppActivationObserver.dispatchQueueLabel.hasPrefix("co.replyai."),
+            "queue label must use the `co.replyai.` reverse-DNS prefix shared with sibling queues")
+    }
 }

@@ -22,6 +22,14 @@ final class MessagesAppActivationObserver: @unchecked Sendable {
     /// 600ms coalesces rapid activations to one callback per visit.
     static let defaultDebounce: TimeInterval = 0.6
 
+    /// Dispatch queue label for the observer's serial debounce queue.
+    /// Visible in Instruments / sample traces. Sibling to
+    /// `ChatDBWatcher.dispatchQueueLabel` — both use the `co.replyai.`
+    /// reverse-DNS prefix. Drift breaks Instruments output filtering.
+    /// Pinned by
+    /// `MessagesAppActivationObserverTests.testDispatchQueueLabelIsFrozen`.
+    static let dispatchQueueLabel = "co.replyai.messages-activation"
+
     /// Fired at most once per `debounce` interval when Messages becomes frontmost.
     var onMessagesActivated: (() -> Void)?
 
@@ -33,7 +41,7 @@ final class MessagesAppActivationObserver: @unchecked Sendable {
     /// Extracts the activated app's bundle ID from the notification userInfo.
     /// Production uses NSWorkspace.applicationUserInfoKey; tests inject a stub.
     private let bundleIDExtractor: (Notification) -> String?
-    private let queue = DispatchQueue(label: "co.replyai.messages-activation", qos: .utility)
+    private let queue = DispatchQueue(label: MessagesAppActivationObserver.dispatchQueueLabel, qos: .utility)
     private var pending: DispatchWorkItem?
     private var observer: NSObjectProtocol?
 
