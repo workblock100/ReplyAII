@@ -1998,6 +1998,19 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
             "yesterdayLabel is the literal user-visible string — drift in casing or wording (e.g. `yest.`) ships in front of users with no review")
     }
 
+    /// `withinWeekDays` is the threshold dividing the weekday-short
+    /// label branch from the absolute `dateShort` branch. A row whose
+    /// date is `< 7` days ago renders as `"Mon"`, `"Wed"`; ≥ 7 days
+    /// flips to `"Mar 3"`. Drift up (e.g. 14) silently extends the
+    /// short-weekday window past the calendar week — `"Mon"` becomes
+    /// ambiguous between this Mon and last Mon. Drift down (e.g. 3)
+    /// flips most of the week to absolute dates and changes how
+    /// active threads' time chips render.
+    func testWithinWeekDaysIsSeven() {
+        XCTAssertEqual(IMessageChannel.TimeFormat.withinWeekDays, 7,
+            "withinWeekDays drift either makes weekday labels ambiguous (>7 days) or pushes recent threads to absolute dates (<7 days)")
+    }
+
     // MARK: - openReadOnly error-message format pins
 
     /// `IMessageChannel.missingDatabaseErrorMessage(path:)` is the

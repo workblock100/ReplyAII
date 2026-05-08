@@ -71,6 +71,17 @@ struct IMessageChannel: ChannelService {
         static let weekdayShort  = "EEE"
         static let dateShort     = "MMM d"
         static let yesterdayLabel = "Yesterday"
+
+        /// Within-week threshold for `formatRelative`'s weekday-short
+        /// branch. A row whose date is `< withinWeekDays` ago and is
+        /// neither today nor yesterday renders as the short weekday
+        /// label (`"Mon"`, `"Wed"`); ≥ 7 days flips to the absolute
+        /// `dateShort` form (`"MMM d"`). Hoisted from the inline `< 7`
+        /// guard so a future "let's bucket two weeks of weekday
+        /// labels" tweak surfaces in code review with a deliberate
+        /// number change. Pinned by
+        /// `IMessageChannelTests.testWithinWeekDaysIsSeven`.
+        static let withinWeekDays: Int = 7
     }
 
     /// chat.db row-decode vocabulary. Each constant is a fallback for a
@@ -549,7 +560,7 @@ struct IMessageChannel: ChannelService {
             return f.string(from: date)
         }
         if cal.isDateInYesterday(date) { return TimeFormat.yesterdayLabel }
-        if let days = cal.dateComponents([.day], from: date, to: Date()).day, days < 7 {
+        if let days = cal.dateComponents([.day], from: date, to: Date()).day, days < TimeFormat.withinWeekDays {
             let f = DateFormatter(); f.dateFormat = TimeFormat.weekdayShort   // Mon
             return f.string(from: date)
         }
