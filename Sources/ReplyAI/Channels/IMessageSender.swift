@@ -36,14 +36,37 @@ enum IMessageSender {
         static let unsupportedToast   = "This thread can't be sent to (unsupported channel)."
         static let timedOutToast      = "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
 
+        /// Format the message-too-long toast for a given character count.
+        /// Hoisted from the inline interpolation so the parameterized
+        /// copy lives next to the parameterless toasts above. The
+        /// embedded `IMessageSender.maxMessageLength` reference means
+        /// the surfaced max value follows the production constant —
+        /// drift in the constant updates the toast automatically rather
+        /// than silently desyncing two numbers. Pinned by
+        /// `IMessageSendErrorCopyTests.testMessageTooLongToastFormatRoundTrips`.
+        static func messageTooLongToast(chars n: Int) -> String {
+            "Message too long (\(n) chars, max \(IMessageSender.maxMessageLength))."
+        }
+
+        /// Format the invalid-chat-GUID toast for a given offending
+        /// GUID. The embedded `iMessage;[+-];<identifier>` shape
+        /// description must stay in sync with `isValidIMessageGUID`'s
+        /// definition — drift either rewords the user-visible expected
+        /// shape away from what the validator actually accepts (toast
+        /// lies to the user) or vice versa. Pinned by
+        /// `IMessageSendErrorCopyTests.testInvalidChatGUIDToastFormatRoundTrips`.
+        static func invalidChatGUIDToast(guid g: String) -> String {
+            "Invalid chat GUID '\(g)': must match iMessage;[+-];<identifier>."
+        }
+
         var errorDescription: String? {
             switch self {
-            case .scriptFailure(let s): s
-            case .notAuthorized:        Self.notAuthorizedToast
-            case .unsupported:          Self.unsupportedToast
-            case .timedOut:             Self.timedOutToast
-            case .messageTooLong(let n): "Message too long (\(n) chars, max \(IMessageSender.maxMessageLength))."
-            case .invalidChatGUID(let g): "Invalid chat GUID '\(g)': must match iMessage;[+-];<identifier>."
+            case .scriptFailure(let s):   s
+            case .notAuthorized:          Self.notAuthorizedToast
+            case .unsupported:            Self.unsupportedToast
+            case .timedOut:               Self.timedOutToast
+            case .messageTooLong(let n):  Self.messageTooLongToast(chars: n)
+            case .invalidChatGUID(let g): Self.invalidChatGUIDToast(guid: g)
             }
         }
     }

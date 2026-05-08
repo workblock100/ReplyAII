@@ -129,4 +129,52 @@ final class IMessageSendErrorCopyTests: XCTestCase {
                        IMessageSender.SendError.timedOutToast,
             ".timedOut errorDescription must equal the hoisted constant — drift is silent in user UX")
     }
+
+    // MARK: - Parameterized toast format pins
+
+    /// Pin the .messageTooLong toast format. The format embeds the
+    /// caller's char count AND `IMessageSender.maxMessageLength` —
+    /// drift in the surfaced max number desyncs the toast from the
+    /// validator's actual cutoff and lies to the user.
+    func testMessageTooLongToastFormatRoundTrips() {
+        let toast = IMessageSender.SendError.messageTooLongToast(chars: 5000)
+        XCTAssertEqual(toast,
+                       "Message too long (5000 chars, max \(IMessageSender.maxMessageLength)).")
+        // Routing: the case's errorDescription must equal the format
+        // helper applied to its associated value.
+        XCTAssertEqual(IMessageSender.SendError.messageTooLong(5000).errorDescription, toast,
+            ".messageTooLong case must route through messageTooLongToast(chars:) — drift desyncs case from helper")
+    }
+
+    /// Pin the .messageTooLong format embeds the production
+    /// `maxMessageLength` constant, not a hard-coded number. A future
+    /// max-length bump (e.g. 4096 → 8192) must update the toast
+    /// automatically.
+    func testMessageTooLongToastEmbedsProductionMax() {
+        let toast = IMessageSender.SendError.messageTooLongToast(chars: 1)
+        XCTAssertTrue(toast.contains("max \(IMessageSender.maxMessageLength)"),
+            "messageTooLongToast must embed the production maxMessageLength — drift would surface a stale max in the user toast")
+    }
+
+    /// Pin the .invalidChatGUID toast format. The shape description
+    /// `iMessage;[+-];<identifier>` must stay in sync with what the
+    /// validator actually accepts — drift either rewords the user-
+    /// visible expected shape away from the validator or vice versa.
+    func testInvalidChatGUIDToastFormatRoundTrips() {
+        let toast = IMessageSender.SendError.invalidChatGUIDToast(guid: "bogus;guid")
+        XCTAssertEqual(toast,
+                       "Invalid chat GUID 'bogus;guid': must match iMessage;[+-];<identifier>.")
+        XCTAssertEqual(IMessageSender.SendError.invalidChatGUID("bogus;guid").errorDescription, toast,
+            ".invalidChatGUID case must route through invalidChatGUIDToast(guid:) — drift desyncs case from helper")
+    }
+
+    /// Pin the GUID-shape phrase the validator promises. The toast is
+    /// the user's only signal of what shape ReplyAI expects — drift
+    /// here makes a legitimate-shaped GUID look wrong to the user or
+    /// claims a different shape than the validator enforces.
+    func testInvalidChatGUIDToastEmbedsExpectedShape() {
+        let toast = IMessageSender.SendError.invalidChatGUIDToast(guid: "X")
+        XCTAssertTrue(toast.contains("iMessage;[+-];<identifier>"),
+            "invalidChatGUIDToast must surface the same shape the validator accepts — drift between toast and validator is silent")
+    }
 }
