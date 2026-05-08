@@ -313,6 +313,33 @@ final class StatsTests: XCTestCase {
         XCTAssertNil(snap.draftsSentByTone["Direct"])
     }
 
+    /// Pin the asymmetry: the no-tone overloads of `recordDraftGenerated`
+    /// and `recordDraftSent` ONLY update the aggregate counter, NOT the
+    /// per-tone breakdown. The tone-aware overloads update both.
+    /// Existing testPerToneCountersIncrement covers the tone-aware path
+    /// (both counters advance) but doesn't pin that the no-tone path
+    /// keeps `draftsGeneratedByTone` empty. A future "let's just bucket
+    /// no-tone calls under .warm as a default" refactor would silently
+    /// inflate the .warm bucket on every legacy call site, distorting
+    /// the per-tone breakdown for stakeholder review. Pin both legs.
+    func testNoToneRecordDraftDoesNotPopulateByToneBreakdown() {
+        let stats = Stats(fileURL: tempURL())
+
+        stats.recordDraftGenerated()
+        stats.recordDraftGenerated()
+        stats.recordDraftSent()
+
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.draftsGenerated, 2,
+                       "no-tone recordDraftGenerated must still bump the aggregate counter")
+        XCTAssertEqual(snap.draftsSent, 1,
+                       "no-tone recordDraftSent must still bump the aggregate counter")
+        XCTAssertTrue(snap.draftsGeneratedByTone.isEmpty,
+                      "no-tone recordDraftGenerated must NOT touch draftsGeneratedByTone — drift would silently inflate one tone bucket on every legacy call site")
+        XCTAssertTrue(snap.draftsSentByTone.isEmpty,
+                      "no-tone recordDraftSent must NOT touch draftsSentByTone — same asymmetry, same risk")
+    }
+
     func testPerToneCountersRoundTrip() throws {
         let url = tempURL()
         let first = Stats(fileURL: url)
