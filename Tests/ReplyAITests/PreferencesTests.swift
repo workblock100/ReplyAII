@@ -728,6 +728,34 @@ final class PreferencesVoiceExamplesTests: XCTestCase {
                        "individual voice example must be truncated to 500 chars at setter")
     }
 
+    /// Pin the boundary direction at the per-entry length cap. The
+    /// implementation truncates with strict-greater (`> maxLength`), so
+    /// an entry of EXACTLY 500 chars passes through verbatim while 501
+    /// chars gets clipped. Existing `testVoiceExampleTruncatedAtFiveHundredChars`
+    /// only exercises 600 (clearly-over). A future "harden to >="
+    /// refactor would clip every legitimate 500-char example by one
+    /// trailing char, silently shifting the voice profile for users at
+    /// the boundary. Pin both legs.
+    func testVoiceExampleAtExactly500CharsPassesThroughUntruncated() {
+        let exact = String(repeating: "x", count: 500)
+        defaults.setVoiceExampleMessages([exact])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored[0].count, 500,
+                       "exactly 500 chars must NOT trigger truncation — predicate is strict-greater (`>`), not `>=`")
+        XCTAssertEqual(stored[0], exact,
+                       "the 500-char entry must round-trip byte-for-byte unchanged")
+    }
+
+    func testVoiceExampleAt501CharsTruncatesByExactlyOne() {
+        let oneOver = String(repeating: "y", count: 501)
+        defaults.setVoiceExampleMessages([oneOver])
+        let stored = defaults.voiceExampleMessages()
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored[0].count, 500,
+                       "exactly 501 chars must clip to 500 — single char above the cap is truncated")
+    }
+
     // MARK: - boundary cases
 
     func testVoiceExampleMessagesGetterReturnsEmptyWhenUnset() {
