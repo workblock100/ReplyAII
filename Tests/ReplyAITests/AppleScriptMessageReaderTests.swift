@@ -498,7 +498,7 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         let reader = makeReader(returning: raw)
         let threads = try reader.recentChats()
         XCTAssertEqual(threads.count, 1)
-        XCTAssertEqual(threads[0].name, "Group chat",
+        XCTAssertEqual(threads[0].name, AppleScriptMessageReader.groupChatDisplayLabel,
             "synthetic chat IDs (`chat...`) must label as `Group chat`, not the raw key")
     }
 
