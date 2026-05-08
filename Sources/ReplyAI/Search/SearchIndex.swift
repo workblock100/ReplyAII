@@ -359,18 +359,47 @@ actor SearchIndex {
 
     // MARK: - Query translation
 
+    /// FTS5 syntax characters that, when present in a token, force the
+    /// token to be wrapped in phrase quotes rather than appended with
+    /// `*`. The set is intentionally narrow — only chars FTS5 itself
+    /// treats syntactically (`(` and `)` for grouping, `*` for prefix,
+    /// `:` for column scoping). Drift here either over-quotes ordinary
+    /// tokens (silently disabling prefix matching for queries like
+    /// `bob's`) or under-quotes a real special char (returning a
+    /// `malformed MATCH expression` SQLite error to the search caller,
+    /// which surfaces as an empty palette). If FTS5 ever picks up a
+    /// new special character, this is the one place to update.
+    /// Pinned by `SearchIndexTests`'s `*FTSSpecialCharacters*` cluster.
+    static let ftsSpecialCharacters: String = "()*:"
+
+    /// FTS5 `AND` join used for multi-word queries — surrounded by
+    /// spaces so it sits between adjacent tokens. Drift to `OR` would
+    /// silently flip search semantics from "all words must match" to
+    /// "any word matches", broadening every multi-token query in the
+    /// palette to far more results than the user intended.
+    static let ftsTokenJoiner: String = " AND "
+
+    /// FTS5 prefix-match suffix appended to every plain (non-special)
+    /// token. Drift to `%` would silently disable prefix matching
+    /// (FTS5 only treats `*` as the prefix operator), making "din"
+    /// fail to surface "dinner" — a steep recall regression for the
+    /// ⌘K palette where users type partial words. Pinned by the
+    /// existing `SearchIndexTests` `ftsQuery` examples that rely on
+    /// `dinner*` etc.
+    static let ftsPrefixSuffix: String = "*"
+
     /// Translate a user's free-form input into an FTS5 MATCH expression.
     ///
     /// Sanitization (REP-092):
     ///   - Strip double-quotes (prevent unclosed phrase literals)
     ///   - Strip hyphens (bare `-` confuses FTS5's phrase-boundary parser)
     ///   - Skip tokens that collapse to empty after stripping
-    ///   - Wrap remaining FTS5 syntax characters `()*:` in phrase quotes
-    ///   - Otherwise append `*` for prefix matching
+    ///   - Wrap tokens containing chars in `ftsSpecialCharacters` in phrase quotes
+    ///   - Otherwise append `ftsPrefixSuffix` (`*`) for prefix matching
     ///
-    /// Multi-word queries join tokens with explicit `AND` so both words must
-    /// appear somewhere in the document (not as an adjacent phrase), giving
-    /// better recall for inbox search.
+    /// Multi-word queries join tokens with explicit `AND` (`ftsTokenJoiner`)
+    /// so both words must appear somewhere in the document (not as an
+    /// adjacent phrase), giving better recall for inbox search.
     static func ftsQuery(from input: String) -> String {
         let raw = input.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         guard !raw.isEmpty else { return "" }
@@ -378,13 +407,13 @@ actor SearchIndex {
             var safe = token.replacingOccurrences(of: "\"", with: "")
             safe = safe.replacingOccurrences(of: "-", with: "")
             guard !safe.isEmpty else { return nil }
-            let specialSet = CharacterSet(charactersIn: "()*:")
+            let specialSet = CharacterSet(charactersIn: Self.ftsSpecialCharacters)
             let hasSpecial = safe.rangeOfCharacter(from: specialSet) != nil
             if hasSpecial { return "\"\(safe)\"" }
-            return "\(safe)*"
+            return "\(safe)\(Self.ftsPrefixSuffix)"
         }
         guard !tokens.isEmpty else { return "" }
-        return tokens.count == 1 ? tokens[0] : tokens.joined(separator: " AND ")
+        return tokens.count == 1 ? tokens[0] : tokens.joined(separator: Self.ftsTokenJoiner)
     }
 
     private static func text(_ stmt: OpaquePointer?, _ col: Int32) -> String? {

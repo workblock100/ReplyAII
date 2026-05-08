@@ -80,6 +80,68 @@ final class SearchIndexTests: XCTestCase {
                        "colon must trigger phrase-quote wrapping (regression guard for the existing :-only test)")
     }
 
+    // MARK: - FTS5 syntax constants pin
+
+    /// `SearchIndex.ftsSpecialCharacters` is the single source of
+    /// truth for which characters trigger phrase-quote wrapping.
+    /// Drift either over-quotes ordinary tokens (silently disabling
+    /// prefix matching) or under-quotes a real FTS5 special char
+    /// (returning a `malformed MATCH expression` SQLite error which
+    /// surfaces as an empty palette). The set is intentionally
+    /// narrow — only chars FTS5 itself treats syntactically.
+    func testFTSSpecialCharactersConstantIsFrozen() {
+        XCTAssertEqual(SearchIndex.ftsSpecialCharacters, "()*:",
+            "ftsSpecialCharacters drift either over-quotes ordinary tokens or under-quotes real FTS5 special chars — pin so a deliberate FTS5-grammar update lands in code review")
+    }
+
+    func testFTSSpecialCharactersIncludesEachKnownSpecialChar() {
+        // Independent witness: each char individually must be in the
+        // set. Pin so a future refactor that, e.g., dropped `*` while
+        // the existing testFTSQueryQuotesEachSpecialCharIndividually
+        // continued to pass somehow can't slip through unnoticed.
+        for c in ["(", ")", "*", ":"] {
+            XCTAssertTrue(SearchIndex.ftsSpecialCharacters.contains(c),
+                "ftsSpecialCharacters must include `\(c)` — drift here silently disables phrase-quoting for tokens containing it")
+        }
+        // And the same set must NOT include benign chars that should
+        // remain prefix-appended.
+        for c in ["a", "0", "_", "'", ".", "@"] {
+            XCTAssertFalse(SearchIndex.ftsSpecialCharacters.contains(c),
+                "ftsSpecialCharacters must NOT include `\(c)` — drift would over-quote tokens like `bob's` or `user@host` and silently disable prefix matching")
+        }
+    }
+
+    /// `ftsTokenJoiner` defines multi-word search semantics. Drift to
+    /// `OR` would silently widen every multi-token query to a much
+    /// larger result set — a stealth recall change users notice as
+    /// "the palette suddenly shows random matches".
+    func testFTSTokenJoinerIsAndWithSpaces() {
+        XCTAssertEqual(SearchIndex.ftsTokenJoiner, " AND ",
+            "ftsTokenJoiner drift flips multi-word semantics from intersection to union — every palette query starts surfacing far more (less relevant) results")
+
+        // Witness: the joiner round-trips through ftsQuery for the
+        // simplest two-token case.
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "foo bar"),
+                       "foo*\(SearchIndex.ftsTokenJoiner)bar*",
+                       "ftsQuery must compose tokens through ftsTokenJoiner — drift either at the constant or the call site changes search semantics")
+    }
+
+    /// `ftsPrefixSuffix` is the single character FTS5 treats as the
+    /// prefix-match operator. Drift to `%` (LIKE-style wildcard) or
+    /// blank would silently disable prefix matching across every
+    /// palette query — typing `din` would no longer surface
+    /// `dinner`.
+    func testFTSPrefixSuffixIsAsterisk() {
+        XCTAssertEqual(SearchIndex.ftsPrefixSuffix, "*",
+            "ftsPrefixSuffix drift breaks prefix matching — FTS5 treats only `*` as the prefix operator")
+
+        // Witness: a single-token query round-trips through
+        // ftsPrefixSuffix.
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "din"),
+                       "din\(SearchIndex.ftsPrefixSuffix)",
+                       "single-token query composes through ftsPrefixSuffix — drift here changes the on-the-wire FTS5 expression")
+    }
+
     /// Mixing one normal token and one with a special char must produce
     /// `normal* AND "special:token"` — both branches participate in the
     /// AND join. Pin the order-preserving join because a future "collapse
