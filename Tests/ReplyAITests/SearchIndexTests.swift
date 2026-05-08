@@ -1755,4 +1755,18 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
                        PromptBuilder.Template.speakerSelf,
             "search-index outgoing-sender label must match PromptBuilder.Template.speakerSelf — drift desyncs `from:me` search from prompt formatting")
     }
+
+    /// Pin the SQLite in-memory-database sentinel filename. Drift to
+    /// e.g. `":memory"` (no trailing colon) silently makes SQLite open
+    /// a real disk file named `:memory` in the current working
+    /// directory instead of an in-memory DB, polluting test state.
+    /// Surfaces in every SearchIndex unit test that constructs the
+    /// index without a `databaseURL`.
+    func testInMemoryDatabasePathIsFrozen() {
+        XCTAssertEqual(SearchIndex.inMemoryDatabasePath, ":memory:")
+        XCTAssertTrue(SearchIndex.inMemoryDatabasePath.hasPrefix(":"),
+            "in-memory sentinel must start with `:` — SQLite parses the leading colon as the in-memory marker")
+        XCTAssertTrue(SearchIndex.inMemoryDatabasePath.hasSuffix(":"),
+            "in-memory sentinel must end with `:` — SQLite parses the trailing colon as part of the marker")
+    }
 }

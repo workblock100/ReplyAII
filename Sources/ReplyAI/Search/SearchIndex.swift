@@ -320,11 +320,21 @@ actor SearchIndex {
         return results
     }
 
+    /// SQLite-defined sentinel filename that opens an in-memory
+    /// database. Passed to `sqlite3_open_v2` when the test harness
+    /// constructs a `SearchIndex` without a `databaseURL` — drift
+    /// here (e.g. a typo to `":memory"` without the trailing colon)
+    /// would have SQLite open a real disk file named `:memory` in
+    /// the current working directory instead of an in-memory DB,
+    /// silently making every test mutate shared state on disk.
+    /// Pinned by `SearchIndexTests.testInMemoryDatabasePathIsFrozen`.
+    static let inMemoryDatabasePath: String = ":memory:"
+
     // MARK: - Setup
 
     private func open(url: URL?) {
         var handle: OpaquePointer?
-        let path = url?.path ?? ":memory:"
+        let path = url?.path ?? Self.inMemoryDatabasePath
         guard sqlite3_open_v2(path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
             return
         }
