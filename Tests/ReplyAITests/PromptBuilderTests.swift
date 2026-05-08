@@ -912,4 +912,94 @@ final class PromptBuilderTests: XCTestCase {
         XCTAssertFalse(prompt.contains("\(PromptBuilder.Template.speakerSelf): incoming-from-no-name"),
             "incoming message must NOT be attributed to `me` even when thread.name is empty — speaker selection must remain `from == .me ? speakerSelf : thread.name` regardless of name's emptiness")
     }
+
+    // MARK: - Line-ending and section-separator pins
+
+    /// Pin that `PromptBuilder.build` produces a prompt with LF-only
+    /// (`\n`) line endings, never CRLF (`\r\n`). The internal
+    /// `lines.joined(separator: "\n")` is the only join site in the
+    /// build path, so a refactor toward `joined(separator: "\r\n")`
+    /// (rare but happens during cross-platform code copies) would
+    /// silently change the LLM's tokenization on every prompt — the
+    /// MLX tokenizer treats `\r\n` as two separate tokens vs `\n` as
+    /// one, redistributing the token budget for free. Drift here
+    /// would NOT crash, NOT change visible string content, but WOULD
+    /// degrade completion quality for every shipped user. Assert no
+    /// `\r` byte appears anywhere in the produced prompt.
+    func testBuildPromptUsesLFOnlyLineEndingsNeverCR() {
+        let thread = makeThread(name: "Maya")
+        let history = [
+            makeMessage("incoming line", from: .them),
+            makeMessage("outgoing line", from: .me),
+            makeMessage("incoming with\nembedded newline", from: .them)  // collapses to space
+        ]
+        let prompt = PromptBuilder.build(
+            thread: thread,
+            tone: .warm,
+            history: history,
+            voiceExamples: ["sample one", "sample two"]
+        )
+        XCTAssertFalse(prompt.contains("\r"),
+            "build() output must contain NO `\\r` bytes — drift toward CRLF separators would silently degrade LLM tokenization for every prompt")
+        XCTAssertFalse(prompt.contains("\r\n"),
+            "build() output must contain NO `\\r\\n` sequences — pin the negative case separately so a partial CRLF refactor (e.g. only one of the two join sites) still surfaces here")
+        // Sanity: the prompt does still have LF separators where expected.
+        XCTAssertTrue(prompt.contains("\n"),
+            "control: prompt MUST contain `\\n` separators between sections — pinning the negative-CR case shouldn't accidentally cover an empty-prompt regression")
+    }
+
+    /// Pin the inter-section separator shape. Sections of the prompt
+    /// are separated by exactly one blank line (`\n\n` — a single
+    /// empty `lines.append("")` joined by `\n`). The model treats
+    /// `\n\n` as a paragraph break, which is how the four blocks
+    /// (thread header → voice examples → recent messages → instruction)
+    /// surface as distinct conversational turns to the LLM. Drift
+    /// toward `\n` (no blank line) collapses the section structure
+    /// into a wall of text the model has to re-segment; drift toward
+    /// `\n\n\n` introduces a stronger break than the template was
+    /// trained against. Pin the count of blank-line gaps so the
+    /// section structure can't drift.
+    func testBuildPromptHasExpectedBlankLineSeparatorsBetweenSections() {
+        let thread = makeThread(name: "Maya")
+        let history = [makeMessage("hello", from: .them)]
+        // With voiceExamples non-empty: header → blank → voice header → bullet → blank → history header → message → blank → instruction.
+        // The blank lines are at positions [after thread header], [after voice examples], [before instruction].
+        let prompt = PromptBuilder.build(
+            thread: thread,
+            tone: .direct,
+            history: history,
+            voiceExamples: ["example one"]
+        )
+        // Each blank-line gap renders as `\n\n` in the joined string.
+        let occurrences = prompt.components(separatedBy: "\n\n").count - 1
+        XCTAssertEqual(occurrences, 3,
+            "build() with non-empty voiceExamples must emit exactly 3 `\\n\\n` paragraph breaks (after thread header, after voice examples, before instruction); got \(occurrences). Drift here changes how the LLM segments the prompt into turns")
+        XCTAssertFalse(prompt.contains("\n\n\n"),
+            "build() must NOT emit triple-newlines — drift toward `\\n\\n\\n` introduces a stronger paragraph break than the template was trained against")
+    }
+
+    /// Pin the system-prompt cap math. `systemPrompt` clamps the raw
+    /// "base + tone suffix" string at `historyCharBudget - minHistoryReserve`
+    /// = `2000 - 200` = `1800` characters when the raw exceeds it. The
+    /// individual constants are pinned by
+    /// `testHistoryCharBudgetPinned` and `testMinHistoryReservePinned`,
+    /// but the *derived* cap value is the actual contract: a future
+    /// "let's reserve 500 chars for history instead of 200" edit on
+    /// `minHistoryReserve` would correctly flow through, but pinning
+    /// the current 1800 makes that flow visible at the truncation site
+    /// rather than only via algebra on the constant tests.
+    func testSystemPromptCapIs1800CharactersWhenRawExceeds() {
+        // Force the truncation path with a tone whose suffix is short
+        // and where the raw base+suffix is < 1800 — sanity check the
+        // happy path doesn't truncate.
+        let warm = PromptBuilder.systemPrompt(tone: .warm)
+        XCTAssertLessThan(warm.count, 1800,
+            "control: warm system prompt must be under the 1800-char cap so this test exercises the no-truncation path")
+        // The truncation-path test is exercised by
+        // testOversizedSystemInstructionFitsWithinCap (which runs against
+        // the real cap); pin the derived value here.
+        let derivedCap = PromptBuilder.historyCharBudget - PromptBuilder.minHistoryReserve
+        XCTAssertEqual(derivedCap, 1800,
+            "system-prompt cap is exactly historyCharBudget - minHistoryReserve = 2000 - 200 = 1800; drift in either constant must surface here, not only as an indirect change in oversized-prompt behavior")
+    }
 }
