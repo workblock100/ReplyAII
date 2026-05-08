@@ -120,10 +120,10 @@ final class SlackOAuthFlowTests: XCTestCase {
         let items = components.queryItems ?? []
         func param(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
 
-        XCTAssertEqual(param("client_id"), "my-client-id")
-        XCTAssertEqual(param("redirect_uri"), "http://localhost:4242/callback")
+        XCTAssertEqual(param(SlackOAuthFlow.FormField.clientID), "my-client-id")
+        XCTAssertEqual(param(SlackOAuthFlow.FormField.redirectURI), SlackOAuthFlow.redirectURI)
 
-        let scope = param("scope") ?? ""
+        let scope = param(SlackOAuthFlow.FormField.scope) ?? ""
         XCTAssertTrue(scope.contains("channels:read"), "scope must include channels:read, got: \(scope)")
         XCTAssertTrue(scope.contains("chat:write"), "scope must include chat:write, got: \(scope)")
     }
@@ -156,7 +156,7 @@ final class SlackOAuthFlowTests: XCTestCase {
             return
         }
         let items = components.queryItems ?? []
-        let scope = items.first(where: { $0.name == "scope" })?.value ?? ""
+        let scope = items.first(where: { $0.name == SlackOAuthFlow.FormField.scope })?.value ?? ""
         XCTAssertEqual(scope, SlackOAuthFlow.scope,
             "auth URL scope must route through SlackOAuthFlow.scope — drift means the constant became dead code while the URLQueryItem froze a stale literal")
         // Pin the literal value of the constant itself. The routing test
@@ -473,8 +473,8 @@ final class SlackOAuthFlowTests: XCTestCase {
         wait(for: [exp], timeout: 3)
 
         let items = URLComponents(url: opener.openedURL!, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        let redirect = items.first(where: { $0.name == "redirect_uri" })?.value
-        XCTAssertEqual(redirect, "http://localhost:4242/callback")
+        let redirect = items.first(where: { $0.name == SlackOAuthFlow.FormField.redirectURI })?.value
+        XCTAssertEqual(redirect, SlackOAuthFlow.redirectURI)
     }
 
     /// Token-exchange POST body uses x-www-form-urlencoded content type.
