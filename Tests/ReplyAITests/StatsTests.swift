@@ -944,7 +944,7 @@ final class StatsDefaultFileURLTests: XCTestCase {
 
     func testDefaultFileURLEndsWithStatsJSON() {
         let url = Stats.defaultFileURL()
-        XCTAssertEqual(url.lastPathComponent, "stats.json",
+        XCTAssertEqual(url.lastPathComponent, Stats.productionFileName,
                        "production path must end with stats.json — anything else orphans existing user data")
     }
 

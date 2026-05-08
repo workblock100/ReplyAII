@@ -3207,7 +3207,7 @@ final class RulesStoreDefaultFileURLTests: XCTestCase {
 
     func testDefaultFileURLEndsWithRulesJSON() {
         let url = RulesStore.defaultFileURL()
-        XCTAssertEqual(url.lastPathComponent, "rules.json",
+        XCTAssertEqual(url.lastPathComponent, RulesStore.Disk.fileName,
                        "production path must end with rules.json — anything else orphans every user's customised rules")
     }
 
