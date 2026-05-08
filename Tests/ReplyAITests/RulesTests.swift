@@ -3333,4 +3333,48 @@ final class SmartRuleSeedNamesTests: XCTestCase {
             XCTFail("expected .silentlyIgnore for Substack seed, got \(SmartRule.seedRules[3].then)"); return
         }
     }
+
+    // MARK: - On-disk vocabulary pins (RulesStore.Disk)
+
+    /// The `Disk` enum on `RulesStore` holds every literal that crosses
+    /// the boundary between save and load — drift between the auto-Codable
+    /// `RulesExport` writer and the manual `JSONSerialization` reader is
+    /// silent corruption (every export roundtrip stops working but tests
+    /// that don't roundtrip still pass). Pin each constant byte-for-byte.
+    func testRulesStoreDiskVocabularyIsFrozen() {
+        XCTAssertEqual(RulesStore.Disk.fileName, "rules.json",
+            "rules.json filename is what every install reads from — drift breaks load on next launch")
+        XCTAssertEqual(RulesStore.Disk.brokenSuffix, "broken",
+            "`broken` suffix is the recovery handle — drift makes a corrupted file vanish without leaving a copy the user can hand-edit")
+        XCTAssertEqual(RulesStore.Disk.versionKey, "version",
+            "version key bridges the auto-Codable RulesExport writer and the manual JSONSerialization reader — drift breaks every import")
+        XCTAssertEqual(RulesStore.Disk.rulesKey, "rules",
+            "rules key bridges the auto-Codable RulesExport writer and the manual JSONSerialization reader — drift breaks every import")
+    }
+
+    /// Pin that the auto-Codable `RulesExport` actually emits the keys
+    /// the manual import path reads. Catches the case where someone adds
+    /// a `CodingKeys` override on `RulesExport` (renaming `version` to
+    /// e.g. `schema_version`) but forgets to update `Disk.versionKey` —
+    /// existing roundtrip tests would still pass because both the writer
+    /// and reader's auto-Codable agree, but `Disk.versionKey` drifts away
+    /// from the wire format.
+    func testRulesExportEmitsDiskVocabularyKeys() throws {
+        let envelope = RulesExport(version: RulesStore.exportVersion, rules: [])
+        let data = try JSONEncoder().encode(envelope)
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(obj?[RulesStore.Disk.versionKey],
+            "RulesExport must emit a top-level `\(RulesStore.Disk.versionKey)` key — Disk.versionKey has drifted from the auto-Codable wire format")
+        XCTAssertNotNil(obj?[RulesStore.Disk.rulesKey],
+            "RulesExport must emit a top-level `\(RulesStore.Disk.rulesKey)` key — Disk.rulesKey has drifted from the auto-Codable wire format")
+    }
+
+    /// The on-disk filename ends in `.json` (not e.g. `.plist` or no
+    /// extension). Pin so a future "let's switch to plist" edit shows up
+    /// here as a deliberate test change rather than a silent migration
+    /// that orphans every existing user's rules.
+    func testRulesStoreFileNameUsesJsonExtension() {
+        XCTAssertTrue(RulesStore.Disk.fileName.hasSuffix(".json"),
+            "rules disk format is JSON — drift away from .json silently orphans every existing install's rules.json")
+    }
 }

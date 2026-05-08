@@ -30,6 +30,25 @@ final class RulesStore {
     /// Hard cap preventing unbounded O(n) rule evaluation on every thread select.
     static let maxRules = 100
 
+    /// On-disk vocabulary. Each literal is load-bearing across save and
+    /// load: the manual `import(from:)` path reads `version` and `rules`
+    /// keys via raw `JSONSerialization` while `export(to:)` writes them
+    /// via the auto-Codable `RulesExport` struct — drift between the two
+    /// (e.g. the struct gains a `CodingKeys` override) silently breaks
+    /// every export/import roundtrip. The `rules.json` filename is the
+    /// canonical disk handle every install reads from; the `.broken`
+    /// extension is what `loadOrSeed` renames a corrupted file to before
+    /// reseeding so the user can recover by hand. Hoisted to a `Disk`
+    /// enum so a deliberate edit shows up as a single-line diff and a
+    /// future reader/writer wires through one source of truth. Pinned
+    /// by `RulesTests.testRulesStoreDiskVocabularyIsFrozen`.
+    enum Disk {
+        static let fileName       = "rules.json"
+        static let brokenSuffix   = "broken"
+        static let versionKey     = "version"
+        static let rulesKey       = "rules"
+    }
+
     private(set) var rules: [SmartRule] = []
 
     /// Most-recent batch of (ruleID, action) pairs that fired during rule
@@ -128,13 +147,13 @@ final class RulesStore {
     func `import`(from url: URL) throws {
         let data = try Data(contentsOf: url)
         guard let rawObj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let version = rawObj["version"] as? Int else {
+              let version = rawObj[Disk.versionKey] as? Int else {
             throw CocoaError(.fileReadCorruptFile)
         }
         guard version == Self.exportVersion else {
             throw RulesStoreError.unsupportedExportVersion(version)
         }
-        guard let rawRules = rawObj["rules"] as? [Any] else {
+        guard let rawRules = rawObj[Disk.rulesKey] as? [Any] else {
             throw CocoaError(.fileReadCorruptFile)
         }
         // Element-by-element decode preserves the malformed-skip policy from REP-024.
@@ -167,7 +186,7 @@ final class RulesStore {
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support/\(Preferences.appSupportDirectoryName)", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-        return root.appendingPathComponent("rules.json")
+        return root.appendingPathComponent(Disk.fileName)
     }
 
     /// Returns loaded rules and a count of entries that failed to decode.
@@ -189,7 +208,7 @@ final class RulesStore {
         // wipe the entire rules list.
         guard let rawArray = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
             // File is not even valid JSON — treat as fully corrupt.
-            let broken = url.appendingPathExtension("broken")
+            let broken = url.appendingPathExtension(Disk.brokenSuffix)
             try? FileManager.default.moveItem(at: url, to: broken)
             let seeds = SmartRule.seedRules
             writeSync(seeds, to: url)
