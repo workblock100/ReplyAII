@@ -257,6 +257,38 @@ final class NotificationCoordinatorTests: XCTestCase {
             "Empty reply text must not set pendingNotificationReply")
     }
 
+    /// Pin the current handleReply guard semantics on whitespace-only
+    /// reply text. The guard is `let text = userText, !text.isEmpty` —
+    /// `" "` and `"\n"` are NOT empty, so they pass through and land on
+    /// `pendingNotificationReply`. The downstream consumer
+    /// (`InboxViewModel.consumeNotificationReply`) then ships the
+    /// whitespace text to IMessageSender verbatim. This is a known
+    /// soft-spot — pinning the current pass-through behavior so a
+    /// future "trim before checking emptiness" tightening surfaces
+    /// here rather than silently changing the user-visible "did my
+    /// blank reply send?" UX. Whichever way the contract eventually
+    /// settles, the change should be deliberate against this test.
+    func testHandleReplyForwardsWhitespaceOnlyTextVerbatim() {
+        let center = MockNotificationCenter()
+        let coordinator = NotificationCoordinator(center: center)
+        let inbox = InboxViewModel()
+        coordinator.inbox = inbox
+
+        coordinator.handleReply(
+            actionIdentifier: NotificationCoordinator.replyActionID,
+            userText: "   ",
+            notificationID: "t1"
+        )
+
+        guard let pending = inbox.pendingNotificationReply else {
+            XCTFail("whitespace-only reply must currently pass the !isEmpty guard and land on pendingNotificationReply — pin this so a future trim-before-empty refactor is deliberate")
+            return
+        }
+        XCTAssertEqual(pending.text, "   ",
+            "the whitespace-only text must round-trip verbatim — the guard currently doesn't trim, and the downstream consumer relies on this contract")
+        XCTAssertEqual(pending.threadID, "t1")
+    }
+
     /// `nil` userText (the `userText: String?` param) is the actual UN
     /// representation when a non-text-input action fires; pin the silent
     /// drop so a refactor that replaces `let text = userText` with a
