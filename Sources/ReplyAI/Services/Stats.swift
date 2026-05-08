@@ -123,7 +123,31 @@ final class Stats: @unchecked Sendable {
     /// pending DispatchWorkItem pointer so cancel/replace is race-free.
     private let writeLock = NSLock()
     private var pendingWrite: DispatchWorkItem?
-    private static let writeQueue = DispatchQueue(label: "com.replyai.stats.write", qos: .utility)
+
+    /// Dispatch-queue label for the debounced stats writer. Visible
+    /// in Instruments / sample traces. **Note**: this label uses the
+    /// `com.replyai.` Java-style reverse-DNS prefix, while every other
+    /// queue / Notification.Name / Keychain service in the codebase
+    /// uses `co.replyai.` (e.g. `ChatDBWatcher.dispatchQueueLabel =
+    /// "co.replyai.chatdb-watcher"`,
+    /// `MessagesAppActivationObserver.dispatchQueueLabel =
+    /// "co.replyai.messages-activation"`,
+    /// `KeychainHelper.defaultService = "co.replyai.app"`,
+    /// `GlobalHotkey.replyAIRequestSummonInbox =
+    /// "co.replyai.summon.inbox"`). The Stats label is the only
+    /// drifted one; harmonizing to `co.replyai.stats.write` is a
+    /// trivial code change but would orphan any production
+    /// Instruments-trace filter or external observability rule that
+    /// keys off the literal `com.replyai.stats.write` string.
+    /// Hoisted from the inline `DispatchQueue(label:)` so the
+    /// drifted literal is greppable from the source side and
+    /// pinnable in tests independently of the queue construction.
+    /// Pinned by `StatsTests.testWriteQueueLabelIsFrozen` and the
+    /// cross-file divergence by
+    /// `testWriteQueueLabelDivergesFromCoReplyAIPrefix`.
+    static let writeQueueLabel = "com.replyai.stats.write"
+
+    private static let writeQueue = DispatchQueue(label: Stats.writeQueueLabel, qos: .utility)
 
     /// - Parameter fileURL: Persistence path. Nil disables file I/O entirely
     ///   (useful for tests that only verify in-memory counters). Non-nil paths

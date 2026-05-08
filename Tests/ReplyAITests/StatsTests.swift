@@ -1223,6 +1223,41 @@ final class StatsResetAndGuardTests: XCTestCase {
             "constants must round-trip to the bare-string key — the snapshot dictionary is keyed on the raw value")
     }
 
+    /// Pin the literal `Stats.writeQueueLabel` value. The label
+    /// surfaces in Instruments / sample traces — drift in the
+    /// literal (e.g. a refactor that "tidies up" the queue label
+    /// without realizing external tooling keys off it) silently
+    /// breaks production observability filters. Hoisted from the
+    /// inline `DispatchQueue(label:)` so this pin can assert the
+    /// exact string a profiler will see.
+    func testWriteQueueLabelIsFrozen() {
+        XCTAssertEqual(Stats.writeQueueLabel, "com.replyai.stats.write",
+            "writeQueueLabel drift breaks Instruments filters keyed on the literal queue label — re-prefixing requires migrating any external observability rules first")
+    }
+
+    /// Cross-file divergence pin. The Stats writer queue uses the
+    /// `com.replyai.` Java-style reverse-DNS prefix, while every
+    /// other queue / Notification.Name / Keychain service in the
+    /// codebase uses `co.replyai.`. The Stats label is the only
+    /// drifted one. Pin asserts the inequality so a future
+    /// "let's harmonize prefixes across the codebase" refactor
+    /// surfaces as a deliberate change here, with a migration
+    /// note for any external observability tooling pinned to
+    /// the historical `com.replyai.` literal.
+    func testWriteQueueLabelDivergesFromCoReplyAIPrefix() {
+        // The non-stats sibling labels all start with `co.replyai.`.
+        XCTAssertTrue(ChatDBWatcher.dispatchQueueLabel.hasPrefix("co.replyai."),
+            "ChatDBWatcher uses co.replyai. prefix — sibling for the divergence pin")
+        XCTAssertTrue(MessagesAppActivationObserver.dispatchQueueLabel.hasPrefix("co.replyai."),
+            "MessagesAppActivationObserver uses co.replyai. prefix — sibling for the divergence pin")
+
+        // Stats does NOT start with co.replyai. — pin the divergence.
+        XCTAssertFalse(Stats.writeQueueLabel.hasPrefix("co.replyai."),
+            "Stats.writeQueueLabel uses 'com.replyai.' (Java-style) while every sibling uses 'co.replyai.' — pin so a future harmonization is a deliberate change with a migration plan, not a silent rename")
+        XCTAssertTrue(Stats.writeQueueLabel.hasPrefix("com.replyai."),
+            "Stats.writeQueueLabel uses 'com.replyai.' prefix specifically — drift away breaks the assumption that the divergence shape is com vs co (e.g. drift to 'app.replyai.' would still satisfy `!hasPrefix(\"co.replyai.\")` but isn't the documented historical state)")
+    }
+
     /// Pin the cross-vocabulary divergence between Stats counters
     /// (camelCase, used in the on-disk stats.json) and the
     /// rules.json schema's RuleAction Codable form (snake_case,
