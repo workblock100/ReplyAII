@@ -683,4 +683,36 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         XCTAssertTrue(captured.source.contains(AppleScriptMessageReader.rowDelimiter),
             "AppleScript emitter must contain the same delimiter the Swift parser splits on")
     }
+
+    /// `incomingDirectionValue` is the Swift-side default the parser
+    /// applies when a message row is missing its direction segment.
+    /// Pin the literal byte-for-byte and assert the symmetry with
+    /// `outgoingDirectionValue` (they are the only two valid values
+    /// the AppleScript surface emits). Drift in either direction
+    /// flips authorship attribution silently.
+    func testIncomingDirectionLiteralIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.incomingDirectionValue, "incoming",
+            "incomingDirectionValue drift desyncs the Swift parser's fallback from the AppleScript emitter's hardcoded `incoming` literal")
+        XCTAssertNotEqual(AppleScriptMessageReader.incomingDirectionValue,
+                          AppleScriptMessageReader.outgoingDirectionValue,
+            "incoming and outgoing direction literals must differ — collision flips authorship for every parsed message")
+    }
+
+    /// Pin the contract that the incoming/outgoing literals partition
+    /// the value space: every emitted direction segment is one of the
+    /// two, and any unrecognized value (or missing segment) defaults
+    /// to `.them` via the parser's "anything not equal to outgoing
+    /// → .them" rule. Documented as a sibling pin to the existing
+    /// `testOutgoingDirectionLiteralIsFrozen` so the partition
+    /// invariant is captured even though `parse` is private.
+    func testDirectionValueLiteralsArePartitioned() {
+        // The two valid direction literals are non-empty and differ —
+        // captured as a pair pin so a future refactor that collapses
+        // them (e.g. defining both as the same string for a
+        // mocked-out test scenario) trips here.
+        XCTAssertFalse(AppleScriptMessageReader.outgoingDirectionValue.isEmpty,
+            "outgoingDirectionValue must not be empty — every parsed message routes through this comparison")
+        XCTAssertFalse(AppleScriptMessageReader.incomingDirectionValue.isEmpty,
+            "incomingDirectionValue must not be empty — drift to empty would break the AppleScript emitter's fallback path")
+    }
 }

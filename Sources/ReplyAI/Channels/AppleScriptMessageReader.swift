@@ -42,6 +42,17 @@ struct AppleScriptMessageReader: Sendable {
     /// `AppleScriptMessageReaderTests.testOutgoingDirectionLiteralIsFrozen`.
     static let outgoingDirectionValue: String = "outgoing"
 
+    /// AppleScript message-direction default for any non-outgoing row,
+    /// AND the literal the AppleScript-side fallback emits when the
+    /// per-message `direction` lookup throws. The Swift parser doesn't
+    /// strictly require this exact value (it routes everything not
+    /// equal to `outgoingDirectionValue` to `.them`), but the AppleScript
+    /// hardcodes "incoming" as the fallback at the row-emit site —
+    /// hoisting the Swift-side default makes the symmetry explicit and
+    /// pin-able. Pinned by
+    /// `AppleScriptMessageReaderTests.testIncomingDirectionLiteralIsFrozen`.
+    static let incomingDirectionValue: String = "incoming"
+
     /// Executes an AppleScript source string and returns the result as text.
     /// Injectable so tests can verify the script string and return mock data
     /// without touching Messages.app.
@@ -173,7 +184,7 @@ struct AppleScriptMessageReader: Sendable {
             guard !trimmed.isEmpty else { continue }
             let parts = trimmed.components(separatedBy: Self.rowDelimiter)
             let body = parts.count > 0 ? parts[0] : ""
-            let dir  = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : "incoming"
+            let dir  = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : Self.incomingDirectionValue
             // AppleScript can leak "missing value" when a message has no
             // text body (e.g. a tapback or attachment-only message). Drop
             // those rather than surface a literal "missing value" string.
