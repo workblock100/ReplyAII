@@ -96,6 +96,43 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "non-numeric input falls to default branch and round-trips")
     }
 
+    /// Pin a surprising-but-safe behavior: when `prettyPhone` receives a
+    /// string with letters AND digits AND no early-return sentinel
+    /// (no space, `@`, `(`, or `chat` prefix), it filters via
+    /// `s.filter(\.isNumber)` BEFORE the digit-count switch. That means
+    /// letters interleaved with a phone-shaped digit substring are
+    /// silently stripped and the resulting digits-only string is
+    /// formatted as a phone number.
+    ///
+    /// Realistic-but-pathological case: a contact name like
+    /// `"555ab1234567c"` (which AppleScript should never emit, but a
+    /// stub or fuzzed input could) yields digits `"5551234567"` (10 digits)
+    /// → matches the 10-digit case → formats as `"(555) 123-4567"`.
+    /// The original letters never appear in the output.
+    ///
+    /// Sibling case for under-10 digits: `"55512345abc"` yields digits
+    /// `"55512345"` (8 digits) → default branch → returns the original
+    /// string verbatim. Pin both legs so a future "let's also reject
+    /// inputs containing letters" tightening surfaces here as a
+    /// deliberate change. Mirrors the existing chat-prefix +
+    /// already-formatted + email pass-through cluster.
+    func testPrettyPhoneStripsLettersWhenDigitCountMatchesUSPhoneShape() {
+        // 10 digits AFTER stripping letters → reformats as US phone.
+        XCTAssertEqual(
+            AppleScriptMessageReader.prettyPhone("555ab1234567c"),
+            "(555) 123-4567",
+            "letters interleaved with 10 digits get stripped silently and the digits format as US phone — drift toward 'reject anything with letters' would flip this to verbatim pass-through"
+        )
+        // 8 digits AFTER stripping letters → falls through to default
+        // (verbatim return). Pins the lower bound of the format-vs-passthrough
+        // boundary.
+        XCTAssertEqual(
+            AppleScriptMessageReader.prettyPhone("55512345abc"),
+            "55512345abc",
+            "fewer than 10 digits after letter-strip falls through to verbatim — drift toward 'try to format any digit-having input' would silently mangle this string"
+        )
+    }
+
     // MARK: - recentChats parsing
 
     /// Canned-executor shorthand. `result` becomes the AppleScript stdout the
