@@ -832,6 +832,48 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertEqual(result, "")
     }
 
+    /// `userInfo` is `[AnyHashable: Any]` and the resolver's `as? String`
+    /// cast must safely fail for non-String payloads (NSNumber, NSNull,
+    /// NSData, dictionary, etc. — any wrapper that posts a non-String
+    /// for an iMessage userInfo key). The cast yielding nil falls
+    /// through the resolution order to the title.
+    ///
+    /// Mirrors the structured parser's pin
+    /// (`UNNotificationContentParserTests.testNonStringSenderValuesFallThroughResolutionOrder`)
+    /// for the inline `willPresent` path. The two paths share userInfo
+    /// keys and resolution order, but they're distinct callsites — the
+    /// parser pin doesn't transitively cover this one. Drift toward
+    /// `String(describing: rawValue)` would silently surface
+    /// `"15551234567"` for an NSNumber sender, which then collides with
+    /// chatGUID-based thread keying. Pin so that drift surfaces here.
+    func testResolveSenderHandleNonStringValuesFallThroughResolutionOrder() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [
+                UNNotificationContentParser.UserInfoKey.ckSenderID: NSNumber(value: 15551234567),
+                UNNotificationContentParser.UserInfoKey.sender: NSNull()
+            ],
+            fallbackTitle: "TitleFallback"
+        )
+        XCTAssertEqual(result, "TitleFallback",
+            "non-String CKSenderID + non-String sender must fall through to fallbackTitle — drift toward String(describing:) would surface a numeric handle and break thread keying")
+    }
+
+    /// Sibling pin for `resolveChatGUID` — non-String values for either
+    /// key fail the `as? String` cast and produce nil, NOT a coerced
+    /// string. Drift toward `String(describing:)` would silently
+    /// surface `"42"` for an NSNumber chat identifier and create a
+    /// duplicate thread keyed by the literal `"42"` GUID. Mirrors the
+    /// parser's `testNonStringChatIdentifierProducesNilChatGUID` for
+    /// the inline path.
+    func testResolveChatGUIDNonStringValuesProduceNil() {
+        let result = NotificationCoordinator.resolveChatGUID(userInfo: [
+            UNNotificationContentParser.UserInfoKey.ckChatIdentifier: NSNumber(value: 42),
+            UNNotificationContentParser.UserInfoKey.ckChatGUID: NSNull()
+        ])
+        XCTAssertNil(result,
+            "non-String chat identifiers must produce nil — drift toward String(describing:) would surface a numeric chatGUID and key threads off the wrong identity")
+    }
+
     /// `CKChatIdentifier` is the primary key — picked when present and
     /// non-empty, ahead of `CKChatGUID`. Drift would silently route to
     /// the legacy GUID path even when the modern identifier is set.
