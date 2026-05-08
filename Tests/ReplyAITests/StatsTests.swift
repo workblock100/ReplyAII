@@ -81,6 +81,30 @@ final class StatsTests: XCTestCase {
             "empty action string is tracked verbatim per the verbatim-discriminator policy")
     }
 
+    /// Companion pin for the present-but-WHITESPACE-only action string.
+    /// The verbatim policy pinned for empty strings extends to a single
+    /// space — `recordRuleFired(action: " ")` tracks under the literal
+    /// `" "` key, NOT trimmed-and-collapsed to `""`. Drift toward
+    /// `.trimmingCharacters(.whitespacesAndNewlines)` before insertion
+    /// would silently fold whitespace-only call-site bugs into the
+    /// empty-string bucket, masking the typo. Pin both legs of the
+    /// empty-vs-whitespace distinction so the verbatim contract is
+    /// explicit. Same drift class as the IMessageSender chatGUID-
+    /// whitespace pin and the NotificationCoordinator chatGUID-
+    /// whitespace pin from prior fires.
+    func testRecordRuleFiredAcceptsWhitespaceOnlyActionVerbatim() {
+        let stats = Stats(fileURL: tempURL())
+        stats.recordRuleFired(action: " ")          // single space
+        stats.recordRuleFired(action: "  ")         // double space — distinct key
+        let snap = stats.snapshot()
+        XCTAssertEqual(snap.rulesFiredByAction[" "], 1,
+            "single-space action key tracked verbatim, NOT folded to '' — drift toward .trimmingCharacters() would silently merge whitespace-only call-site typos into the empty-action bucket")
+        XCTAssertEqual(snap.rulesFiredByAction["  "], 1,
+            "double-space action key tracked as a separate verbatim entry — proves the verbatim policy preserves byte-level distinctness, not just non-emptiness")
+        XCTAssertNil(snap.rulesFiredByAction[""],
+            "no implicit fold to empty bucket — verbatim policy means the empty bucket stays empty when the caller passed whitespace-only")
+    }
+
     /// Parallel guard pin for `recordRuleLoadSkips` — also no-ops on
     /// `count <= 0`. Pinned because rules.json load is one of the few
     /// paths that calls this counter, and a guard regression would
