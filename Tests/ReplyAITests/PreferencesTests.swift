@@ -932,6 +932,23 @@ final class PreferencesLastThreadsCacheURLTests: XCTestCase {
             "wipeNamespacePrefix drift orphans every newly-named key from the factory-reset path")
     }
 
+    /// Five services build paths under `~/Library/Application Support/<dir>/…`
+    /// (Preferences last-threads cache, Stats, DraftStore, RulesStore,
+    /// SearchIndex production DB). Drift between any two writers leaves
+    /// orphan state on disk that no migration code can find. Pin the
+    /// hoisted constant to the literal value every shipped install reads
+    /// from today.
+    func testAppSupportDirectoryNameIsFrozen() {
+        XCTAssertEqual(Preferences.appSupportDirectoryName, "ReplyAI",
+            "Preferences.appSupportDirectoryName drift desyncs every service that builds an app-support path — orphans existing user state on disk")
+
+        // Cross-verify: lastThreadsCacheURL must still contain the hoisted
+        // directory name (catches a future refactor that forgets to route
+        // through the constant).
+        XCTAssertTrue(Preferences.lastThreadsCacheURL.path.contains("/\(Preferences.appSupportDirectoryName)/"),
+            "lastThreadsCacheURL must build its path through Preferences.appSupportDirectoryName")
+    }
+
     /// Cross-check: every preference key declared in `PreferenceKey`
     /// MUST start with the wipe namespace prefix, otherwise factory
     /// reset silently leaves it on disk. New keys that forget the

@@ -28,7 +28,7 @@ final class DraftStore: Sendable {
                 in: .userDomainMask
             ).first!
             self.draftsDirectory = appSupport
-                .appendingPathComponent("ReplyAI", isDirectory: true)
+                .appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
                 .appendingPathComponent("drafts", isDirectory: true)
         }
         try? FileManager.default.createDirectory(

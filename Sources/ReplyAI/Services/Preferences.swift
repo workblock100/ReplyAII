@@ -107,12 +107,22 @@ enum PreferenceDefaults {
 /// File-system paths that ReplyAI reads or writes at runtime.
 /// Distinct from `PreferenceKey` (UserDefaults) — these are plain file URLs.
 enum Preferences {
+    /// Single source of truth for the per-user app-support subdirectory
+    /// name. Five services (Preferences last-threads cache, Stats,
+    /// DraftStore, RulesStore, SearchIndex production DB) all build paths
+    /// of the form `~/Library/Application Support/<appSupportDirectoryName>/…`.
+    /// Drift between any two writers means one service writes under the
+    /// new name while another writes (and reads) under the old, creating
+    /// orphan state on disk that no migration code can find. Pinned by
+    /// `PreferencesTests.testAppSupportDirectoryNameIsFrozen`.
+    static let appSupportDirectoryName: String = "ReplyAI"
+
     /// JSON cache of the last-known thread list. Written after every successful
     /// sync so InboxViewModel can show recognizable rows on cold launch even
     /// when all channels fail to connect.
     static var lastThreadsCacheURL: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return support.appendingPathComponent("ReplyAI/last-threads-cache.json")
+        return support.appendingPathComponent("\(appSupportDirectoryName)/last-threads-cache.json")
     }
 }
 

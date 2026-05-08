@@ -163,9 +163,9 @@ final class RulesStore {
             appropriateFor: nil,
             create: true
         )
-        let root = appSupport?.appendingPathComponent("ReplyAI", isDirectory: true)
+        let root = appSupport?.appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
             ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support/ReplyAI", isDirectory: true)
+                .appendingPathComponent("Library/Application Support/\(Preferences.appSupportDirectoryName)", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         return root.appendingPathComponent("rules.json")
     }

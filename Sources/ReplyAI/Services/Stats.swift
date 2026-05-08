@@ -254,7 +254,7 @@ final class Stats: @unchecked Sendable {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let dir = base.appendingPathComponent("ReplyAI", isDirectory: true)
+        let dir = base.appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("stats.json")
     }
