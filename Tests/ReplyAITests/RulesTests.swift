@@ -1373,7 +1373,7 @@ final class RulesTests: XCTestCase {
         let url = tempRulesURL()
         defer {
             try? FileManager.default.removeItem(at: url)
-            try? FileManager.default.removeItem(at: url.appendingPathExtension("broken"))
+            try? FileManager.default.removeItem(at: url.appendingPathExtension(RulesStore.Disk.brokenSuffix))
         }
 
         try "not json at all %%%".data(using: .utf8)!.write(to: url)
@@ -1668,8 +1668,8 @@ final class RulesTests: XCTestCase {
         let validData = try JSONEncoder().encode(validRule)
         let validObj = try JSONSerialization.jsonObject(with: validData)
         let envelope: [String: Any] = [
-            "version": 1,
-            "rules": [validObj, ["bad_key": "no kind field"]]
+            RulesStore.Disk.versionKey: 1,
+            RulesStore.Disk.rulesKey: [validObj, ["bad_key": "no kind field"]]
         ]
         let mixedData = try JSONSerialization.data(withJSONObject: envelope)
         try mixedData.write(to: malformedURL)
@@ -1700,8 +1700,8 @@ final class RulesTests: XCTestCase {
         let data = try Data(contentsOf: exportURL)
         let obj = try XCTUnwrap(try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                                 "export must produce a JSON object, not a bare array")
-        XCTAssertEqual(obj["version"] as? Int, 1, "export must include version: 1")
-        XCTAssertNotNil(obj["rules"], "export must include a rules key")
+        XCTAssertEqual(obj[RulesStore.Disk.versionKey] as? Int, 1, "export must include version: 1")
+        XCTAssertNotNil(obj[RulesStore.Disk.rulesKey], "export must include a rules key")
     }
 
     /// Pin `RulesStore.exportVersion` directly. The integration test
@@ -1743,7 +1743,7 @@ final class RulesTests: XCTestCase {
             try? FileManager.default.removeItem(at: targetURL)
             try? FileManager.default.removeItem(at: badURL)
         }
-        let envelope: [String: Any] = ["version": 99, "rules": []]
+        let envelope: [String: Any] = [RulesStore.Disk.versionKey: 99, RulesStore.Disk.rulesKey: []]
         let data = try JSONSerialization.data(withJSONObject: envelope)
         try data.write(to: badURL)
 
@@ -2714,7 +2714,7 @@ final class RulesStoreImportMergeTests: XCTestCase {
         try FileManager.default.createDirectory(
             at: emptyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: emptyURL.deletingLastPathComponent()) }
-        let envelope: [String: Any] = ["version": 1, "rules": [Any]()]
+        let envelope: [String: Any] = [RulesStore.Disk.versionKey: 1, RulesStore.Disk.rulesKey: [Any]()]
         let data = try JSONSerialization.data(withJSONObject: envelope)
         try data.write(to: emptyURL)
 
