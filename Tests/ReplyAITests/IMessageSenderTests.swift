@@ -1121,4 +1121,14 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
         XCTAssertEqual(needle, "AppleScript error -1708",
             "retry-detection needle must compose `appleScriptErrorPrefix + eventNotHandledErrorCode` byte-for-byte — drift in either silently disables retry")
     }
+
+    /// `scriptParseFailureCopy` is the failure string emitted when
+    /// `NSAppleScript(source:)` returns nil — pre-execution syntax
+    /// failure. Hoisted from the inline literal so support-engineer
+    /// log grep stays stable. Pin the literal byte-for-byte.
+    func testScriptParseFailureCopyIsFrozen() {
+        XCTAssertEqual(IMessageSender.scriptParseFailureCopy,
+                       "NSAppleScript failed to parse",
+            "scriptParseFailureCopy drift breaks support-engineer log grep on the pre-execution-syntax-failure path")
+    }
 }

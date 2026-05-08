@@ -129,6 +129,15 @@ enum IMessageSender {
     /// `IMessageSenderTests.testAppleScriptErrorPrefixIsFrozen`.
     static let appleScriptErrorPrefix = "AppleScript error "
 
+    /// Failure copy emitted when `NSAppleScript(source:)` returns nil —
+    /// the script source itself has a syntax error that the AppleScript
+    /// compiler rejected before execution could even start. This is a
+    /// developer-side bug (we generated a malformed script) rather than
+    /// a runtime-side issue, so the copy doesn't need to be actionable
+    /// for end users; it just needs to be greppable in support logs.
+    /// Hoisted so a future copy edit lands on a named constant.
+    static let scriptParseFailureCopy = "NSAppleScript failed to parse"
+
     /// Delay between a -1708 failure and the retry attempt.
     /// Defaults to 0.5 s in production; set to 0.0 in tests to avoid slow paths.
     nonisolated(unsafe) static var retryDelay: TimeInterval = defaultRetryDelay
@@ -199,7 +208,7 @@ enum IMessageSender {
         // Capture executor once so test hooks can't be swapped mid-flight.
         let executor: (String) throws -> Void = executeHook ?? { src in
             guard let script = NSAppleScript(source: src) else {
-                throw SendError.scriptFailure("NSAppleScript failed to parse")
+                throw SendError.scriptFailure(Self.scriptParseFailureCopy)
             }
             var errorDict: NSDictionary?
             script.executeAndReturnError(&errorDict)
