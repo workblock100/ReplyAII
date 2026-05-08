@@ -140,6 +140,20 @@ enum KeychainError: LocalizedError, Sendable {
     static let duplicateItemToast           = "Keychain already has a saved entry for this account. Disconnect the account in Settings → Channels and reconnect."
     static let itemNotFoundToast            = "Keychain entry missing. Reconnect the account in Settings → Channels."
 
+    /// Format the unhandled-error fallback toast for an arbitrary
+    /// OSStatus. Surfaces when the raw status doesn't match any of the
+    /// five translated toasts — e.g. a future macOS release introduces
+    /// a new SecBase.h status code we haven't translated. The format
+    /// surfaces the raw integer status so a support engineer can grep
+    /// Apple's table; drift here either drops the integer (eliminating
+    /// the only signal a triage-engineer has) or rewords the recovery
+    /// hint ("Open Keychain Access…") which is the user's only
+    /// actionable next step. Pinned by
+    /// `KeychainErrorTests.testUnhandledErrorFallbackToastFormatRoundTrips`.
+    static func unhandledErrorFallbackToast(status: OSStatus) -> String {
+        "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
+    }
+
     /// Surfaces in Settings → Channels when an OAuth token write fails.
     /// The bare-integer fallback used to read "Keychain error -25308" which
     /// is unactionable — translating the handful of statuses ReplyAI can
@@ -162,7 +176,7 @@ enum KeychainError: LocalizedError, Sendable {
             case errSecItemNotFound:
                 return Self.itemNotFoundToast
             default:
-                return "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
+                return Self.unhandledErrorFallbackToast(status: status)
             }
         }
     }

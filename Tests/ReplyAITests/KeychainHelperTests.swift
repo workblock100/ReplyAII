@@ -336,6 +336,36 @@ final class KeychainErrorTests: XCTestCase {
                        KeychainError.itemNotFoundToast,
             "errSecItemNotFound must surface the hoisted constant byte-for-byte")
     }
+
+    // MARK: - Unknown-status fallback toast pin
+
+    /// Pin the parameterized fallback toast format. The format embeds
+    /// the raw OSStatus integer (the only signal a triage engineer
+    /// has) and the actionable hint ("Open Keychain Access…"). Drift
+    /// here either drops the integer or rewords the recovery path.
+    func testUnhandledErrorFallbackToastFormatRoundTrips() {
+        let s: OSStatus = -42
+        let toast = KeychainError.unhandledErrorFallbackToast(status: s)
+        XCTAssertEqual(toast,
+                       "Keychain error \(s). Open Keychain Access to inspect, or reconnect the account in Settings → Channels.")
+        // Routing: an unknown status's errorDescription must equal
+        // the format helper applied to the same status.
+        let bogus: OSStatus = -99999
+        XCTAssertEqual(KeychainError.unhandledError(status: bogus).errorDescription,
+                       KeychainError.unhandledErrorFallbackToast(status: bogus),
+            "unknown OSStatus path must route through unhandledErrorFallbackToast(status:)")
+    }
+
+    /// Pin the format embeds the literal raw status integer at the
+    /// `\(status)` position — drift to e.g. surfacing only the
+    /// hex form, or dropping the integer entirely, eliminates the
+    /// only signal a support engineer has for SecBase.h triage.
+    func testUnhandledErrorFallbackToastEmbedsIntegerStatus() {
+        let s: OSStatus = -25308
+        let toast = KeychainError.unhandledErrorFallbackToast(status: s)
+        XCTAssertTrue(toast.contains("-25308"),
+            "fallback toast must surface the raw OSStatus integer for SecBase.h lookup — got: \(toast)")
+    }
 }
 
 // MARK: - SlackTokenStore (REP-274)
