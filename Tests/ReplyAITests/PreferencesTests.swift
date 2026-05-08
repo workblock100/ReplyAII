@@ -949,6 +949,24 @@ final class PreferencesLastThreadsCacheURLTests: XCTestCase {
             "lastThreadsCacheURL must build its path through Preferences.appSupportDirectoryName")
     }
 
+    /// Pin the tilde-relative parent of `appSupportDirectoryName` —
+    /// the path component the SearchIndex and RulesStore fallback
+    /// writers hand-build when `FileManager.url(for:.applicationSupportDirectory)`
+    /// returns nil. Drift here makes the two fallback writers disagree
+    /// on where they're looking even though they share an
+    /// `appSupportDirectoryName`. Captures both the literal value and
+    /// the no-trailing-slash + no-leading-slash invariants (drift to
+    /// either produces double-slash paths or absolute-path
+    /// concatenation that escapes NSHomeDirectory()).
+    func testAppSupportRootRelativePathIsFrozen() {
+        XCTAssertEqual(Preferences.appSupportRootRelativePath,
+                       "Library/Application Support")
+        XCTAssertFalse(Preferences.appSupportRootRelativePath.hasSuffix("/"),
+            "constant must NOT end with a slash — appendingPathComponent expects no trailing separator")
+        XCTAssertFalse(Preferences.appSupportRootRelativePath.hasPrefix("/"),
+            "constant must NOT start with a slash — it's a tilde-relative subpath of NSHomeDirectory()")
+    }
+
     /// Cross-check: every preference key declared in `PreferenceKey`
     /// MUST start with the wipe namespace prefix, otherwise factory
     /// reset silently leaves it on disk. New keys that forget the

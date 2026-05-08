@@ -91,7 +91,7 @@ actor SearchIndex {
         )
         let root = appSupport?.appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
             ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support/\(Preferences.appSupportDirectoryName)", isDirectory: true)
+                .appendingPathComponent("\(Preferences.appSupportRootRelativePath)/\(Preferences.appSupportDirectoryName)", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         return root.appendingPathComponent(Self.productionFileName)
     }

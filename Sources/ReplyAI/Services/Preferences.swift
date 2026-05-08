@@ -117,6 +117,17 @@ enum Preferences {
     /// `PreferencesTests.testAppSupportDirectoryNameIsFrozen`.
     static let appSupportDirectoryName: String = "ReplyAI"
 
+    /// Tilde-relative parent of `appSupportDirectoryName`. Used by the
+    /// fallback paths in `SearchIndex.productionDatabaseURL()` and
+    /// `RulesStore` when `FileManager.url(for:.applicationSupportDirectory)`
+    /// returns nil — both paths fall back to a hand-built
+    /// `NSHomeDirectory() + "Library/Application Support/" + appSupportDirectoryName`.
+    /// Drift in this constant silently makes the two fallback writers
+    /// disagree on where they're looking, even though they share an
+    /// `appSupportDirectoryName`. Pinned by
+    /// `PreferencesTests.testAppSupportRootRelativePathIsFrozen`.
+    static let appSupportRootRelativePath: String = "Library/Application Support"
+
     /// JSON cache of the last-known thread list. Written after every successful
     /// sync so InboxViewModel can show recognizable rows on cold launch even
     /// when all channels fail to connect.
