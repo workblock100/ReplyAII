@@ -883,6 +883,27 @@ final class StatsDefaultFileURLTests: XCTestCase {
                        "production path must end with stats.json — anything else orphans existing user data")
     }
 
+    /// Pin the source-side hoisted constant byte-for-byte. Sibling to
+    /// `testDefaultFileURLEndsWithStatsJSON` (which asserts against
+    /// the inline literal `"stats.json"`); this pin asserts the
+    /// source constant equals the same literal so a future refactor
+    /// that defines the constant but inlines a different literal in
+    /// `defaultFileURL()` would still pass that test while drifting
+    /// the constant — pinning both directions catches it.
+    func testProductionFileNameIsStatsDotJSON() {
+        XCTAssertEqual(Stats.productionFileName, "stats.json",
+            "Stats.productionFileName drift orphans every install's stats.json — pin both this and testDefaultFileURLEndsWithStatsJSON to catch drift in either direction")
+    }
+
+    /// Round-trip pin: `defaultFileURL()` must compose its path through
+    /// `productionFileName`. Catches a constant-defined-but-not-used
+    /// drift where the function inlines a different literal.
+    func testDefaultFileURLRoutesThroughHoistedFileName() {
+        let url = Stats.defaultFileURL()
+        XCTAssertEqual(url.lastPathComponent, Stats.productionFileName,
+            "defaultFileURL() must compose through productionFileName byte-for-byte — drift between source and constant is silent")
+    }
+
     func testDefaultFileURLLivesUnderReplyAIDirectory() {
         let url = Stats.defaultFileURL()
         let parent = url.deletingLastPathComponent().lastPathComponent

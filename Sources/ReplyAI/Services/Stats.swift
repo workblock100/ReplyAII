@@ -106,6 +106,18 @@ final class Stats: @unchecked Sendable {
     /// inside `persist()`.
     static let debounceWriteWindow: TimeInterval = 2
 
+    /// On-disk filename for the stats persistence JSON. Drift here is
+    /// a silent migration: the install's old stats.json stays on disk
+    /// while the new build creates a fresh one, and every counter
+    /// resets to zero on next launch (with the old data orphaned but
+    /// recoverable). The existing
+    /// `StatsDefaultFileURLTests.testProductionPathContainsStatsDotJSON`
+    /// asserts the lastPathComponent is `stats.json` against an inline
+    /// literal — sibling to that pin, this hoist makes the filename
+    /// greppable from the source side and discoverable in one place.
+    /// Pinned by `StatsTests.testProductionFileNameIsStatsDotJSON`.
+    static let productionFileName = "stats.json"
+
     /// Serializes pending debounced writes. Two locks kept separate:
     /// `state` protects counter mutations; `writeLock` protects the
     /// pending DispatchWorkItem pointer so cancel/replace is race-free.
@@ -256,7 +268,7 @@ final class Stats: @unchecked Sendable {
             .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let dir = base.appendingPathComponent(Preferences.appSupportDirectoryName, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("stats.json")
+        return dir.appendingPathComponent(Self.productionFileName)
     }
 
     private static func load(from url: URL) -> Snapshot? {
