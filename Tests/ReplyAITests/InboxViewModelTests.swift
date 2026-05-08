@@ -3090,6 +3090,39 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
         }
     }
 
+    /// Sub-prefix coverage. Inbox-scoped keys live in TWO files —
+    /// the 5 in InboxViewModel above (archived/silentlyIgnored/pinned/
+    /// snoozedUntil/lastSeenRowID) and 3 more in `PreferenceKey`
+    /// (inboxThreadLimit, demoModeActive, inboxLastSyncDate). They
+    /// must all share the `pref.inbox.` sub-prefix so a triage
+    /// engineer can list every inbox-scoped default with one
+    /// `defaults read | grep pref.inbox.` invocation, AND so a future
+    /// "scope wipe to just the inbox" feature has one greppable
+    /// namespace to walk. Drift on either file's side leaves an
+    /// inbox-scoped value invisible to that grep / unreached by the
+    /// hypothetical scoped-wipe. Pin extends
+    /// `testInboxPersistenceKeysShareWipeNamespacePrefix` (which
+    /// asserts the broader `pref.` prefix) with the sub-namespace.
+    func testInboxScopedKeysShareInboxSubPrefix() {
+        let inboxSubPrefix = "pref.inbox."
+        let inboxScopedKeys: [String] = [
+            // From InboxViewModel.
+            InboxViewModel.archivedKey,
+            InboxViewModel.silentlyIgnoredKey,
+            InboxViewModel.pinnedKey,
+            InboxViewModel.snoozedUntilKey,
+            InboxViewModel.lastSeenRowIDKey,
+            // From PreferenceKey.
+            PreferenceKey.inboxThreadLimit,
+            PreferenceKey.demoModeActive,
+            PreferenceKey.inboxLastSyncDate,
+        ]
+        for key in inboxScopedKeys {
+            XCTAssertTrue(key.hasPrefix(inboxSubPrefix),
+                "inbox-scoped key `\(key)` must start with `\(inboxSubPrefix)` — drift fragments the inbox-scoped namespace across two files and breaks `defaults read | grep pref.inbox.` triage")
+        }
+    }
+
 }
 
 // MARK: - copying() field-completeness pin
