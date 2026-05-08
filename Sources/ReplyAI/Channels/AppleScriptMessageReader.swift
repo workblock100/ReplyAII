@@ -129,7 +129,7 @@ struct AppleScriptMessageReader: Sendable {
                     end if
                     set chatID to id of theChat as text
                     if chatName is "" then set chatName to chatID
-                    set output to output & chatName & "||" & chatID & "\n"
+                    set output to output & chatName & "\(Self.rowDelimiter)" & chatID & "\n"
                 end try
             end repeat
             return output
@@ -179,11 +179,11 @@ struct AppleScriptMessageReader: Sendable {
                             try
                                 set msgText to text of m as text
                             end try
-                            set msgDir to "incoming"
+                            set msgDir to "\(Self.incomingDirectionValue)"
                             try
                                 set msgDir to direction of m as text
                             end try
-                            set output to output & msgText & "||" & msgDir & "\n"
+                            set output to output & msgText & "\(Self.rowDelimiter)" & msgDir & "\n"
                         end try
                     end repeat
                 end if

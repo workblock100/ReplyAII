@@ -677,11 +677,14 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "AppleScript's message direction property emits `outgoing`/`incoming` — drift here flips authorship for every parsed message")
     }
 
-    /// Cross-check: the AppleScript heredocs use the *literal* "||" rather
-    /// than `\(Self.rowDelimiter)` interpolation (interpolating into a
-    /// quoted AppleScript string is risky around quote escaping). This test
-    /// exists so a future rename of the Swift-side constant doesn't desync
-    /// the parser from the still-literal emitter.
+    /// Cross-check: the AppleScript heredocs interpolate the
+    /// `Self.rowDelimiter` constant (the value `||` is ASCII-safe inside
+    /// double-quoted AppleScript strings, so Swift-level interpolation
+    /// doesn't risk a quote-escaping issue). The assertion still passes
+    /// against the rendered AppleScript source — both sides resolve to
+    /// the literal value of `rowDelimiter`. Pinning prevents a future
+    /// rename of the Swift-side constant from desyncing the emitter
+    /// from the parser.
     func testRecentChatsScriptUsesRowDelimiter() throws {
         final class Captured: @unchecked Sendable { var source = "" }
         let captured = Captured()
@@ -704,6 +707,27 @@ final class AppleScriptMessageReaderTests: XCTestCase {
         _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 5)
         XCTAssertTrue(captured.source.contains(AppleScriptMessageReader.rowDelimiter),
             "AppleScript emitter must contain the same delimiter the Swift parser splits on")
+    }
+
+    /// Pins the AppleScript-side direction fallback (`set msgDir to
+    /// "incoming"`) to route through `Self.incomingDirectionValue` via
+    /// Swift interpolation. The value is what the AppleScript emits
+    /// when `direction of m` throws — the parser's `outgoing` → `.me`
+    /// rule treats anything else as `.them`, so the emitter literally
+    /// just needs to be a non-`outgoing` string for the parser to
+    /// classify correctly. But pinning the symmetry (emitter and
+    /// parser both reference the same constant) means a future rename
+    /// of `incomingDirectionValue` updates both sides at once.
+    func testMessagesForChatScriptUsesIncomingDirectionConstant() throws {
+        final class Captured: @unchecked Sendable { var source = "" }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.source = script; return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 5)
+        XCTAssertTrue(captured.source.contains("set msgDir to \"\(AppleScriptMessageReader.incomingDirectionValue)\""),
+            "AppleScript fallback for direction must use the same `incomingDirectionValue` literal the parser fallback uses — drift makes the AppleScript-emit value differ from the Swift-fallback value")
     }
 
     /// `incomingDirectionValue` is the Swift-side default the parser
