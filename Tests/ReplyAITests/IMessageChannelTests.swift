@@ -2011,6 +2011,28 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
             "withinWeekDays drift either makes weekday labels ambiguous (>7 days) or pushes recent threads to absolute dates (<7 days)")
     }
 
+    /// `noTimestampSentinel` is what `formatRelative(appleDate: 0)`
+    /// returns for rows whose chat.db `date` column is genuinely zero
+    /// (truncated rows, never-sent drafts, deleted-but-placeholder
+    /// messages). The empty string is the contract every downstream
+    /// time-chip renderer leans on (ThreadRow branches on
+    /// `time.isEmpty`). Drift to "—", "?", "0", or " " would silently
+    /// render an extra glyph on every zero-date row. Pin the literal
+    /// AND the round-trip through `formatRelative` so a refactor that
+    /// renames the constant without rewiring the call site (or vice
+    /// versa) surfaces in code review.
+    func testNoTimestampSentinelIsEmptyString() {
+        XCTAssertEqual(IMessageChannel.TimeFormat.noTimestampSentinel, "",
+            "noTimestampSentinel drift would render an extra glyph on every zero-date thread row")
+        XCTAssertTrue(IMessageChannel.TimeFormat.noTimestampSentinel.isEmpty,
+            "noTimestampSentinel must be empty so ThreadRow's `time.isEmpty` branch hides the chip entirely")
+        // Round-trip: a zero `appleDate` must produce the sentinel
+        // verbatim — pins the production wiring, not just the constant.
+        XCTAssertEqual(IMessageChannel.formatRelative(appleDate: 0),
+                       IMessageChannel.TimeFormat.noTimestampSentinel,
+            "formatRelative(0) must route through TimeFormat.noTimestampSentinel — drift means a hardcoded string in formatRelative diverges from the named constant")
+    }
+
     /// `appleDateNanosecondThreshold` is the strict-`>` boundary above
     /// which a `message.date` value flips from seconds-encoded to
     /// nanoseconds-encoded interpretation. The existing

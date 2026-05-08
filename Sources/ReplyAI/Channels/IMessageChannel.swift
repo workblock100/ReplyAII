@@ -82,6 +82,21 @@ struct IMessageChannel: ChannelService {
         /// number change. Pinned by
         /// `IMessageChannelTests.testWithinWeekDaysIsSeven`.
         static let withinWeekDays: Int = 7
+
+        /// Sentinel returned by `formatRelative(appleDate: 0)` for rows
+        /// whose chat.db `date` column is genuinely zero (truncated
+        /// row, never-sent draft, deleted message that left a
+        /// placeholder). The empty string is the contract every
+        /// downstream renderer leans on — ThreadRow's time-chip
+        /// branches on `time.isEmpty` to decide whether to show the
+        /// chip at all, and SidebarView's preview-line builder skips
+        /// the bullet separator when the time portion is empty.
+        /// Drift to a literal like "—" or "?" would silently render an
+        /// extra glyph on every zero-date row. Hoisted from the inline
+        /// `return ""` so the sentinel value is independently
+        /// pinnable from the surrounding control flow. Pinned by
+        /// `IMessageChannelTests.testNoTimestampSentinelIsEmptyString`.
+        static let noTimestampSentinel = ""
     }
 
     /// chat.db row-decode vocabulary. Each constant is a fallback for a
@@ -576,7 +591,7 @@ struct IMessageChannel: ChannelService {
     }
 
     static func formatRelative(appleDate: Int64) -> String {
-        guard appleDate != 0 else { return "" }
+        guard appleDate != 0 else { return TimeFormat.noTimestampSentinel }
         let date = Date(timeIntervalSinceReferenceDate: secondsSinceReferenceDate(appleDate: appleDate))
         let cal = Calendar.current
         if cal.isDateInToday(date) {
