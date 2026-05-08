@@ -1193,7 +1193,7 @@ final class SearchIndexResultFieldsTests: XCTestCase {
 
         let hits = await index.search("xylophonetest150e")
         XCTAssertEqual(hits.count, 1, "search must return 1 result for the upserted message")
-        XCTAssertEqual(hits.first?.senderName, "me",
+        XCTAssertEqual(hits.first?.senderName, SearchIndex.outgoingSenderLabel,
                        "Result.senderName must be 'me' for outgoing messages")
     }
 
