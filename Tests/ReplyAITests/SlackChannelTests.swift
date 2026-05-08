@@ -982,6 +982,19 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(SlackChannel.excludeArchivedValue, "true",
             "excludeArchivedValue must be the literal string `true` — Slack's API expects a stringified bool, not `1` or some other truthy value")
     }
+
+    /// Pin the channel display-name prefix as the literal `#`. Slack's
+    /// UI convention prepends `#` to every public/private channel
+    /// reference; ReplyAI's sidebar mirrors this so the row format is
+    /// recognizable from the Slack desktop app. Drift to a different
+    /// glyph (or dropping it entirely) silently makes channel rows
+    /// indistinguishable from DM rows in the sidebar — the only
+    /// visual signal a user has that the row is a channel, not a
+    /// person.
+    func testChannelDisplayPrefixIsHash() {
+        XCTAssertEqual(SlackChannel.channelDisplayPrefix, "#",
+            "Slack's display convention prepends `#` to channel names — drift makes channel rows indistinguishable from DM rows")
+    }
 }
 
 // MARK: - Test doubles

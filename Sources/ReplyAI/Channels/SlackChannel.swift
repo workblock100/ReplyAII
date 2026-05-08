@@ -83,6 +83,20 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     /// channel in the sidebar.
     static let excludeArchivedValue = "true"
 
+    /// Display-name prefix for public/private Slack channels (e.g.
+    /// `#general`). Slack's UI convention prepends `#` to every
+    /// channel reference; the inbox sidebar mirrors this so users
+    /// recognize the row format from the Slack desktop app. Drift to
+    /// a different glyph (e.g. dropping the `#`, switching to `>`)
+    /// silently makes channel rows visually indistinguishable from
+    /// DM rows — the only signal a user has that the row is a
+    /// channel, not a person. Hoisted from the inline `"#\(name)"`
+    /// concatenation in the channel-display branch of `recentThreads`
+    /// so a future "let's drop the prefix" copy edit lands once with
+    /// deliberate review. Pinned by
+    /// `SlackChannelTests.testChannelDisplayPrefixIsHash`.
+    static let channelDisplayPrefix = "#"
+
     /// Fallback error copy when Slack returns `ok: false` without an
     /// `error` field. Hoisted from three duplicated inline literals
     /// (`recentThreads`, `messages`, `send`) so the wording lives in
@@ -201,7 +215,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             // present-but-blank `name` can't render a literal empty sidebar row.
             let display: String = {
                 if c.is_im == true, let user = c.user_display_name, !user.isEmpty { return user }
-                if c.is_channel == true, let name = c.name, !name.isEmpty { return "#\(name)" }
+                if c.is_channel == true, let name = c.name, !name.isEmpty { return "\(Self.channelDisplayPrefix)\(name)" }
                 if let name = c.name, !name.isEmpty { return name }
                 return c.id
             }()
