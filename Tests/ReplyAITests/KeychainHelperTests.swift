@@ -262,6 +262,80 @@ final class KeychainErrorTests: XCTestCase {
         XCTAssertTrue(s.contains("Settings"),
             "Unknown-code copy still points the user at Settings → Channels as the recovery path")
     }
+
+    // MARK: - Hoisted-constant pins (REP-hoist 2026-05-07)
+    //
+    // The five known-status toasts live as `static let` on
+    // `KeychainError`. Existing tests above (`*HasActionableCopy`)
+    // use substring matching, which would silently agree with a
+    // copy rewrite that drops the actionable verb. These pins are
+    // the byte-for-byte contract.
+
+    func testAuthFailedToastCopyIsFrozen() {
+        XCTAssertEqual(KeychainError.authFailedToast,
+                       "Keychain refused access. Sign in to your Mac and try again.",
+            "authFailedToast literal must not drift — `Sign in to your Mac` is the actionable verb the user needs")
+    }
+
+    func testUserCanceledToastCopyIsFrozen() {
+        XCTAssertEqual(KeychainError.userCanceledToast,
+                       "Keychain access canceled. Try connecting again to retry.",
+            "userCanceledToast literal must not drift — `Try connecting again` is the recovery path")
+    }
+
+    func testInteractionNotAllowedToastCopyIsFrozen() {
+        XCTAssertEqual(KeychainError.interactionNotAllowedToast,
+                       "Keychain is locked. Unlock your login keychain in Keychain Access and try again.",
+            "interactionNotAllowedToast literal must not drift — `Keychain Access` is the app the user has to open")
+    }
+
+    func testDuplicateItemToastCopyIsFrozen() {
+        XCTAssertEqual(KeychainError.duplicateItemToast,
+                       "Keychain already has a saved entry for this account. Disconnect the account in Settings → Channels and reconnect.",
+            "duplicateItemToast literal must not drift — `Disconnect the account in Settings → Channels` is the recovery path")
+    }
+
+    func testItemNotFoundToastCopyIsFrozen() {
+        XCTAssertEqual(KeychainError.itemNotFoundToast,
+                       "Keychain entry missing. Reconnect the account in Settings → Channels.",
+            "itemNotFoundToast literal must not drift — `Reconnect the account` is the recovery path")
+    }
+
+    /// Routing pins: each translated status's `errorDescription`
+    /// must equal the hoisted constant byte-for-byte. Catches a
+    /// future refactor that defines the constant but rebuilds the
+    /// inner switch with a slightly-different inline literal — every
+    /// constant-only pin would still pass while every user toast
+    /// silently desyncs from the documented copy.
+    func testAuthFailedRoutesThroughHoistedConstant() {
+        XCTAssertEqual(KeychainError.unhandledError(status: errSecAuthFailed).errorDescription,
+                       KeychainError.authFailedToast,
+            "errSecAuthFailed must surface the hoisted constant byte-for-byte — drift between switch and constant is silent")
+    }
+
+    func testUserCanceledRoutesThroughHoistedConstant() {
+        XCTAssertEqual(KeychainError.unhandledError(status: errSecUserCanceled).errorDescription,
+                       KeychainError.userCanceledToast,
+            "errSecUserCanceled must surface the hoisted constant byte-for-byte")
+    }
+
+    func testInteractionNotAllowedRoutesThroughHoistedConstant() {
+        XCTAssertEqual(KeychainError.unhandledError(status: errSecInteractionNotAllowed).errorDescription,
+                       KeychainError.interactionNotAllowedToast,
+            "errSecInteractionNotAllowed must surface the hoisted constant byte-for-byte")
+    }
+
+    func testDuplicateItemRoutesThroughHoistedConstant() {
+        XCTAssertEqual(KeychainError.unhandledError(status: errSecDuplicateItem).errorDescription,
+                       KeychainError.duplicateItemToast,
+            "errSecDuplicateItem must surface the hoisted constant byte-for-byte")
+    }
+
+    func testItemNotFoundRoutesThroughHoistedConstant() {
+        XCTAssertEqual(KeychainError.unhandledError(status: errSecItemNotFound).errorDescription,
+                       KeychainError.itemNotFoundToast,
+            "errSecItemNotFound must surface the hoisted constant byte-for-byte")
+    }
 }
 
 // MARK: - SlackTokenStore (REP-274)

@@ -124,6 +124,22 @@ struct KeychainHelper: Sendable {
 enum KeychainError: LocalizedError, Sendable {
     case unhandledError(status: OSStatus)
 
+    /// User-visible toast copy for each translated `OSStatus`. Hoisted
+    /// from the inline literals inside `errorDescription` so a copy
+    /// edit lands on a clearly-named constant rather than buried
+    /// inside a nested switch in a non-UI file. Existing tests in
+    /// `KeychainErrorTests` use substring matching (e.g.
+    /// `.contains("sign in")`) which doesn't catch a re-wording that
+    /// drops the actionable hint — these constants plus the
+    /// `*ToastCopyIsFrozen` pin tests are the byte-for-byte contract.
+    /// Pinned by `KeychainHelperTests`'
+    /// `*ToastCopyIsFrozen` cluster.
+    static let authFailedToast              = "Keychain refused access. Sign in to your Mac and try again."
+    static let userCanceledToast            = "Keychain access canceled. Try connecting again to retry."
+    static let interactionNotAllowedToast   = "Keychain is locked. Unlock your login keychain in Keychain Access and try again."
+    static let duplicateItemToast           = "Keychain already has a saved entry for this account. Disconnect the account in Settings → Channels and reconnect."
+    static let itemNotFoundToast            = "Keychain entry missing. Reconnect the account in Settings → Channels."
+
     /// Surfaces in Settings → Channels when an OAuth token write fails.
     /// The bare-integer fallback used to read "Keychain error -25308" which
     /// is unactionable — translating the handful of statuses ReplyAI can
@@ -136,15 +152,15 @@ enum KeychainError: LocalizedError, Sendable {
         case .unhandledError(let status):
             switch status {
             case errSecAuthFailed:
-                return "Keychain refused access. Sign in to your Mac and try again."
+                return Self.authFailedToast
             case errSecUserCanceled:
-                return "Keychain access canceled. Try connecting again to retry."
+                return Self.userCanceledToast
             case errSecInteractionNotAllowed:
-                return "Keychain is locked. Unlock your login keychain in Keychain Access and try again."
+                return Self.interactionNotAllowedToast
             case errSecDuplicateItem:
-                return "Keychain already has a saved entry for this account. Disconnect the account in Settings → Channels and reconnect."
+                return Self.duplicateItemToast
             case errSecItemNotFound:
-                return "Keychain entry missing. Reconnect the account in Settings → Channels."
+                return Self.itemNotFoundToast
             default:
                 return "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
             }
