@@ -612,4 +612,30 @@ final class SlackHTTPClientTests: XCTestCase {
             "GET and POST must surface the same user-visible copy for the unusable-response failure mode")
         XCTAssertEqual(getMessage, URLSessionSlackClient.ErrorMessage.unusableResponse)
     }
+
+    // MARK: - Request-shape vocabulary pins (REP-hoist 2026-05-07)
+
+    /// Pin the HTTP method for the `post` overload. Drift to a wrong
+    /// verb (e.g. `PUT`) silently routes every Slack chat send to a
+    /// `method_not_allowed` 405.
+    func testPostHTTPMethodIsPOST() {
+        XCTAssertEqual(URLSessionSlackClient.postHTTPMethod, "POST",
+            "postHTTPMethod must be POST — Slack's chat.postMessage rejects every other verb")
+    }
+
+    /// Pin the URL-construction failure prefixes. Drift on either
+    /// changes the format of every URL-construction error toast and
+    /// breaks any support engineer's grep on `Invalid Slack endpoint:`
+    /// or `Could not build Slack API URL for endpoint:`.
+    func testInvalidEndpointPrefixIsFrozen() {
+        XCTAssertEqual(URLSessionSlackClient.invalidEndpointPrefix,
+                       "Invalid Slack endpoint: ",
+            "invalidEndpointPrefix drift breaks support-engineer grep on the URLComponents-failure log line")
+    }
+
+    func testURLBuildFailedPrefixIsFrozen() {
+        XCTAssertEqual(URLSessionSlackClient.urlBuildFailedPrefix,
+                       "Could not build Slack API URL for endpoint: ",
+            "urlBuildFailedPrefix drift breaks support-engineer grep on the components-to-URL failure log line")
+    }
 }

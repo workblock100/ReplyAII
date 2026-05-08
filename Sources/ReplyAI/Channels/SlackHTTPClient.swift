@@ -46,6 +46,22 @@ struct URLSessionSlackClient: SlackHTTPClient {
         static func bearer(_ token: String) -> String { "Bearer \(token)" }
     }
 
+    /// HTTP method for the `post` overload. Hoisted so a future
+    /// migration to e.g. `PUT` for an idempotent endpoint lands once
+    /// rather than scattered, and so a typo can't quietly downgrade
+    /// the request to a wrong verb.
+    static let postHTTPMethod = "POST"
+
+    /// User-visible error format prefixes for the URL-construction
+    /// failure modes. Both the URLComponents and URL construction
+    /// paths emit `<prefix>: <endpoint>` — pinning the prefixes
+    /// independently keeps the two error paths visually consistent
+    /// (so a debugger or support-engineer log scan finds both with the
+    /// same grep). Drift on either is rare but silent. Pinned by
+    /// `SlackHTTPClientTests.testInvalidEndpointPrefixIsFrozen`.
+    static let invalidEndpointPrefix = "Invalid Slack endpoint: "
+    static let urlBuildFailedPrefix  = "Could not build Slack API URL for endpoint: "
+
     private let session: HTTPSessionProtocol
 
     init(session: HTTPSessionProtocol = URLSession.shared) {
@@ -54,7 +70,7 @@ struct URLSessionSlackClient: SlackHTTPClient {
 
     func get(endpoint: String, token: String, params: [String: String]) async throws -> Data {
         guard var components = URLComponents(string: Self.apiBase + endpoint) else {
-            throw ChannelError.networkError("Invalid Slack endpoint: \(endpoint)")
+            throw ChannelError.networkError("\(Self.invalidEndpointPrefix)\(endpoint)")
         }
         if !params.isEmpty {
             components.queryItems = params
@@ -62,7 +78,7 @@ struct URLSessionSlackClient: SlackHTTPClient {
                 .map { URLQueryItem(name: $0.key, value: $0.value) }
         }
         guard let url = components.url else {
-            throw ChannelError.networkError("Could not build Slack API URL for endpoint: \(endpoint)")
+            throw ChannelError.networkError("\(Self.urlBuildFailedPrefix)\(endpoint)")
         }
         var request = URLRequest(url: url)
         request.setValue(Header.bearer(token), forHTTPHeaderField: Header.authorizationField)
@@ -73,10 +89,10 @@ struct URLSessionSlackClient: SlackHTTPClient {
 
     func post(endpoint: String, token: String, json: [String: Any]) async throws -> Data {
         guard let url = URL(string: Self.apiBase + endpoint) else {
-            throw ChannelError.networkError("Invalid Slack endpoint: \(endpoint)")
+            throw ChannelError.networkError("\(Self.invalidEndpointPrefix)\(endpoint)")
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = Self.postHTTPMethod
         request.setValue(Header.bearer(token), forHTTPHeaderField: Header.authorizationField)
         request.setValue(Header.contentTypeJSON, forHTTPHeaderField: Header.contentTypeField)
         request.httpBody = try JSONSerialization.data(withJSONObject: json)
