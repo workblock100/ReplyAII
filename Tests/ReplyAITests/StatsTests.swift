@@ -145,6 +145,26 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(stats.snapshot(), Stats.Snapshot())
     }
 
+    /// Pin: `Stats.Snapshot()` default-initialization produces all-zero
+    /// counters and empty breakdown maps. Existing tests assert equality
+    /// against `Stats.Snapshot()` which proves a freshly-loaded stats
+    /// equals the default — but if the defaults silently changed (e.g.
+    /// `draftsGenerated = 1`), every freshly-loaded stats would also
+    /// start at 1 and the equality tests would still pass. Pin the
+    /// actual literal values to catch a silent default-shift.
+    func testSnapshotDefaultInitializerStartsAtZeroForAllCounters() {
+        let s = Stats.Snapshot()
+        XCTAssertEqual(s.draftsGenerated, 0)
+        XCTAssertEqual(s.draftsSent, 0)
+        XCTAssertEqual(s.messagesIndexed, 0)
+        XCTAssertEqual(s.ruleLoadSkips, 0)
+        XCTAssertEqual(s.rulesMatchedCount, 0)
+        XCTAssertTrue(s.rulesFiredByAction.isEmpty)
+        XCTAssertTrue(s.draftsGeneratedByTone.isEmpty)
+        XCTAssertTrue(s.draftsSentByTone.isEmpty)
+        XCTAssertTrue(s.messagesIndexedByChannel.isEmpty)
+    }
+
     func testMalformedFileFallsBackToFreshSnapshot() throws {
         let url = tempURL()
         try Data("{not valid json".utf8).write(to: url)
