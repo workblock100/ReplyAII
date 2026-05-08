@@ -108,11 +108,11 @@ final class NotificationCoordinatorTests: XCTestCase {
         let textInput = action as? UNTextInputNotificationAction
         XCTAssertNotNil(textInput, "the reply action must be a UNTextInputNotificationAction so the user can type inline")
 
-        XCTAssertEqual(action?.title, "Reply",
+        XCTAssertEqual(action?.title, NotificationCoordinator.InlineReplyAction.title,
             "Reply action title ships verbatim to the notification shade — pin so a rephrase shows up in code review")
-        XCTAssertEqual(textInput?.textInputButtonTitle, "Send",
+        XCTAssertEqual(textInput?.textInputButtonTitle, NotificationCoordinator.InlineReplyAction.buttonTitle,
             "Send button title ships verbatim — pin so a rephrase shows up in code review")
-        XCTAssertEqual(textInput?.textInputPlaceholder, "Your reply…",
+        XCTAssertEqual(textInput?.textInputPlaceholder, NotificationCoordinator.InlineReplyAction.placeholder,
             "Placeholder ships verbatim — pin so a rephrase shows up in code review")
     }
 
