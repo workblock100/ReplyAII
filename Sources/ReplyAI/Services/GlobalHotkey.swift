@@ -29,6 +29,36 @@ final class GlobalHotkey: @unchecked Sendable {
     /// `GlobalHotkeyContractTests.testLogPrefixIsFrozen`.
     static let logPrefix = "[ReplyAI] GlobalHotkey: "
 
+    /// Format the diagnostic NSLog line emitted when Carbon's
+    /// `RegisterEventHotKey` returns non-`noErr`. Hoisted from the
+    /// inline interpolation so the body wording (`RegisterEventHotKey
+    /// failed (status=...)`) lives next to the prefix it composes with
+    /// — drift to a different verb or a `code=` keyword breaks the
+    /// triage grep that looks for "RegisterEventHotKey failed" in
+    /// `log show` output. Pinned by `GlobalHotkeyContractTests`'
+    /// `testRegisterFailedLogFormat*`.
+    static func registerFailedLog(status: OSStatus) -> String {
+        "\(Self.logPrefix)RegisterEventHotKey failed (status=\(status))"
+    }
+
+    /// Format the diagnostic NSLog line emitted when Carbon's
+    /// `InstallEventHandler` returns non-`noErr` — the second-leg
+    /// failure mode after `RegisterEventHotKey` succeeded. Hoisted
+    /// alongside `registerFailedLog` so both failure-leg messages share
+    /// the same shape — drift here would force two distinct triage
+    /// greps. Pinned by `GlobalHotkeyContractTests`'
+    /// `testInstallFailedLogFormat*`.
+    static func installFailedLog(status: OSStatus) -> String {
+        "\(Self.logPrefix)InstallEventHandler failed (status=\(status))"
+    }
+
+    /// Diagnostic NSLog line emitted on the successful-register tail.
+    /// Triage greps on this exact string to confirm `⌘⇧R` registered
+    /// at app launch — drift to e.g. "registered ⌘⇧R" would silently
+    /// break the runbook check. Pinned by `GlobalHotkeyContractTests`'
+    /// `testRegisteredLogIsExact`.
+    static let registeredLog = "[ReplyAI] GlobalHotkey: ⌘⇧R registered"
+
     private var ref: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private var callback: (() -> Void)?
@@ -59,7 +89,7 @@ final class GlobalHotkey: @unchecked Sendable {
             &hotkeyRef
         )
         guard registerStatus == noErr, let hotkeyRef else {
-            NSLog("\(Self.logPrefix)RegisterEventHotKey failed (status=\(registerStatus))")
+            NSLog(Self.registerFailedLog(status: registerStatus))
             return
         }
         self.ref = hotkeyRef
@@ -87,13 +117,13 @@ final class GlobalHotkey: @unchecked Sendable {
             &handlerRef
         )
         guard installStatus == noErr, let handlerRef else {
-            NSLog("\(Self.logPrefix)InstallEventHandler failed (status=\(installStatus))")
+            NSLog(Self.installFailedLog(status: installStatus))
             UnregisterEventHotKey(hotkeyRef)
             self.ref = nil
             return
         }
         self.handler = handlerRef
-        NSLog("\(Self.logPrefix)⌘⇧R registered")
+        NSLog(Self.registeredLog)
     }
 
     /// Tear down the registration. Safe to call when nothing is registered.

@@ -145,4 +145,62 @@ final class GlobalHotkeyContractTests: XCTestCase {
         XCTAssertTrue(GlobalHotkey.logPrefix.hasSuffix(": "),
             "log prefix must end with `: ` so subsequent message text reads naturally without an extra separator")
     }
+
+    // MARK: - Diagnostic NSLog body pins
+
+    /// `registerFailedLog(status:)` is the line a triage engineer
+    /// greps for after a "⌘⇧R doesn't open ReplyAI" report. The body
+    /// must read "RegisterEventHotKey failed" verbatim — drift to a
+    /// different verb (e.g. "errored") or an alternate keyword (e.g.
+    /// `code=` instead of `status=`) silently breaks the runbook
+    /// grep. Pins both the prefix composition (logPrefix is reused)
+    /// and the body shape.
+    func testRegisterFailedLogFormatIncludesStatusAndKeyword() {
+        let line = GlobalHotkey.registerFailedLog(status: -50)
+        XCTAssertEqual(line, "[ReplyAI] GlobalHotkey: RegisterEventHotKey failed (status=-50)",
+            "registerFailedLog must produce the exact triage-greppable line — drift breaks the runbook")
+        XCTAssertTrue(line.hasPrefix(GlobalHotkey.logPrefix),
+            "registerFailedLog must compose with logPrefix so process-wide filtering catches it")
+    }
+
+    func testRegisterFailedLogFormatHandlesPositiveStatus() {
+        // Carbon hot-key statuses are usually negative, but pin a
+        // positive value too so the format works regardless of sign.
+        XCTAssertEqual(GlobalHotkey.registerFailedLog(status: 7),
+                       "[ReplyAI] GlobalHotkey: RegisterEventHotKey failed (status=7)",
+                       "format must handle non-negative OSStatus values without prepending a sign or padding")
+    }
+
+    /// `installFailedLog(status:)` is the second-leg failure line —
+    /// `RegisterEventHotKey` succeeded but `InstallEventHandler` did
+    /// not. Triage relies on these reading distinctly so the runbook
+    /// can localize the failing leg.
+    func testInstallFailedLogFormatIncludesStatusAndKeyword() {
+        XCTAssertEqual(GlobalHotkey.installFailedLog(status: -25291),
+                       "[ReplyAI] GlobalHotkey: InstallEventHandler failed (status=-25291)",
+                       "installFailedLog must produce the exact triage-greppable line for the second-leg failure mode")
+    }
+
+    func testRegisterAndInstallFailedLogsReadDistinctly() {
+        let r = GlobalHotkey.registerFailedLog(status: -50)
+        let i = GlobalHotkey.installFailedLog(status: -50)
+        XCTAssertNotEqual(r, i,
+            "register- and install-failed lines must read distinctly so a triage engineer can localize which Carbon leg failed without inspecting code")
+        XCTAssertTrue(r.contains("RegisterEventHotKey"),
+            "registerFailedLog must call out `RegisterEventHotKey` by name — drift breaks the runbook grep")
+        XCTAssertTrue(i.contains("InstallEventHandler"),
+            "installFailedLog must call out `InstallEventHandler` by name — drift breaks the runbook grep")
+    }
+
+    /// `registeredLog` is the success-path confirmation a triage
+    /// engineer greps for to verify `⌘⇧R` registered at app launch.
+    /// Drift would silently break the runbook check that confirms
+    /// the global hotkey is active in production builds.
+    func testRegisteredLogIsExact() {
+        XCTAssertEqual(GlobalHotkey.registeredLog,
+                       "[ReplyAI] GlobalHotkey: ⌘⇧R registered",
+                       "registeredLog must read exactly — runbook grep on `⌘⇧R registered` confirms hotkey installed at launch")
+        XCTAssertTrue(GlobalHotkey.registeredLog.hasPrefix(GlobalHotkey.logPrefix),
+            "registeredLog must compose with logPrefix so process-wide filtering catches the success line")
+    }
 }
