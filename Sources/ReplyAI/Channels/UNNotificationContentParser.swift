@@ -37,14 +37,27 @@ enum UNNotificationContentParser {
     /// Returns nil when none of those produce a non-empty string.
     /// `chatGUID` is populated from `userInfo[CKChatIdentifier]` or `userInfo[CKChatGUID]`.
     ///
-    /// **Divergence with `NotificationCoordinator.willPresent`**: this parser
-    /// keeps an empty-string `CKChatIdentifier` verbatim (no fallback to
-    /// `CKChatGUID`), pinned by `testEmptyCKChatIdentifierIsNotFalledBack`.
-    /// The inline logic in `NotificationCoordinator.userNotificationCenter(_:willPresent:)`
-    /// instead filters present-but-empty values to nil and falls through.
-    /// If this parser ever replaces the inline path, harmonize the empty
-    /// handling first — the pinned test will fail and force a deliberate
-    /// decision rather than a silent behavior change.
+    /// **Divergence with `NotificationCoordinator.willPresent`**: two
+    /// paths exist for resolving the same notification fields, and they
+    /// disagree on two contracts:
+    ///
+    /// 1. **Sender key**: this parser checks `ckSenderID` → `sender` →
+    ///    `title` (three steps); willPresent skips `ckSenderID` and only
+    ///    checks `sender` → `title`. Modern iMessage / Continuity
+    ///    payloads populate `CKSenderID` but not always `sender`, so
+    ///    willPresent on those falls through to the title (contact
+    ///    display name) while this parser returns the raw handle.
+    ///
+    /// 2. **Empty `CKChatIdentifier`**: this parser keeps a present-
+    ///    but-empty `CKChatIdentifier` verbatim (no fallback to
+    ///    `CKChatGUID`), pinned by `testEmptyCKChatIdentifierIsNotFalledBack`.
+    ///    The inline willPresent path filters present-but-empty values
+    ///    to nil and falls through to `CKChatGUID`.
+    ///
+    /// If this parser ever replaces the inline path, harmonize both
+    /// contracts deliberately — the pinned tests on each side will
+    /// fail and force a real decision rather than a silent behavior
+    /// flip in production notification handling.
     static func parse(_ content: UNNotificationContent) -> ParsedMessageNotification? {
         let senderHandle: String
         if let ckSender = content.userInfo[UserInfoKey.ckSenderID] as? String, !ckSender.isEmpty {

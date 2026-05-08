@@ -191,13 +191,29 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     ) {
         let content = notification.request.content
         let categoryID = content.categoryIdentifier
-        // Prefer the explicit sender key iMessage/CKSenderID sets; fall back to title.
+        // Read `sender` only (not `CKSenderID`) and fall back to title.
         // The empty-string check prevents an empty `sender` value from
         // bypassing the title fallback — without it, a malformed
         // notification with `userInfo["sender"] = ""` would propagate an
         // empty handle into applyIncomingNotification and (because
         // `chatGUID.hasSuffix("")` is true for every string) match the
         // first thread by accident.
+        //
+        // **Divergence with `UNNotificationContentParser.parse`**:
+        // the parser checks `UserInfoKey.ckSenderID` first, then
+        // `UserInfoKey.sender`, then `content.title` — three steps —
+        // while this inline path skips the `ckSenderID` step. Modern
+        // iMessage / Continuity notifications populate `CKSenderID`
+        // but not always `sender`, so willPresent on those payloads
+        // falls straight through to the title (the contact display
+        // name, e.g. "Mom") instead of the raw handle. The two paths
+        // diverged when the parser was extracted as a structured
+        // alternative; harmonizing means routing willPresent through
+        // `UNNotificationContentParser.parse(content)` and accepting
+        // the parser's empty-CKChatIdentifier-no-fallback semantics
+        // (pinned by `testEmptyCKChatIdentifierIsNotFalledBack`).
+        // Until that's done, this comment + the parser's mirror
+        // divergence note are the only places that surface the gap.
         let rawSender = content.userInfo[UNNotificationContentParser.UserInfoKey.sender] as? String
         let senderHandle = (rawSender?.isEmpty == false ? rawSender : nil) ?? content.title
         let preview = content.body
