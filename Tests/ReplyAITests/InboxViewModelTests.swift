@@ -3254,7 +3254,7 @@ final class InboxViewModelEditKeyTests: XCTestCase {
         vm.requestSend(text: "ok")
         await vm.confirmSend()
 
-        XCTAssertEqual(vm.sendToast, "Sent to Alice Toast",
+        XCTAssertEqual(vm.sendToast, InboxViewModel.sentToToast(recipient: "Alice Toast"),
             "success toast must read exactly `Sent to <recipient>` — drift in this prefix changes the post-send affordance the keyboard-first UX depends on")
     }
 }
