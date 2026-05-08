@@ -697,6 +697,86 @@ final class PromptBuilderTests: XCTestCase {
             "rendered prompt must contain Template.emptyHistoryFallback byte-for-byte — source and constant must not drift")
     }
 
+    // MARK: - Template format pins (build() composers)
+
+    /// `Template.threadHeader(name:channelLabel:)` is the first line of
+    /// the user-turn prompt — drift here changes the very first thing
+    /// the LLM sees on every draft. Pin the format shape AND a
+    /// round-trip witness through `build()` so drift surfaces at
+    /// either the formatter or the call site.
+    func testThreadHeaderFormatIsExact() {
+        XCTAssertEqual(
+            PromptBuilder.Template.threadHeader(name: "Alice", channelLabel: "iMessage"),
+            "Conversation with Alice via iMessage.",
+            "threadHeader format `Conversation with X via Y.` is the prompt-shape contract the LLM has been calibrated against — drift silently changes how the model interprets sender + channel")
+    }
+
+    func testBuildPromptRoutesThreadHeaderThroughTemplate() {
+        let thread = makeThread()  // name="Bob" channel=.imessage in the helper
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        let expected = PromptBuilder.Template.threadHeader(name: thread.name, channelLabel: thread.channel.label)
+        XCTAssertTrue(prompt.contains(expected),
+            "rendered prompt must contain Template.threadHeader(name:channelLabel:) byte-for-byte — source and constant must not drift")
+    }
+
+    /// `Template.voiceExampleBullet(_:)` anchors the LLM into "list of
+    /// examples" mode. Drift to `"* "` or `"• "` silently changes how
+    /// the model treats the voice-examples block.
+    func testVoiceExampleBulletFormatIsExact() {
+        XCTAssertEqual(PromptBuilder.Template.voiceExampleBullet("hey"),
+                       "- hey",
+                       "voice-example bullet format `- X` anchors the model into list mode — drift to a different glyph silently changes how voice examples are weighted")
+        XCTAssertEqual(PromptBuilder.Template.voiceExampleBullet(""),
+                       "- ",
+                       "empty-example edge case must still produce a bullet glyph + space — caller dedupes upstream, the formatter does not silently drop")
+    }
+
+    func testBuildPromptRoutesVoiceExampleBulletsThroughTemplate() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [], voiceExamples: ["sample voice"])
+        let expected = PromptBuilder.Template.voiceExampleBullet("sample voice")
+        XCTAssertTrue(prompt.contains(expected),
+            "rendered prompt must contain Template.voiceExampleBullet(...) byte-for-byte — source and constant must not drift")
+    }
+
+    /// `Template.messageLine(speaker:text:)` is the per-message line
+    /// shape. Drift to `"<speaker> said: <text>"` or moving the colon
+    /// would silently change how the model parses the role of each
+    /// line.
+    func testMessageLineFormatIsExact() {
+        XCTAssertEqual(PromptBuilder.Template.messageLine(speaker: "Alice", text: "hi"),
+                       "Alice: hi",
+                       "messageLine format `<speaker>: <text>` is the conversation-shape contract — drift changes how the LLM interprets which side is speaking")
+        // Empty text edge case (e.g. a message that's all attachment).
+        XCTAssertEqual(PromptBuilder.Template.messageLine(speaker: "me", text: ""),
+                       "me: ",
+                       "empty-text edge case must still emit `<speaker>: ` so the model sees a turn at all — drift here would either drop the speaker entirely or merge with the next line")
+    }
+
+    /// `Template.instructionLine(toneLowercased:)` is the final
+    /// "what to do" line. The verb ("Write my next reply") anchors
+    /// the model's framing of its own task — drift to "Compose" or
+    /// "Draft" silently changes the output style.
+    func testInstructionLineFormatIsExact() {
+        XCTAssertEqual(PromptBuilder.Template.instructionLine(toneLowercased: "warm"),
+                       "Write my next reply in a warm tone. Reply text only.",
+                       "instructionLine drift changes the verb the model uses to anchor generation — every draft for every shipped user")
+        // Composes with the existing userInstructionSuffix pin.
+        let line = PromptBuilder.Template.instructionLine(toneLowercased: "direct")
+        XCTAssertTrue(line.hasSuffix(PromptBuilder.Template.userInstructionSuffix),
+            "instructionLine must compose with userInstructionSuffix — drift either at the prefix or the suffix changes the prompt-shape contract")
+    }
+
+    func testBuildPromptRoutesInstructionLineThroughTemplate() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [makeMessage("hi")])
+        let expected = PromptBuilder.Template.instructionLine(toneLowercased: "warm")
+        XCTAssertTrue(prompt.contains(expected),
+            "rendered prompt must contain Template.instructionLine(toneLowercased:) byte-for-byte — source and constant must not drift")
+    }
+
     func testBuildPromptRoutesVoiceExamplesHeaderThroughTemplate() {
         let thread = makeThread()
         let prompt = PromptBuilder.build(thread: thread, tone: .warm,

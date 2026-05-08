@@ -27,6 +27,46 @@ struct PromptBuilder {
         static let emptyHistoryFallback = "(no messages yet)"
         static let speakerSelf          = "me"
         static let userInstructionSuffix = " tone. Reply text only."
+
+        /// User-prompt header format: thread name + channel label.
+        /// Hoisted from the inline `lines.append(...)` in `build` so
+        /// the prompt-shape contract that the LLM has been trained
+        /// against doesn't drift as a side effect of an unrelated
+        /// edit. Drift here changes the very first user-turn line the
+        /// model sees on every draft. Pinned by `PromptBuilderTests`'
+        /// `*HeaderFormat*` cluster.
+        static func threadHeader(name: String, channelLabel: String) -> String {
+            "Conversation with \(name) via \(channelLabel)."
+        }
+
+        /// Voice-example bullet format. The bullet style anchors the
+        /// LLM into "list of examples" mode rather than "next reply"
+        /// mode for the voice-examples block. Drift to a different
+        /// bullet glyph (e.g. `"* "`, `"• "`) silently changes how
+        /// in-context the examples feel to the model.
+        static func voiceExampleBullet(_ example: String) -> String {
+            "- \(example)"
+        }
+
+        /// Per-message line format inside the recent-messages block.
+        /// The `<speaker>: <text>` shape is the conversation
+        /// representation the LLM has been calibrated against — drift
+        /// to e.g. `"<speaker> said: <text>"` or moving the colon
+        /// would silently change how the model parses the role of
+        /// each line.
+        static func messageLine(speaker: String, text: String) -> String {
+            "\(speaker): \(text)"
+        }
+
+        /// Final user-turn instruction line — the "tell the model
+        /// what to do" prefix. Composes with `userInstructionSuffix`
+        /// for the full instruction; the prefix part is the verb
+        /// ("Write my next reply") that the model uses to anchor
+        /// generation. Drift to "Compose" or "Draft" silently
+        /// changes the model's framing of its own task.
+        static func instructionLine(toneLowercased: String) -> String {
+            "Write my next reply in a \(toneLowercased)\(userInstructionSuffix)"
+        }
     }
 
     /// User-turn prompt: thread context + instruction line.
@@ -41,13 +81,13 @@ struct PromptBuilder {
         voiceExamples: [String] = []
     ) -> String {
         var lines: [String] = []
-        lines.append("Conversation with \(thread.name) via \(thread.channel.label).")
+        lines.append(Template.threadHeader(name: thread.name, channelLabel: thread.channel.label))
         lines.append("")
 
         if !voiceExamples.isEmpty {
             lines.append(Template.voiceExamplesHeader)
             for example in voiceExamples {
-                lines.append("- \(example)")
+                lines.append(Template.voiceExampleBullet(example))
             }
             lines.append("")
         }
@@ -61,12 +101,12 @@ struct PromptBuilder {
             for m in truncated {
                 let speaker = m.from == .me ? Template.speakerSelf : thread.name
                 let text = m.text.replacingOccurrences(of: "\n", with: " ")
-                lines.append("\(speaker): \(text)")
+                lines.append(Template.messageLine(speaker: speaker, text: text))
             }
         }
 
         lines.append("")
-        lines.append("Write my next reply in a \(tone.rawValue.lowercased())\(Template.userInstructionSuffix)")
+        lines.append(Template.instructionLine(toneLowercased: tone.rawValue.lowercased()))
         return lines.joined(separator: "\n")
     }
 
