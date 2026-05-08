@@ -140,6 +140,45 @@ final class IMessageSenderTests: XCTestCase {
         )
     }
 
+    /// Pin that `chatGUID(for:)` returns the thread's stored chatGUID
+    /// VERBATIM when present, regardless of whether the GUID's service
+    /// prefix matches the thread's channel. Realistic scenario: chat.db
+    /// emits `iMessage;-;+15551234567` for a chat that the inbox classifies
+    /// as `.sms` (e.g. SMS-relay where chat.service_name disagrees with
+    /// our channel mapping), or vice versa. The non-synthesis path does
+    /// NOT rewrite the prefix to match the channel — the stored GUID
+    /// wins. Drift toward "let's coerce the prefix to the channel's
+    /// service to be safe" would silently route AppleScript sends through
+    /// the wrong Messages.app service for every chat.db row whose
+    /// channel-classification disagreed with its service_name. Pin both
+    /// directions of mismatch so a future channel-prefix-coercion
+    /// refactor surfaces here.
+    func testChatGUIDForReturnsStoredGUIDVerbatimRegardlessOfChannelPrefixMismatch() {
+        // SMS thread with an iMessage-shaped GUID — verbatim, no rewrite.
+        let smsThreadWithIMessageGUID = MessageThread(
+            id: "+15551234567", channel: .sms, name: "Phone",
+            avatar: "P", preview: "", time: "",
+            chatGUID: "iMessage;-;+15551234567"
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: smsThreadWithIMessageGUID),
+            "iMessage;-;+15551234567",
+            "stored chatGUID must round-trip verbatim regardless of channel — coercing the prefix to the channel's service would silently route AppleScript sends through the wrong Messages.app service for chat.db rows whose service_name disagreed with our channel mapping"
+        )
+
+        // iMessage thread with an SMS-shaped GUID — same verbatim policy.
+        let imessageThreadWithSMSGUID = MessageThread(
+            id: "+15558881111", channel: .imessage, name: "Phone",
+            avatar: "P", preview: "", time: "",
+            chatGUID: "SMS;-;+15558881111"
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: imessageThreadWithSMSGUID),
+            "SMS;-;+15558881111",
+            "iMessage-channel thread with an SMS-shaped stored chatGUID must also round-trip verbatim — the thread.channel is NOT the source of truth for the GUID prefix when the GUID is non-nil"
+        )
+    }
+
     func testEmptyChatGUIDStringTreatedAsNil() {
         // COALESCE(c.guid, '') in IMessageChannel can surface "" for
         // freak rows; the sender should ignore empties and synthesize.
