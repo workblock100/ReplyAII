@@ -112,6 +112,42 @@ final class MessageModelTests: XCTestCase {
         XCTAssertNotEqual(a, b,
             "two messages differing only in rowID must compare unequal — the rule engine dedups by rowID")
     }
+
+    /// `isRead` participates in equality. Drift would let the inbox
+    /// miss a "this message was just marked read" update because the
+    /// synthesized `==` would say "no change," skipping a SwiftUI
+    /// re-render and leaving the unread chip stale.
+    func testHashableEqualityRespectsIsRead() {
+        let id = UUID()
+        let unread = Message(id: id, from: .them, text: "x", time: "t", isRead: false)
+        let read   = Message(id: id, from: .them, text: "x", time: "t", isRead: true)
+        XCTAssertNotEqual(unread, read,
+            "two messages differing only in isRead must compare unequal — the inbox needs the diff to invalidate the cached row when a message is marked read")
+    }
+
+    /// `deliveredAt` participates in equality. Drift would let a delivery-
+    /// receipt update silently fail to refresh the bubble's timestamp /
+    /// delivery indicator. Boundary-tested at nil → non-nil so a future
+    /// "include only when both non-nil" optimization surfaces here.
+    func testHashableEqualityRespectsDeliveredAt() {
+        let id = UUID()
+        let pending   = Message(id: id, from: .me, text: "x", time: "t", deliveredAt: nil)
+        let delivered = Message(id: id, from: .me, text: "x", time: "t", deliveredAt: Date(timeIntervalSince1970: 1_700_000_000))
+        XCTAssertNotEqual(pending, delivered,
+            "two messages differing only in deliveredAt (nil vs Date) must compare unequal — the bubble needs the diff to render the delivery indicator")
+    }
+
+    /// `hasAttachment` participates in equality. Drift would let an
+    /// attachment-arrival update silently fail to render the paperclip
+    /// glyph in the bubble (or the rule-engine `hasAttachment` predicate
+    /// fail to re-fire on a message whose attachment status changed).
+    func testHashableEqualityRespectsMessageHasAttachment() {
+        let id = UUID()
+        let plain     = Message(id: id, from: .them, text: "x", time: "t", hasAttachment: false)
+        let withAtt   = Message(id: id, from: .them, text: "x", time: "t", hasAttachment: true)
+        XCTAssertNotEqual(plain, withAtt,
+            "two messages differing only in hasAttachment must compare unequal — the bubble paperclip glyph + rule predicate both need this diff to fire")
+    }
 }
 
 // MARK: - REP-XX: per-field equality contract
