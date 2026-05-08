@@ -3470,4 +3470,45 @@ final class SmartRuleSeedNamesTests: XCTestCase {
         XCTAssertFalse(ctx.senderKnown,
             "a `+1 (415) 555-1234` thread name must classify as phonelike → senderKnown=false; drift in phonelikeCharacterSet would silently misfire")
     }
+
+    // MARK: - RuleValidationError toast format pins
+
+    /// Pin the parameterized .invalidRegex toast format. The format
+    /// embeds the offending pattern wrapped in straight double quotes
+    /// AND the NSRegularExpression diagnostic. Drift to curly/fancy
+    /// quotes silently changes how the display reads; drift on the
+    /// `:` separator merges pattern and reason into one
+    /// indistinguishable string.
+    func testInvalidRegexToastFormatRoundTrips() {
+        let toast = RuleValidationError.invalidRegexToast(
+            pattern: "(?i)\\b", reason: "unbalanced parenthesis")
+        XCTAssertEqual(toast,
+                       "Invalid regex pattern \"(?i)\\b\": unbalanced parenthesis")
+        // Routing: the case's errorDescription must equal the format
+        // helper applied to its associated values.
+        XCTAssertEqual(
+            RuleValidationError.invalidRegex(pattern: "(?i)\\b",
+                                             reason: "unbalanced parenthesis").errorDescription,
+            toast,
+            ".invalidRegex case must route through invalidRegexToast(pattern:reason:)")
+    }
+
+    /// Pin the parameterized .tooManyRules toast format. Embeds the
+    /// configured limit and the recovery hint. Drift drops either
+    /// the number (user can't tell which limit they hit) or the
+    /// "Remove an existing rule…" recovery sentence.
+    func testTooManyRulesToastFormatRoundTrips() {
+        let toast = RuleValidationError.tooManyRulesToast(limit: 50)
+        XCTAssertEqual(toast,
+                       "Rule limit reached (50 rules maximum). Remove an existing rule before adding a new one.")
+        XCTAssertEqual(RuleValidationError.tooManyRules(limit: 50).errorDescription,
+                       toast,
+            ".tooManyRules case must route through tooManyRulesToast(limit:)")
+        // The toast must surface the integer limit for triage.
+        XCTAssertTrue(toast.contains("50"),
+            "tooManyRulesToast must surface the integer limit so users know which cap they hit")
+        // The toast must surface the recovery hint.
+        XCTAssertTrue(toast.contains("Remove an existing rule"),
+            "tooManyRulesToast must surface the recovery hint — without it the user has no actionable next step")
+    }
 }

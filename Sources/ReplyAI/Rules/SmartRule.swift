@@ -214,12 +214,32 @@ enum RuleValidationError: LocalizedError {
     case invalidRegex(pattern: String, reason: String)
     case tooManyRules(limit: Int)
 
+    /// Format the user-visible toast for `.invalidRegex`. Embeds both
+    /// the offending pattern (so the user can see exactly what failed)
+    /// and NSRegularExpression's diagnostic. The pattern is wrapped in
+    /// straight double quotes — drift to curly / fancy quotes silently
+    /// changes how the display reads. Pinned by
+    /// `RulesTests.testInvalidRegexToastFormatRoundTrips`.
+    static func invalidRegexToast(pattern p: String, reason r: String) -> String {
+        "Invalid regex pattern \"\(p)\": \(r)"
+    }
+
+    /// Format the user-visible toast for `.tooManyRules`. Embeds the
+    /// configured limit (the number is the only signal a user has for
+    /// "how many can I keep"). The "Remove an existing rule…"
+    /// sentence is the recovery hint — drift drops the actionable
+    /// next step. Pinned by
+    /// `RulesTests.testTooManyRulesToastFormatRoundTrips`.
+    static func tooManyRulesToast(limit: Int) -> String {
+        "Rule limit reached (\(limit) rules maximum). Remove an existing rule before adding a new one."
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalidRegex(let p, let r):
-            return "Invalid regex pattern \"\(p)\": \(r)"
+            return Self.invalidRegexToast(pattern: p, reason: r)
         case .tooManyRules(let limit):
-            return "Rule limit reached (\(limit) rules maximum). Remove an existing rule before adding a new one."
+            return Self.tooManyRulesToast(limit: limit)
         }
     }
 }
