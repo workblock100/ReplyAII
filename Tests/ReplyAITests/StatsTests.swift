@@ -629,6 +629,32 @@ final class StatsAcceptanceRateTests: XCTestCase {
         XCTAssertEqual(rate!, 2.0, accuracy: 1e-9,
             "sent > generated must surface as the raw ratio (2.0 here) rather than be clamped to 1.0 — the divergence is information for the audit log")
     }
+
+    /// Parallel pin for the aggregate path. `overallAcceptanceRate()`
+    /// sums the per-tone breakdowns and divides — same divide-by-zero
+    /// guard, same no-clamp policy. The per-tone version is pinned by
+    /// `testAcceptanceRateAllowsOverOneWhenSentExceedsGenerated`; this
+    /// fills the gap on the aggregate path so a future "clamp" or "min(1.0, ...)"
+    /// tightening on `overallAcceptanceRate` surfaces here even if the
+    /// per-tone path stays uncapped. Realistic scenario: an idempotency
+    /// miss in `recordDraftSent(tone:)` double-counts a single user
+    /// confirmation across two tones, lifting the aggregate ratio above
+    /// 1.0; the audit log needs the raw divergence, not a clamped
+    /// "everything looks fine" 1.0.
+    func testOverallAcceptanceRateAllowsOverOneWhenAggregateSentExceedsGenerated() {
+        let stats = Stats(fileURL: tempURL("overall-overone.json"))
+        // Generate 2 (one per tone), send 3 (split across tones with one
+        // double-count). Aggregate: 3 sent / 2 generated = 1.5.
+        stats.recordDraftGenerated(tone: .warm)
+        stats.recordDraftGenerated(tone: .direct)
+        stats.recordDraftSent(tone: .warm)
+        stats.recordDraftSent(tone: .warm)   // doubled — the "idempotency miss"
+        stats.recordDraftSent(tone: .direct)
+        let rate = stats.overallAcceptanceRate()
+        XCTAssertNotNil(rate, "rate must be non-nil — aggregate generated count is non-zero")
+        XCTAssertEqual(rate!, 1.5, accuracy: 1e-9,
+            "aggregate sent > aggregate generated must surface as the raw ratio (1.5 here) rather than be clamped to 1.0 — the divergence is the only signal an audit has of an idempotency-miss bug")
+    }
 }
 
 // MARK: - REP-160: Stats concurrent mixed-counter stress test
