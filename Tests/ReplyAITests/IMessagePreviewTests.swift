@@ -386,4 +386,40 @@ final class IMessagePreviewTests: XCTestCase {
                        "wwwarchive.org",
             "host that starts with `www` but not `\(IMessagePreview.strippedHostPrefix)` must pass through unchanged")
     }
+
+    /// A URL with a query string is still one whitespace-separated
+    /// token, so `singleURLHost` collapses it. The host returned is
+    /// JUST the host — query and path are dropped. Pin so a future
+    /// "include the query string in the preview" decision lands as a
+    /// deliberate change. Realistic case: every analytics-linked
+    /// share URL ends up here (utm_source, fbclid, gclid, etc.).
+    func testSingleURLHostStripsQueryString() {
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://example.com/path?utm_source=email&utm_campaign=launch"),
+                       "example.com",
+            "URL with query string must collapse to bare host — query parameters are noise in a sidebar preview")
+    }
+
+    /// A URL with a fragment (`#section`) is still one token; the
+    /// host comes through, the fragment is dropped. Realistic case:
+    /// shared links into a docs page section, GitHub line-anchor
+    /// links (`#L42`), Stack Overflow answer permalinks.
+    func testSingleURLHostStripsFragment() {
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://example.com/path/page#section-anchor"),
+                       "example.com",
+            "URL with fragment must collapse to bare host — fragments are usage-state, not identity")
+    }
+
+    /// Display-string round-trip: a URL with both query and fragment
+    /// renders as `🔗 example.com`. Reaffirms that everything past
+    /// the host is dropped — companion to the singleURLHost-level
+    /// pins, but at the displayString boundary so a future caller
+    /// that bypasses singleURLHost (or a refactor that flips the
+    /// strip order) still surfaces.
+    func testDisplayStringWithQueryAndFragmentShowsBareHost() {
+        XCTAssertEqual(
+            IMessagePreview.displayString(from: "https://example.com/long/path?ref=share#hl"),
+            "\(IMessagePreview.linkPrefix) example.com",
+            "displayString must collapse a URL with query+fragment to `🔗 <host>` — drift would expose tracking parameters in the sidebar preview"
+        )
+    }
 }
