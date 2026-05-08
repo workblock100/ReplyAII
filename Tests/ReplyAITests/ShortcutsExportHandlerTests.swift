@@ -219,6 +219,52 @@ final class ShortcutsExportHandlerTests: XCTestCase {
         XCTAssertEqual(exports[0].thread.avatar, "M")
     }
 
+    /// Pin two intentional divergences vs `IMessageChannel.avatarInitial(for:)`.
+    /// The Shortcut export uses raw `String(displayName.prefix(1))`:
+    ///
+    /// 1. **No uppercasing.** A `displayName: "maya lee"` produces avatar
+    ///    `"m"` (lowercase). `IMessageChannel.avatarInitial` would
+    ///    uppercase it to `"M"`. Shortcut payloads are user-authored, so
+    ///    the parser preserves the user's input casing without inferring
+    ///    formatting intent.
+    /// 2. **No phone-glyph fallback.** A `displayName: "+15551234567"`
+    ///    produces avatar `"+"`. `IMessageChannel.avatarInitial` would
+    ///    return the telephone glyph `"☎"` from
+    ///    `IMessageChannel.phoneAvatarGlyph`.
+    ///
+    /// Drift class: a well-meaning audit that "aligns avatar logic across
+    /// channels" by routing this path through `IMessageChannel.avatarInitial`
+    /// would silently change every Shortcut-imported thread's sidebar
+    /// glyph — a UX shift no test would otherwise catch. The empty-
+    /// displayName divergence is already pinned by
+    /// `testAvatarFromEmptyDisplayNameIsEmpty`; this fills the
+    /// remaining two cases so the full divergence surface is locked.
+    func testAvatarDivergesFromIMessageChannelAvatarInitialOnCaseAndPhone() throws {
+        // Lowercase displayName: prefix(1) preserves the lowercase byte;
+        // IMessageChannel.avatarInitial would uppercase to "M".
+        let lowercaseJSON = #"[ { "id": "x", "displayName": "maya lee", "channel": "imessage", "messages": [] } ]"#
+        let lowercaseURL = try makeURL(payload: lowercaseJSON)
+        let lowercaseExport = try ShortcutsExportHandler.parse(url: lowercaseURL)
+        XCTAssertEqual(lowercaseExport[0].thread.avatar, "m",
+            "lowercase displayName must produce lowercase avatar — drift toward routing through IMessageChannel.avatarInitial would silently uppercase to 'M'")
+        // Sanity: confirm IMessageChannel.avatarInitial would have produced
+        // the divergent value, so the test fails meaningfully if either
+        // side ever harmonizes.
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "maya lee"), "M",
+            "control: IMessageChannel.avatarInitial uppercases — divergence sanity")
+
+        // Phone-handle displayName: prefix(1) returns "+"; avatarInitial
+        // would return the telephone glyph.
+        let phoneJSON = #"[ { "id": "y", "displayName": "+15551234567", "channel": "imessage", "messages": [] } ]"#
+        let phoneURL = try makeURL(payload: phoneJSON)
+        let phoneExport = try ShortcutsExportHandler.parse(url: phoneURL)
+        XCTAssertEqual(phoneExport[0].thread.avatar, "+",
+            "phone-handle displayName must produce '+' avatar — drift toward routing through IMessageChannel.avatarInitial would replace it with the telephone glyph '☎' on every Shortcut-imported phone thread")
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "+15551234567"),
+                       IMessageChannel.phoneAvatarGlyph,
+            "control: IMessageChannel.avatarInitial maps '+' prefix to the phone glyph — divergence sanity")
+    }
+
     /// Pin the current behavior: empty `displayName` produces an empty
     /// avatar (`String(displayName.prefix(1))` yields ""), unlike
     /// `IMessageChannel.avatarInitial(for:)` which falls back to "?".
