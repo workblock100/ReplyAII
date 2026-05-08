@@ -971,7 +971,16 @@ final class InboxViewModel {
 
     // MARK: - Archived persistence
 
-    private static let archivedKey = "pref.inbox.archivedThreadIDs"
+    /// UserDefaults key for the per-install archived-thread set. Drift
+    /// here orphans every shipped user's archived list — the new key
+    /// reads as empty while the old data sits unreachable on disk
+    /// until a wipeReplyAIDefaults clears it. The `pref.inbox.` prefix
+    /// is what the wipe-namespace sweep matches on, so a rename that
+    /// also drops the prefix would leak past factory reset. Hoisted
+    /// from `private static let` to package access so the contract is
+    /// pinnable. Pinned by
+    /// `InboxViewModelArchivedTests.testArchivedKeyIsFrozen`.
+    static let archivedKey = "pref.inbox.archivedThreadIDs"
 
     private static func loadArchivedIDs(from defaults: UserDefaults) -> Set<String> {
         guard let data = defaults.data(forKey: archivedKey),
@@ -988,7 +997,11 @@ final class InboxViewModel {
 
     // MARK: - silentlyIgnored persistence
 
-    private static let silentlyIgnoredKey = "pref.inbox.silentlyIgnoredThreadIDs"
+    /// UserDefaults key for the per-install silently-ignored thread
+    /// set (rule action `silentlyIgnore`). Same orphan-on-rename risk
+    /// as `archivedKey`. Pinned by
+    /// `InboxViewModelArchivedTests.testSilentlyIgnoredKeyIsFrozen`.
+    static let silentlyIgnoredKey = "pref.inbox.silentlyIgnoredThreadIDs"
 
     private static func loadSilentlyIgnoredIDs(from defaults: UserDefaults) -> Set<String> {
         guard let data = defaults.data(forKey: silentlyIgnoredKey),
@@ -1005,7 +1018,12 @@ final class InboxViewModel {
 
     // MARK: - Pinned persistence (REP-178)
 
-    private static let pinnedKey = "pref.inbox.pinnedThreadIDs"
+    /// UserDefaults key for the per-install pinned-thread set. Drift
+    /// silently un-pins every thread on next launch (data is still on
+    /// disk under the old key but the load path looks at the new
+    /// one). Pinned by
+    /// `InboxViewModelArchivedTests.testPinnedKeyIsFrozen`.
+    static let pinnedKey = "pref.inbox.pinnedThreadIDs"
 
     private static func loadPinnedIDs(from defaults: UserDefaults) -> Set<String> {
         guard let data = defaults.data(forKey: pinnedKey),
@@ -1022,7 +1040,11 @@ final class InboxViewModel {
 
     // MARK: - Snooze persistence (REP-111)
 
-    private static let snoozedUntilKey = "pref.inbox.snoozedUntil"
+    /// UserDefaults key for the per-install snoozed-until map
+    /// (`[threadID: Date]`). Drift here silently un-snoozes every
+    /// thread on next launch. Pinned by
+    /// `InboxViewModelArchivedTests.testSnoozedUntilKeyIsFrozen`.
+    static let snoozedUntilKey = "pref.inbox.snoozedUntil"
 
     private static func loadSnoozedUntil(from defaults: UserDefaults) -> [String: Date] {
         guard let data = defaults.data(forKey: snoozedUntilKey),
@@ -1039,7 +1061,14 @@ final class InboxViewModel {
 
     // MARK: - lastSeenRowID persistence
 
-    private static let lastSeenRowIDKey = "pref.inbox.lastSeenRowID"
+    /// UserDefaults key for the per-install lastSeenRowID watermark
+    /// map (`[chatGUID: ROWID]`). Drift here silently re-replays every
+    /// historical message as if it were brand-new on next launch
+    /// (the watcher loop reads the watermark from the new key, finds
+    /// nothing, and treats the entire chat history as unseen).
+    /// Pinned by
+    /// `InboxViewModelArchivedTests.testLastSeenRowIDKeyIsFrozen`.
+    static let lastSeenRowIDKey = "pref.inbox.lastSeenRowID"
 
     private static func loadLastSeenRowID(from defaults: UserDefaults) -> [String: Int64] {
         guard let data = defaults.data(forKey: lastSeenRowIDKey),

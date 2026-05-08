@@ -3050,6 +3050,46 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
         XCTAssertEqual(vm.snoozedUntil["t-snoozed"], wake,
                        "snooze load path must read 'pref.inbox.snoozedUntil' literally — renaming silently un-snoozes every shipped user's deferred threads")
     }
+
+    /// Constants pin: every InboxViewModel UserDefaults key the load
+    /// path uses must equal its expected literal value byte-for-byte.
+    /// The four `*LoadFromLiteralKey` tests above check the symmetry
+    /// between writes-to-literal and reads-from-constant, but they
+    /// pass even if the constant value drifts in lockstep with the
+    /// test literal. This pin freezes the named constants so a
+    /// "let's namespace it" refactor surfaces independently.
+    func testInboxPersistenceKeysMatchExpectedLiterals() {
+        XCTAssertEqual(InboxViewModel.archivedKey, "pref.inbox.archivedThreadIDs",
+            "archivedKey drift orphans every shipped user's archived list — old key sits unreachable on disk while new key reads empty")
+        XCTAssertEqual(InboxViewModel.silentlyIgnoredKey, "pref.inbox.silentlyIgnoredThreadIDs",
+            "silentlyIgnoredKey drift silently re-surfaces threads the user already silenced")
+        XCTAssertEqual(InboxViewModel.pinnedKey, "pref.inbox.pinnedThreadIDs",
+            "pinnedKey drift silently un-pins every thread on next launch")
+        XCTAssertEqual(InboxViewModel.snoozedUntilKey, "pref.inbox.snoozedUntil",
+            "snoozedUntilKey drift silently un-snoozes every deferred thread on next launch")
+        XCTAssertEqual(InboxViewModel.lastSeenRowIDKey, "pref.inbox.lastSeenRowID",
+            "lastSeenRowIDKey drift re-replays every historical message as if brand-new on next launch")
+    }
+
+    /// Cross-check: every InboxViewModel UserDefaults key shares the
+    /// `pref.` wipe-namespace prefix so factory reset
+    /// (`wipeReplyAIDefaults`) sweeps them. Drift that drops the
+    /// prefix would silently leak the corresponding state past
+    /// factory reset (user clicks "Factory reset" but their archived
+    /// thread set persists). Pinned alongside the literal values so
+    /// the wipe-coverage invariant is enforced at compile-pin level.
+    func testInboxPersistenceKeysShareWipeNamespacePrefix() {
+        let prefix = PreferenceKey.wipeNamespacePrefix
+        for key in [InboxViewModel.archivedKey,
+                    InboxViewModel.silentlyIgnoredKey,
+                    InboxViewModel.pinnedKey,
+                    InboxViewModel.snoozedUntilKey,
+                    InboxViewModel.lastSeenRowIDKey] {
+            XCTAssertTrue(key.hasPrefix(prefix),
+                "key `\(key)` must start with `\(prefix)` — drift would leak this state past factory reset")
+        }
+    }
+
 }
 
 // MARK: - copying() field-completeness pin
