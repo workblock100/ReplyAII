@@ -874,4 +874,42 @@ final class PromptBuilderTests: XCTestCase {
                 "tone suffix must start with a space so concatenation produces `essays. Use…` not `essays.Use…` — got: \(s)")
         }
     }
+
+    /// Pin the empty-thread-name shape: when `thread.name = ""` (the
+    /// shape that flows in from a malformed UNNotification where every
+    /// userInfo key + the title is empty — see
+    /// `NotificationCoordinator.resolveSenderHandle`'s
+    /// `testResolveSenderHandleAllEmptyReturnsEmptyTitle`), the
+    /// thread-header line still threads through `Template.threadHeader`
+    /// and produces `"Conversation with  via iMessage."` (note the
+    /// double space). This is surprising-but-safe: the model still
+    /// gets a syntactically-valid prompt, the LLM ignores the missing
+    /// name without breaking the response. Pin so a future "guard
+    /// against empty thread name" refactor lands as a deliberate
+    /// change rather than silently dropping the header line.
+    func testEmptyThreadNameProducesDoubleSpacedHeader() {
+        let thread = makeThread(name: "")
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        XCTAssertTrue(prompt.contains("Conversation with  via \(Channel.imessage.label)."),
+            "empty thread name must round-trip into the threadHeader template verbatim — drift here changes prompt shape on every malformed-notification draft request")
+    }
+
+    /// Pin the speaker-attribution behavior with an empty thread name.
+    /// `Template.speakerSelf` ("me") is used for outgoing messages;
+    /// incoming messages use `thread.name`. When `thread.name = ""`,
+    /// incoming-message speaker attribution becomes `": <text>"` (an
+    /// empty speaker followed by colon + space + text). Surprising-
+    /// but-safe — the LLM still parses turns from the colon. Pin so
+    /// the empty-speaker semantics can't drift to "use 'them'" or
+    /// "skip the colon" without surfacing on a test diff.
+    func testEmptyThreadNameProducesEmptySpeakerForIncomingMessages() {
+        let thread = makeThread(name: "")
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [
+            makeMessage("incoming-from-no-name", from: .them)
+        ])
+        XCTAssertTrue(prompt.contains(": incoming-from-no-name"),
+            "empty thread.name on an incoming message must render as `: <text>` (empty speaker + colon) — drift here would change how the LLM parses turn boundaries on every malformed-notification draft")
+        XCTAssertFalse(prompt.contains("\(PromptBuilder.Template.speakerSelf): incoming-from-no-name"),
+            "incoming message must NOT be attributed to `me` even when thread.name is empty — speaker selection must remain `from == .me ? speakerSelf : thread.name` regardless of name's emptiness")
+    }
 }
