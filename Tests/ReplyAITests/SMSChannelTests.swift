@@ -9,7 +9,7 @@ final class SMSChannelTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        KeychainHelper(service: testService).delete(key: "sms-token")
+        KeychainHelper(service: testService).delete(key: SMSChannel.keychainTokenKey)
     }
 
     func testSMSChannelThrowsWhenNoToken() async throws {
@@ -26,7 +26,7 @@ final class SMSChannelTests: XCTestCase {
 
     func testSMSChannelReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-relay-token", for: "sms-token")
+        try keychain.set(value: "test-relay-token", for: SMSChannel.keychainTokenKey)
         let channel = SMSChannel(keychain: keychain)
 
         let threads = try await channel.recentThreads(limit: 10)
@@ -53,7 +53,7 @@ final class SMSChannelTests: XCTestCase {
 
     func testSMSChannelMessagesReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-relay-token", for: "sms-token")
+        try keychain.set(value: "test-relay-token", for: SMSChannel.keychainTokenKey)
         let channel = SMSChannel(keychain: keychain)
 
         let messages = try await channel.messages(forThreadID: "any", limit: 10)

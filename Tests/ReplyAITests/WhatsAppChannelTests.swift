@@ -9,7 +9,7 @@ final class WhatsAppChannelTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        KeychainHelper(service: testService).delete(key: "whatsapp-token")
+        KeychainHelper(service: testService).delete(key: WhatsAppChannel.keychainTokenKey)
     }
 
     func testWhatsAppChannelThrowsWhenNoToken() async throws {
@@ -26,7 +26,7 @@ final class WhatsAppChannelTests: XCTestCase {
 
     func testWhatsAppChannelReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-session-token", for: "whatsapp-token")
+        try keychain.set(value: "test-session-token", for: WhatsAppChannel.keychainTokenKey)
         let channel = WhatsAppChannel(keychain: keychain)
 
         let threads = try await channel.recentThreads(limit: 10)
@@ -53,7 +53,7 @@ final class WhatsAppChannelTests: XCTestCase {
 
     func testWhatsAppChannelMessagesReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-session-token", for: "whatsapp-token")
+        try keychain.set(value: "test-session-token", for: WhatsAppChannel.keychainTokenKey)
         let channel = WhatsAppChannel(keychain: keychain)
 
         let messages = try await channel.messages(forThreadID: "any", limit: 10)

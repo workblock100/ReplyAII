@@ -9,7 +9,7 @@ final class TelegramChannelTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        KeychainHelper(service: testService).delete(key: "telegram-bot-token")
+        KeychainHelper(service: testService).delete(key: TelegramChannel.keychainTokenKey)
     }
 
     // MARK: - Auth gate
@@ -28,7 +28,7 @@ final class TelegramChannelTests: XCTestCase {
 
     func testTelegramChannelReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-bot-token-12345", for: "telegram-bot-token")
+        try keychain.set(value: "test-bot-token-12345", for: TelegramChannel.keychainTokenKey)
         let channel = TelegramChannel(keychain: keychain)
 
         let threads = try await channel.recentThreads(limit: 10)
@@ -59,7 +59,7 @@ final class TelegramChannelTests: XCTestCase {
 
     func testTelegramChannelMessagesReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-bot-token-12345", for: "telegram-bot-token")
+        try keychain.set(value: "test-bot-token-12345", for: TelegramChannel.keychainTokenKey)
         let channel = TelegramChannel(keychain: keychain)
 
         let messages = try await channel.messages(forThreadID: "any", limit: 10)

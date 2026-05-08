@@ -9,7 +9,7 @@ final class TeamsChannelTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        KeychainHelper(service: testService).delete(key: "teams-token")
+        KeychainHelper(service: testService).delete(key: TeamsChannel.keychainTokenKey)
     }
 
     func testTeamsChannelThrowsWhenNoToken() async throws {
@@ -26,7 +26,7 @@ final class TeamsChannelTests: XCTestCase {
 
     func testTeamsChannelReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-graph-token", for: "teams-token")
+        try keychain.set(value: "test-graph-token", for: TeamsChannel.keychainTokenKey)
         let channel = TeamsChannel(keychain: keychain)
 
         let threads = try await channel.recentThreads(limit: 10)
@@ -53,7 +53,7 @@ final class TeamsChannelTests: XCTestCase {
 
     func testTeamsChannelMessagesReturnsEmptyWithToken() async throws {
         let keychain = KeychainHelper(service: testService)
-        try keychain.set(value: "test-graph-token", for: "teams-token")
+        try keychain.set(value: "test-graph-token", for: TeamsChannel.keychainTokenKey)
         let channel = TeamsChannel(keychain: keychain)
 
         let messages = try await channel.messages(forThreadID: "any", limit: 10)
