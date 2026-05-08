@@ -208,4 +208,61 @@ final class LLMServiceTests: XCTestCase {
         XCTAssertEqual(svc.tokenDelay, StubLLMService.defaultTokenDelay,
             "no-arg StubLLMService init must route tokenDelay through defaultTokenDelay")
     }
+
+    /// Pin the Swift-grapheme-cluster CRLF behavior. `tokenize` iterates
+    /// over `text` as `Character`s, and Swift's `Character` is an extended
+    /// grapheme cluster — `"\r\n"` parses as a SINGLE `Character`, not two.
+    /// That cluster is `!= " "` and `!= "\n"`, so the equality check
+    /// `ch == " " || ch == "\n"` fails on it: a CRLF-laced body produces
+    /// ONE token, not the LF-split shape a byte-level tokenizer would
+    /// emit. This is "surprising-but-safe" — pasted Windows / RFC-822
+    /// content stays glued, but a future swap to `text.unicodeScalars`
+    /// (which DOES emit `\r` and `\n` as separate scalars) would silently
+    /// start splitting CRLF input mid-stream. Pin the cluster behavior so
+    /// the scalar-iteration swap surfaces here, not as a token-cadence
+    /// flicker for every pasted-from-Windows draft.
+    func testTokenizerTreatsCRLFAsSingleGraphemeAndDoesNotSplit() {
+        XCTAssertEqual(StubLLMService.tokenize("hi\r\nthere"),
+                       ["hi\r\nthere"],
+                       "Swift `Character` clusters CRLF — `\"\\r\\n\"` is one Character, not two; tokenize must keep CRLF input as ONE token. Drift toward `text.unicodeScalars` would split mid-cluster")
+        XCTAssertEqual(StubLLMService.tokenize("hi\rthere"),
+                       ["hi\rthere"],
+                       "bare `\\r` (no `\\n`) is NOT a delimiter — pinning the lone-CR case rules out a future `\\r||\\n` widening that would silently flip Mac classic-style line endings into split tokens")
+        // Sanity: the LF-only path (no CR) still splits.
+        XCTAssertEqual(StubLLMService.tokenize("hi\nthere"),
+                       ["hi\n", "there"],
+                       "control: bare `\\n` IS still a delimiter — the cluster-only behavior above is specific to the CRLF compound, not a regression of LF splitting")
+    }
+
+    /// Pin the ASCII-space-only delimiter contract — Unicode whitespace
+    /// (NBSP, em-space, ideographic space, etc.) is NOT a delimiter.
+    /// `tokenize` checks `ch == " "`, which matches U+0020 verbatim and
+    /// rejects U+00A0 NO-BREAK SPACE, U+2003 EM SPACE, U+3000 IDEOGRAPHIC
+    /// SPACE, etc. Drafts that include emoji, Asian punctuation, or
+    /// rich text containing non-breaking spaces (e.g. when the composer
+    /// pastes from Pages / Notion) must keep their whitespace glued to
+    /// the surrounding token so `joined()` round-trips losslessly. Drift
+    /// toward `ch.isWhitespace` would split on every Unicode-class
+    /// whitespace char — the joined-stream content stays the same but
+    /// the inter-token cadence the composer animates against changes
+    /// silently for every Unicode-rich draft. Pin three specific
+    /// whitespace chars to guard the contract.
+    func testTokenizerDoesNotSplitOnUnicodeWhitespace() {
+        // U+00A0 NO-BREAK SPACE — heavily used in French typography, in
+        // common rich-text editors, and as the byte AppleScript inserts
+        // when escaping certain message bodies.
+        XCTAssertEqual(StubLLMService.tokenize("a\u{00A0}b"),
+                       ["a\u{00A0}b"],
+                       "U+00A0 NO-BREAK SPACE must NOT split — only U+0020 ASCII SPACE does")
+        // U+2003 EM SPACE — used in typographic layout and pasted from
+        // word-processor sources.
+        XCTAssertEqual(StubLLMService.tokenize("a\u{2003}b"),
+                       ["a\u{2003}b"],
+                       "U+2003 EM SPACE must NOT split — pin so a future `Character.isWhitespace` swap surfaces here")
+        // U+3000 IDEOGRAPHIC SPACE — CJK content, common in pasted
+        // drafts from Japanese/Chinese chat clients.
+        XCTAssertEqual(StubLLMService.tokenize("a\u{3000}b"),
+                       ["a\u{3000}b"],
+                       "U+3000 IDEOGRAPHIC SPACE must NOT split — CJK content stays one token")
+    }
 }
