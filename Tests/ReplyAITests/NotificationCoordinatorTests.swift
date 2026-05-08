@@ -820,6 +820,33 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertEqual(result, "Real Title")
     }
 
+    /// Pin the case where BOTH `CKSenderID` and `sender` are
+    /// `Some("")` — the doc-comment paragraph above
+    /// `testResolveSenderHandleSkipsEmptySenderAndFallsToTitle`
+    /// claims this falls to title, but the test only exercises one
+    /// half (sender="" with no CKSenderID at all). The chained
+    /// `?.isEmpty == false ? ... : nil` filter must skip BOTH legs
+    /// when each is present-but-empty — a malformed iMessage payload
+    /// from a misbehaving service-extension is the realistic source
+    /// of this shape. Drift toward dropping the empty-string filter
+    /// on either side would silently propagate `""` as senderHandle
+    /// and let the chatGUID-`hasSuffix("")` match-anything bug back
+    /// into the inbox path. Pin the symmetry — both `Some("")` legs
+    /// must filter, not just one — so a future "consolidate the two
+    /// guards into one helper" refactor surfaces here if it
+    /// accidentally drops the second leg.
+    func testResolveSenderHandleSkipsBothEmptyCKSenderIDAndEmptySender() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "",
+                UNNotificationContentParser.UserInfoKey.sender: ""
+            ],
+            fallbackTitle: "Real Title"
+        )
+        XCTAssertEqual(result, "Real Title",
+            "both Some(\"\") legs must filter to nil — drift on either filter re-introduces the empty-handle propagation bug, but only this both-empty case exercises both filters in the same call")
+    }
+
     /// All three keys empty/missing → empty string. The helper does NOT
     /// hard-fail — it returns the (possibly empty) fallbackTitle. The
     /// caller's responsibility is to decide what to do with the empty
