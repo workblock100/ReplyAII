@@ -947,6 +947,44 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(tone, .warm)
     }
 
+    /// `matching` produces a stable sort across three-way ties + a
+    /// higher-priority rule. The existing testPriorityTiebreakerPreservesInsertionOrder
+    /// covers two equal-priority rules; this fills the gap for the
+    /// realistic case where MULTIPLE same-priority rules sit
+    /// alongside a higher-priority winner. The implementation routes
+    /// through `lhs.offset < rhs.offset` as the explicit tiebreaker
+    /// (rather than relying on Swift's documented stable sort
+    /// guarantee), and it's worth pinning that the explicit
+    /// tiebreaker actually produces the documented order across more
+    /// than two ties — a future "use Sequence.min(by:)" or
+    /// "sort by hash" refactor would still pass the two-rule test
+    /// while reordering three or more equal-priority rules.
+    func testMatchingProducesStableOrderAcrossThreeWayTie() {
+        let high = SmartRule(name: "high",
+                             when: .channelIs(.imessage), then: .archive,
+                             priority: 100)
+        let lo1 = SmartRule(name: "lo1",
+                            when: .channelIs(.imessage), then: .pin,
+                            priority: 1)
+        let lo2 = SmartRule(name: "lo2",
+                            when: .channelIs(.imessage), then: .markDone,
+                            priority: 1)
+        let lo3 = SmartRule(name: "lo3",
+                            when: .channelIs(.imessage), then: .silentlyIgnore,
+                            priority: 1)
+        let ctx = RuleContext(
+            senderName: "x", senderHandle: "x", channel: .imessage,
+            lastMessageText: "", isUnread: false, senderKnown: true,
+            chatIdentifier: ""
+        )
+        let names = RuleEvaluator.matching([lo1, high, lo2, lo3], in: ctx).map(\.name)
+        XCTAssertEqual(
+            names,
+            ["high", "lo1", "lo2", "lo3"],
+            "high-priority rule sorts to front; the three priority-1 rules retain their original insertion order (lo1 before lo2 before lo3) — drift here would silently reorder same-priority actions, which can flip the resulting state when actions are non-commutative (pin THEN archive vs archive THEN pin)"
+        )
+    }
+
     @MainActor
     func testStoreTogglePersists() throws {
         let tmp = FileManager.default.temporaryDirectory
