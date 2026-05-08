@@ -359,6 +359,126 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertEqual(stored?.workspaceName, "")
     }
 
+    /// `team: { name: "" }` — Slack returns the key but the value is empty.
+    /// The `as? String ?? ""` fallback in SlackOAuthFlow flattens this to
+    /// an empty workspaceName, identical to "key absent". Per the
+    /// "present-but-empty strings" gotcha in AGENTS.md, the safe behavior
+    /// here is to land the same "" value as the missing-key path so
+    /// downstream UI ("Connected: <name>") fails to a single empty-string
+    /// state rather than two divergent ones. Pin the surprising-but-safe
+    /// behavior so a future "Some(\"\") → nil filter" refactor surfaces as
+    /// a deliberate change rather than silent drift.
+    func testSlackOAuthTeamNameSomeEmptyDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": ["id": "T123", "name": ""] // present-but-empty
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "",
+            "team.name = \"\" must round-trip to workspaceName = \"\" — same as missing team or missing name; consolidating Some(\"\") with nil here would change downstream UI without a deliberate refactor")
+        XCTAssertEqual(stored?.token, "xoxb-w",
+            "empty team.name must NOT block token storage — only an empty access_token blocks; team.name is informational")
+    }
+
+    /// `team: NSNull()` — JSON `null` for the whole team key. The chained
+    /// `(json[ResponseKey.team] as? [String: Any])?[…]` cast fails on
+    /// NSNull (it is not a [String: Any]) and the optional-chain returns
+    /// nil, so the `?? ""` fallback fires. Same shape as missing key.
+    /// Pinning the JSON-null path separately from the missing-key path
+    /// because NSNull is a distinct value JSONSerialization can produce.
+    func testSlackOAuthTeamJSONNullDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": NSNull() // JSON null
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "")
+        XCTAssertEqual(stored?.token, "xoxb-w")
+    }
+
+    /// `team: "ACME Corp"` (a JSON string instead of the expected
+    /// `{ id, name }` object). Slack would never send this shape today,
+    /// but a future Web API revision or a malformed proxy response could
+    /// produce it. The `as? [String: Any]` cast fails, the chain returns
+    /// nil, the `?? ""` fallback fires. Pin the wrong-type-tolerance
+    /// behavior so a "stricter parsing" refactor doesn't accidentally
+    /// hard-fail token exchange on what is otherwise a successful auth.
+    func testSlackOAuthTeamWrongTypeDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": "ACME Corp" // wrong shape — string, not dict
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "",
+            "team-as-string must not parse as a dict; the wrong-type cast fails and workspaceName falls back to \"\"")
+        XCTAssertEqual(stored?.token, "xoxb-w",
+            "wrong-type team must not block successful token persistence — Slack's auth is informational about the workspace name")
+    }
+
+    /// `team: { id: "T123", name: NSNull() }` — JSON null for the name
+    /// field specifically. The `as? String` cast against NSNull fails
+    /// (NSNull is not a String), the chain returns nil, and the `?? ""`
+    /// fallback fires. Different from the empty-string case (Some("")
+    /// hits the cast successfully and produces ""); same observable
+    /// outcome, different code path.
+    func testSlackOAuthTeamNameJSONNullDefaultsToEmpty() {
+        MockURLProtocol.stubbedResponseJSON = [
+            "ok": true,
+            "access_token": "xoxb-w",
+            "team": ["id": "T123", "name": NSNull()] // JSON null name
+        ]
+
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "code") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let stored = SlackTokenStore(keychain: keychain).get()
+        XCTAssertEqual(stored?.workspaceName, "")
+        XCTAssertEqual(stored?.token, "xoxb-w")
+    }
+
     // MARK: - Token-exchange edge cases
 
     /// `{"ok":true}` response missing `access_token` must surface as
