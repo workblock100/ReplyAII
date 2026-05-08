@@ -1676,7 +1676,7 @@ final class SearchIndexProductionDatabaseURLTests: XCTestCase {
 
     func testProductionDatabaseURLEndsWithSearchDB() {
         let url = SearchIndex.productionDatabaseURL()
-        XCTAssertEqual(url.lastPathComponent, "search.db",
+        XCTAssertEqual(url.lastPathComponent, SearchIndex.productionFileName,
                        "production index filename must remain search.db — anything else orphans the FTS5 index and forces a re-index from chat.db")
     }
 
