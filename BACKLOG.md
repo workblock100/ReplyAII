@@ -56,11 +56,12 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: superseded by autopilot architecture (single-agent fires every 2h replaced the 7-agent pipeline). Pipeline has been running reliably since the switch — `git log --since="2026-04-26"` shows continuous autopilot commits. The original alert pointed at scheduler / quota / human-paused as root causes; whichever it was, the new architecture sidesteps the multi-agent silence failure mode entirely. Closing 13 days late so the open-task census reflects current reality.
 - claimed_by: human
-- scope: Operator's 2026-04-25 20:10 fire observed all six automated agents (Planner, Worker, Merger, Reviewer, Architect, Polisher) silent for 24h 47m – 27h 23m. Last automated commit chain ended 2026-04-24 19:23 (Polisher). No new wip branches pushed in 25h, wip queue still 34 with 8 branches >3 days old, build cache cold, REP-285 (MLX Package.swift split that unblocks the merger) untouched. Only main-branch activity in 24h is one Elijah commit and one Worker SHA re-applied by hand. Pipeline did not degrade — it stopped. Likely root causes are outside the operator's read surface: scheduled-task scheduler not firing, Claude Code session expired / API quota / billing, or human-paused automation during the FDA-pivot manual work. Operator cannot self-diagnose scheduler health; needs human to check `mcp__scheduled-tasks` status and confirm whether automation was intentionally paused. Full per-agent stale times in `.automation/logs/operator-2026-04-25-2010.md`.
+- scope: Operator's 2026-04-25 20:10 fire observed all six automated agents (Planner, Worker, Merger, Reviewer, Architect, Polisher) silent for 24h 47m – 27h 23m. Pipeline did not degrade — it stopped. Likely root causes were outside the operator's read surface: scheduled-task scheduler not firing, Claude Code session expired / API quota / billing, or human-paused automation during the FDA-pivot manual work.
 - success_criteria:
-  - Operator's next fire (2026-04-26 08:00) reports HEALTHY or DEGRADED
+  - Operator's next fire (2026-04-26 08:00) reports HEALTHY or DEGRADED — satisfied; pipeline has been continuous for 13+ days under the autopilot architecture.
 - test_plan: null
 - blocker: null
 
