@@ -52,7 +52,7 @@ final class KeychainHelperTests: XCTestCase {
         try keychain.set(value: "v2", for: "Slack-other")
         try keychain.set(value: "v3", for: "iMessage-token")
 
-        keychain.deleteAll(prefix: "ReplyAI-")
+        keychain.deleteAll(prefix: KeychainHelper.accountPrefix)
 
         XCTAssertNil(keychain.get(key: "Slack-token"))
         XCTAssertNil(keychain.get(key: "Slack-other"))
@@ -79,7 +79,7 @@ final class KeychainHelperTests: XCTestCase {
         }
 
         try keychain.set(value: "to-delete", for: "Slack-token")
-        keychain.deleteAll(prefix: "ReplyAI-")
+        keychain.deleteAll(prefix: KeychainHelper.accountPrefix)
 
         XCTAssertNil(keychain.get(key: "Slack-token"))
 
@@ -98,7 +98,7 @@ final class KeychainHelperTests: XCTestCase {
 
     func testDeleteAllOnEmptyKeychainIsNoop() {
         // Must not throw or crash when no items exist for this service.
-        keychain.deleteAll(prefix: "ReplyAI-")
+        keychain.deleteAll(prefix: KeychainHelper.accountPrefix)
     }
 
     /// Regression pin: empty prefix must be refused. `String.hasPrefix("")`
