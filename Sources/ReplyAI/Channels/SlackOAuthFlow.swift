@@ -112,6 +112,31 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         static let teamName    = "name"
     }
 
+    /// HTTP method used for the token-exchange POST. Pinned to `POST`
+    /// — Slack's `oauth.v2.access` rejects `GET` with a `method_not_allowed`
+    /// error that surfaces as a generic `tokenExchangeFailed`. Hoisted
+    /// alongside the content-type constants so the request-shape
+    /// vocabulary is discoverable in one place.
+    static let tokenExchangeHTTPMethod = "POST"
+
+    /// Content-Type header value for the token-exchange POST. Slack's
+    /// `oauth.v2.access` accepts `application/x-www-form-urlencoded`
+    /// AND `application/json`, but the body in this implementation is
+    /// form-encoded — drift to `application/json` would have Slack
+    /// parse the form bytes as JSON, fail, and return
+    /// `invalid_form_data` (which surfaces as a generic
+    /// `tokenExchangeFailed`). Pinned by
+    /// `SlackOAuthFlowTests.testFormURLEncodedContentTypeIsFrozen`.
+    static let formURLEncodedContentType = "application/x-www-form-urlencoded"
+
+    /// Header field name for setting the request Content-Type. Slack's
+    /// HTTP server is case-insensitive on header names per RFC 7230,
+    /// so drift to `content-type` (lowercase) wouldn't break runtime,
+    /// but pinning the canonical capitalization keeps the request shape
+    /// matching the existing curl-based debugging artifacts in
+    /// AGENTS.md.
+    static let contentTypeHeaderField = "Content-Type"
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -199,8 +224,9 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         }
 
         var request = URLRequest(url: endpointURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpMethod = SlackOAuthFlow.tokenExchangeHTTPMethod
+        request.setValue(SlackOAuthFlow.formURLEncodedContentType,
+                         forHTTPHeaderField: SlackOAuthFlow.contentTypeHeaderField)
         // Percent-encode each value individually. Slack's actual codes / IDs are
         // alphanumeric so the encoding is usually a no-op, but a code or secret
         // with `&`, `=`, `+`, or `%` would otherwise corrupt the form body

@@ -752,4 +752,30 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertEqual(SlackOAuthFlow.ResponseKey.team,        "team")
         XCTAssertEqual(SlackOAuthFlow.ResponseKey.teamName,    "name")
     }
+
+    // MARK: - Token-exchange request-shape pins (REP-hoist 2026-05-07)
+
+    /// HTTP method for the token-exchange POST. Slack's `oauth.v2.access`
+    /// rejects `GET` with `method_not_allowed` which surfaces as a
+    /// generic `tokenExchangeFailed`. Pin the literal so a refactor
+    /// can't quietly switch verbs.
+    func testTokenExchangeHTTPMethodIsPOST() {
+        XCTAssertEqual(SlackOAuthFlow.tokenExchangeHTTPMethod, "POST",
+            "tokenExchangeHTTPMethod must be POST — `oauth.v2.access` rejects GET with `method_not_allowed`")
+    }
+
+    /// Content-Type for the token-exchange POST. The body is
+    /// form-encoded; drift to `application/json` would have Slack
+    /// parse the form bytes as JSON and return `invalid_form_data`.
+    func testFormURLEncodedContentTypeIsFrozen() {
+        XCTAssertEqual(SlackOAuthFlow.formURLEncodedContentType,
+                       "application/x-www-form-urlencoded",
+            "formURLEncodedContentType drift to e.g. application/json would have Slack parse the form bytes as JSON and fail with invalid_form_data")
+    }
+
+    /// Header field name for setting the request Content-Type.
+    func testContentTypeHeaderFieldIsCanonicalCapitalization() {
+        XCTAssertEqual(SlackOAuthFlow.contentTypeHeaderField, "Content-Type",
+            "contentTypeHeaderField pinned to canonical capitalization so request shape matches AGENTS.md curl-based debugging artifacts")
+    }
 }
