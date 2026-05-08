@@ -40,9 +40,9 @@ final class AccessibilityAPIReaderTests: XCTestCase {
     func testReturnsConversationNamesFromMockTree() {
         // Build a tree: Application → Window → List → three AXRow elements
         let rows: [any AXElement] = [
-            MockAXElement(role: "AXRow", title: "Alice"),
-            MockAXElement(role: "AXRow", title: "Bob"),
-            MockAXElement(role: "AXRow", title: "Carol"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Alice"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Bob"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Carol"),
         ]
         let list   = MockAXElement(role: "AXList",        children: rows)
         let window = MockAXElement(role: "AXWindow",      children: [list])
@@ -59,7 +59,7 @@ final class AccessibilityAPIReaderTests: XCTestCase {
     }
 
     func testReturnsEmptyWhenAccessibilityNotTrusted() {
-        let row  = MockAXElement(role: "AXRow", title: "Alice")
+        let row  = MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Alice")
         let root = MockAXElement(role: "AXApplication", children: [row])
 
         let reader = AccessibilityAPIReader(
@@ -117,10 +117,10 @@ final class AccessibilityAPIReaderTests: XCTestCase {
     func testRowWithEmptyTitleIsSkipped() {
         // AXRow with empty title must not appear in results
         let rows: [any AXElement] = [
-            MockAXElement(role: "AXRow", title: "Alice"),
-            MockAXElement(role: "AXRow", title: ""),        // empty → skip
-            MockAXElement(role: "AXRow", title: nil),       // nil   → skip
-            MockAXElement(role: "AXRow", title: "Bob"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Alice"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: ""),        // empty → skip
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: nil),       // nil   → skip
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Bob"),
         ]
         let root = MockAXElement(role: "AXApplication", children: rows)
 
@@ -137,8 +137,8 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         // Real Messages.app sidebar has wrapping AXScrollArea / AXOutline / AXGroup
         // before the AXRow leaves. Collector must recurse to arbitrary depth.
         let leaves: [any AXElement] = [
-            MockAXElement(role: "AXRow", title: "Mom"),
-            MockAXElement(role: "AXRow", title: "Group: Family"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Mom"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Group: Family"),
         ]
         let group = MockAXElement(role: "AXGroup",      children: leaves)
         let outline = MockAXElement(role: "AXOutline",  children: [group])
@@ -162,7 +162,7 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         let mixed: [any AXElement] = [
             MockAXElement(role: "AXButton",    title: "Send"),
             MockAXElement(role: "AXStaticText", title: "Search"),
-            MockAXElement(role: "AXRow",       title: "Alice"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole,       title: "Alice"),
             MockAXElement(role: "AXText",      title: "Footer"),
         ]
         let root = MockAXElement(role: "AXApplication", children: mixed)
@@ -181,12 +181,12 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         // Order across regions is meaningful (most-recent first) — collection
         // must walk subtrees in order, not by depth/breadth interleaving.
         let pinnedRows: [any AXElement] = [
-            MockAXElement(role: "AXRow", title: "Pinned 1"),
-            MockAXElement(role: "AXRow", title: "Pinned 2"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Pinned 1"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Pinned 2"),
         ]
         let unpinnedRows: [any AXElement] = [
-            MockAXElement(role: "AXRow", title: "Recent A"),
-            MockAXElement(role: "AXRow", title: "Recent B"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Recent A"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Recent B"),
         ]
         let pinnedGroup = MockAXElement(role: "AXGroup", children: pinnedRows)
         let unpinnedGroup = MockAXElement(role: "AXGroup", children: unpinnedRows)
@@ -223,7 +223,7 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         // itself an AXRow (some AX trees look like this when the conversation
         // list is the only window content), the root's title must still
         // surface — otherwise we'd silently drop the only conversation.
-        let root = MockAXElement(role: "AXRow", title: "Solo conversation")
+        let root = MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Solo conversation")
 
         let reader = AccessibilityAPIReader(
             pidProvider:       { 1 },
@@ -240,8 +240,8 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         // every child unconditionally, so both parent and nested rows must
         // appear in the output — the rule engine downstream dedups on
         // chatGUID, not on AX titles.
-        let child = MockAXElement(role: "AXRow", title: "Child row")
-        let parent = MockAXElement(role: "AXRow", title: "Parent row", children: [child])
+        let child = MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Child row")
+        let parent = MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "Parent row", children: [child])
         let root = MockAXElement(role: "AXOutline", children: [parent])
 
         let reader = AccessibilityAPIReader(
@@ -259,7 +259,7 @@ final class AccessibilityAPIReaderTests: XCTestCase {
         // A title of `"   "` (all spaces) survives the filter today. If a
         // future change tightens this, this test will fail loudly so we
         // can decide deliberately whether to drop it.
-        let row = MockAXElement(role: "AXRow", title: "   ")
+        let row = MockAXElement(role: AccessibilityAPIReader.conversationRowRole, title: "   ")
         let root = MockAXElement(role: "AXApplication", children: [row])
 
         let reader = AccessibilityAPIReader(
@@ -282,7 +282,7 @@ final class AccessibilityAPIReaderTests: XCTestCase {
             MockAXElement(role: "AXOutlineRow", title: "Outline child"),
             MockAXElement(role: "axrow",       title: "lower"),
             MockAXElement(role: "AXRow ",      title: "trailing space"),
-            MockAXElement(role: "AXRow",       title: "Real row"),
+            MockAXElement(role: AccessibilityAPIReader.conversationRowRole,       title: "Real row"),
         ]
         let root = MockAXElement(role: "AXApplication", children: near)
 
