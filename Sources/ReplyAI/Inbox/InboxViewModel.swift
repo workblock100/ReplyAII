@@ -452,6 +452,18 @@ final class InboxViewModel {
     /// `InboxViewModelTests.testIncomingNotificationTimeLabelIsFrozen`.
     static let incomingNotificationTimeLabel: String = "now"
 
+    /// Format the user-visible "Sent to <recipient>" toast surfaced by
+    /// the composer after a successful send. The recipient is the
+    /// thread's display name (contact name when available, otherwise
+    /// the raw handle). Hoisted so the success-toast vocabulary lives
+    /// in one place — drift on the prefix ("Sent" → "Delivered" →
+    /// "Sent to") is the kind of copy edit a designer wants to see in
+    /// review, not buried inside an async function. Pinned by
+    /// `InboxViewModelTests.testSentToToastFormatRoundTrips`.
+    static func sentToToast(recipient: String) -> String {
+        "Sent to \(recipient)"
+    }
+
     /// `true` when a successful chat.db sync is active. When false, the
     /// UNNotification capture path is the only real-time source of thread data.
     var chatDBAvailable: Bool {
@@ -1147,7 +1159,7 @@ final class InboxViewModel {
                 throw IMessageSender.SendError.unsupported
             }
             stats.recordDraftSent(tone: pending.tone)
-            sendToast = "Sent to \(pending.recipient)"
+            sendToast = InboxViewModel.sentToToast(recipient: pending.recipient)
             advanceToNextThread()
         } catch let err as IMessageSender.SendError {
             sendToast = err.localizedDescription

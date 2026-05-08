@@ -3558,4 +3558,18 @@ final class InboxViewModelMessagesForThreadTests: XCTestCase {
         XCTAssertFalse(InboxViewModel.incomingNotificationTimeLabel.isEmpty,
             "an empty time label leaves the inbox row's time chip blank — every notification-driven row would render with no temporal cue")
     }
+
+    /// Pin the parameterized "Sent to <recipient>" success-toast
+    /// format. Drift on the prefix ("Sent" → "Delivered") changes the
+    /// confirmation copy users see after every send.
+    func testSentToToastFormatRoundTrips() {
+        XCTAssertEqual(InboxViewModel.sentToToast(recipient: "Maya Chen"),
+                       "Sent to Maya Chen")
+        XCTAssertEqual(InboxViewModel.sentToToast(recipient: "+15551234567"),
+                       "Sent to +15551234567")
+        // Recipient must appear verbatim — drift to e.g. wrapping in
+        // quotes silently changes the user-facing display.
+        XCTAssertTrue(InboxViewModel.sentToToast(recipient: "X").contains("X"),
+            "sentToToast must surface the recipient verbatim — drift to quoted/escaped form changes the display")
+    }
 }
