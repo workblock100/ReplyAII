@@ -639,6 +639,44 @@ final class SlackChannelTests: XCTestCase {
         }
     }
 
+    // MARK: - networkErrorFallback format pin
+
+    /// `SlackChannel.networkErrorFallback(endpoint:)` is the single source
+    /// of truth for the three `recentThreads` / `messages` / `send` fallback
+    /// strings pinned above. Pinning the formatter keeps the three call
+    /// sites in lock-step: drift in either the format template or the
+    /// `Endpoint.*` constants flows into all three toasts together,
+    /// preventing the old failure mode where one site got reworded and
+    /// the other two silently desynced. The format intentionally embeds
+    /// the raw Slack endpoint name so a triage engineer reading a toast
+    /// can identify *which* call degraded without cracking the source.
+    func testNetworkErrorFallbackFormatProducesExpectedStringsForEveryEndpoint() {
+        XCTAssertEqual(
+            SlackChannel.networkErrorFallback(endpoint: SlackChannel.Endpoint.conversationsList),
+            "Slack conversations.list failed",
+            "format must produce the recentThreads fallback string — drift desyncs the existing recentThreads pin")
+        XCTAssertEqual(
+            SlackChannel.networkErrorFallback(endpoint: SlackChannel.Endpoint.conversationsHistory),
+            "Slack conversations.history failed",
+            "format must produce the messages fallback string — drift desyncs the existing messages pin")
+        XCTAssertEqual(
+            SlackChannel.networkErrorFallback(endpoint: SlackChannel.Endpoint.chatPostMessage),
+            "Slack chat.postMessage failed",
+            "format must produce the send fallback string — drift desyncs the existing send pin")
+    }
+
+    func testNetworkErrorFallbackFormatEmbedsEndpointArgumentLiterally() {
+        // Independent witness: an endpoint name that's not in our
+        // production vocabulary still flows through the same template.
+        // Drift in the template (e.g. capitalising "Slack", changing
+        // "failed" to "errored", reordering) would surface here even if
+        // every Endpoint.* constant happened to drift in lock-step.
+        XCTAssertEqual(
+            SlackChannel.networkErrorFallback(endpoint: "files.upload"),
+            "Slack files.upload failed",
+            "format template `Slack <endpoint> failed` must remain stable — endpoint argument is interpolated verbatim with no decoration")
+    }
+
     // MARK: - parseThreads — derived fields (chatGUID + avatar)
 
     /// Pin that the Slack conversation id flows through to `MessageThread.chatGUID`

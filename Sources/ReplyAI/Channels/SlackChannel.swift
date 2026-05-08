@@ -83,6 +83,20 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     /// channel in the sidebar.
     static let excludeArchivedValue = "true"
 
+    /// Fallback error copy when Slack returns `ok: false` without an
+    /// `error` field. Hoisted from three duplicated inline literals
+    /// (`recentThreads`, `messages`, `send`) so the wording lives in
+    /// one place — drift used to mean three near-identical strings
+    /// could each have their own typo. Embeds the endpoint name so a
+    /// triage engineer reading a toast can see *which* Slack call
+    /// degraded; the endpoint string is sourced from `Endpoint.*` so
+    /// drift in the endpoint constant flows into the toast
+    /// automatically. Pinned by `SlackChannelTests`'
+    /// `*FallbackErrorMessage*` cluster.
+    static func networkErrorFallback(endpoint: String) -> String {
+        "Slack \(endpoint) failed"
+    }
+
     private let tokenStore: SlackTokenStore
     private let http: SlackHTTPClient
     private let oauthFlowFactory: SlackOAuthFlowFactory
@@ -169,7 +183,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
         struct Ack: Decodable { let ok: Bool; let error: String? }
         let ack = try JSONDecoder().decode(Ack.self, from: data)
         if !ack.ok {
-            throw ChannelError.networkError(ack.error ?? "Slack chat.postMessage failed")
+            throw ChannelError.networkError(ack.error ?? Self.networkErrorFallback(endpoint: Endpoint.chatPostMessage))
         }
     }
 
@@ -178,7 +192,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     private static func parseThreads(_ data: Data, workspaceName: String) throws -> [MessageThread] {
         let payload = try JSONDecoder().decode(ConversationsListResponse.self, from: data)
         guard payload.ok else {
-            throw ChannelError.networkError(payload.error ?? "Slack conversations.list failed")
+            throw ChannelError.networkError(payload.error ?? Self.networkErrorFallback(endpoint: Endpoint.conversationsList))
         }
         return payload.channels.map { c in
             // DMs use the user's real name; channels use #name; group DMs use a
@@ -211,7 +225,7 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
     private static func parseMessages(_ data: Data) throws -> [Message] {
         let payload = try JSONDecoder().decode(ConversationsHistoryResponse.self, from: data)
         guard payload.ok else {
-            throw ChannelError.networkError(payload.error ?? "Slack conversations.history failed")
+            throw ChannelError.networkError(payload.error ?? Self.networkErrorFallback(endpoint: Endpoint.conversationsHistory))
         }
         // Slack returns newest-first; ReplyAI views render oldest-first.
         let formatter = relativeFormatter()
