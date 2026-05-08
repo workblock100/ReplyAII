@@ -422,4 +422,36 @@ final class IMessagePreviewTests: XCTestCase {
             "displayString must collapse a URL with query+fragment to `🔗 <host>` — drift would expose tracking parameters in the sidebar preview"
         )
     }
+
+    /// Pin the order-of-operations contract between the U+FFFC strip
+    /// (used for the empty-check) and `singleURLHost` (used for URL
+    /// detection). The implementation strips FFFC for the
+    /// `withoutAttachmentMarkers.isEmpty` branch, but invokes
+    /// `singleURLHost(in: trimmed)` against the un-stripped trimmed
+    /// string — so a body like `"\u{FFFC}https://example.com"`
+    /// REJECTS at URL parsing (Foundation's URL(string:) returns nil
+    /// for any FFFC-containing input) and falls through to verbatim
+    /// body return, NOT to `🔗 example.com`. Drift toward consolidating
+    /// the two paths (e.g. `singleURLHost(in: withoutAttachmentMarkers)`)
+    /// would silently flip every attachment-prefixed link message
+    /// from "verbatim body" to "🔗 host" rendering — a UX change for
+    /// every link that arrives alongside an inline-attachment marker
+    /// in newer iOS rich-text payloads. Pin both the FFFC-prefix and
+    /// FFFC-suffix variants so the asymmetry is locked at both sites.
+    func testFFFCAdjacentToURLPassesThroughVerbatimNotCollapsed() {
+        // FFFC at front: URL parsing rejects, falls through to body verbatim.
+        let prefixBody = "\u{FFFC}https://example.com"
+        XCTAssertEqual(IMessagePreview.displayString(from: prefixBody), prefixBody,
+            "FFFC-prefixed URL must pass through verbatim — singleURLHost is invoked on the un-stripped trimmed string, URL(string:) rejects FFFC. Drift toward stripping FFFC before URL parse would silently switch to `🔗 example.com` rendering")
+
+        // FFFC at end: same shape — URL parsing rejects, body verbatim.
+        let suffixBody = "https://example.com\u{FFFC}"
+        XCTAssertEqual(IMessagePreview.displayString(from: suffixBody), suffixBody,
+            "FFFC-suffixed URL must also pass through verbatim — pinning both positions rules out a partial-fix refactor that only stripped from one end")
+
+        // Sanity: without FFFC, the same URL DOES collapse.
+        XCTAssertEqual(IMessagePreview.displayString(from: "https://example.com"),
+                       "\(IMessagePreview.linkPrefix) example.com",
+            "control: a URL without FFFC still collapses to the link form — pinning the negative cases above shouldn't accidentally cover a regression in URL collapse for clean URLs")
+    }
 }
