@@ -191,43 +191,62 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     ) {
         let content = notification.request.content
         let categoryID = content.categoryIdentifier
-        // Read `sender` only (not `CKSenderID`) and fall back to title.
-        // The empty-string check prevents an empty `sender` value from
-        // bypassing the title fallback — without it, a malformed
-        // notification with `userInfo["sender"] = ""` would propagate an
-        // empty handle into applyIncomingNotification and (because
-        // `chatGUID.hasSuffix("")` is true for every string) match the
-        // first thread by accident.
-        //
-        // **Divergence with `UNNotificationContentParser.parse`**:
-        // the parser checks `UserInfoKey.ckSenderID` first, then
-        // `UserInfoKey.sender`, then `content.title` — three steps —
-        // while this inline path skips the `ckSenderID` step. Modern
-        // iMessage / Continuity notifications populate `CKSenderID`
-        // but not always `sender`, so willPresent on those payloads
-        // falls straight through to the title (the contact display
-        // name, e.g. "Mom") instead of the raw handle. The two paths
-        // diverged when the parser was extracted as a structured
-        // alternative; harmonizing means routing willPresent through
-        // `UNNotificationContentParser.parse(content)` and accepting
-        // the parser's empty-CKChatIdentifier-no-fallback semantics
-        // (pinned by `testEmptyCKChatIdentifierIsNotFalledBack`).
-        // Until that's done, this comment + the parser's mirror
-        // divergence note are the only places that surface the gap.
-        let rawSender = content.userInfo[UNNotificationContentParser.UserInfoKey.sender] as? String
-        let senderHandle = (rawSender?.isEmpty == false ? rawSender : nil) ?? content.title
+        let senderHandle = Self.resolveSenderHandle(userInfo: content.userInfo, fallbackTitle: content.title)
         let preview = content.body
-        // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
-        // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
-        // Empty strings on either key are filtered to nil so the present-but-empty
-        // case can't bypass the senderHandle/name fallback (see handleIncomingNotification).
-        let rawIdentifier = content.userInfo[UNNotificationContentParser.UserInfoKey.ckChatIdentifier] as? String
-        let rawGUID = content.userInfo[UNNotificationContentParser.UserInfoKey.ckChatGUID] as? String
-        let chatGUID = (rawIdentifier?.isEmpty == false ? rawIdentifier : nil)
-            ?? (rawGUID?.isEmpty == false ? rawGUID : nil)
+        let chatGUID = Self.resolveChatGUID(userInfo: content.userInfo)
         Task { @MainActor in
             self.handleIncomingNotification(categoryID: categoryID, senderHandle: senderHandle, preview: preview, chatGUID: chatGUID)
         }
         completionHandler(Self.foregroundPresentationOptions)
+    }
+
+    /// Resolve the sender handle from a notification's `userInfo` using
+    /// the canonical three-step order: `CKSenderID` → `sender` → title.
+    /// Each step skips a present-but-empty value rather than letting it
+    /// through, so a malformed notification with e.g.
+    /// `userInfo["sender"] = ""` falls through to the next step instead
+    /// of propagating an empty handle into applyIncomingNotification
+    /// (which would let `chatGUID.hasSuffix("")` match the first thread
+    /// by accident).
+    ///
+    /// This three-step order mirrors `UNNotificationContentParser.parse`,
+    /// which is the structured equivalent. The two paths previously
+    /// diverged on this contract — willPresent skipped `CKSenderID`,
+    /// which modern iMessage / Continuity payloads populate but legacy
+    /// `sender` does not, so willPresent on those payloads fell straight
+    /// through to the title (the contact display name, e.g. "Mom")
+    /// instead of the raw handle. Hoisted to a static helper so both the
+    /// nonisolated willPresent path and tests can exercise the same
+    /// resolution without constructing a real UNNotification (which has
+    /// no public initializer).
+    nonisolated static func resolveSenderHandle(userInfo: [AnyHashable: Any], fallbackTitle: String) -> String {
+        let rawCKSender = userInfo[UNNotificationContentParser.UserInfoKey.ckSenderID] as? String
+        let rawSender = userInfo[UNNotificationContentParser.UserInfoKey.sender] as? String
+        return (rawCKSender?.isEmpty == false ? rawCKSender : nil)
+            ?? (rawSender?.isEmpty == false ? rawSender : nil)
+            ?? fallbackTitle
+    }
+
+    /// Resolve the chat GUID from a notification's `userInfo`.
+    /// `CKChatIdentifier` is the primary key iMessage userInfo uses for
+    /// the conversation; `CKChatGUID` is the older fallback. Either
+    /// uniquely identifies the chat.db thread. Empty strings on either
+    /// key are filtered to nil so the present-but-empty case can't
+    /// bypass the senderHandle/name fallback in
+    /// `handleIncomingNotification`. Returns nil when neither key
+    /// produces a non-empty string.
+    ///
+    /// **Diverges from `UNNotificationContentParser.parse`** on the
+    /// empty-CKChatIdentifier shape: the parser keeps a present-but-
+    /// empty `CKChatIdentifier` verbatim with no fallback to
+    /// `CKChatGUID`. This inline path filters present-but-empty values
+    /// to nil and falls through. Pinned divergence is documented in
+    /// `UNNotificationContentParser.parse` and
+    /// `testEmptyCKChatIdentifierIsNotFalledBack`.
+    nonisolated static func resolveChatGUID(userInfo: [AnyHashable: Any]) -> String? {
+        let rawIdentifier = userInfo[UNNotificationContentParser.UserInfoKey.ckChatIdentifier] as? String
+        let rawGUID = userInfo[UNNotificationContentParser.UserInfoKey.ckChatGUID] as? String
+        return (rawIdentifier?.isEmpty == false ? rawIdentifier : nil)
+            ?? (rawGUID?.isEmpty == false ? rawGUID : nil)
     }
 }

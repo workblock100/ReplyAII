@@ -665,4 +665,113 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertEqual(NotificationCoordinator.InlineReplyAction.buttonTitle, "Send")
         XCTAssertEqual(NotificationCoordinator.InlineReplyAction.placeholder, "Your reply…")
     }
+
+    // MARK: - resolveSenderHandle / resolveChatGUID — willPresent contract
+
+    /// Modern iMessage / Continuity payloads populate `CKSenderID` (the
+    /// raw handle, e.g. "+15551234567") but not always `sender`. With
+    /// the willPresent path now aligned to the parser's three-step
+    /// order, `CKSenderID` wins over both `sender` and the title.
+    /// Regression-pin against a re-divergence where willPresent skips
+    /// `CKSenderID` again — that would silently rewrite raw-handle
+    /// notifications as their contact display name (the title) and
+    /// break thread-matching for users without a contact entry.
+    func testResolveSenderHandlePrefersCKSenderIDOverSenderAndTitle() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "+15551234567",
+                UNNotificationContentParser.UserInfoKey.sender: "alice@example.com"
+            ],
+            fallbackTitle: "Alice"
+        )
+        XCTAssertEqual(result, "+15551234567",
+            "CKSenderID must win over both `sender` and the title — it's the only field present on modern iMessage payloads without a contact entry")
+    }
+
+    /// Legacy or non-iMessage notifications without `CKSenderID` fall
+    /// to `sender`. Same as the parser's second step.
+    func testResolveSenderHandleFallsToSenderWhenCKSenderIDAbsent() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [UNNotificationContentParser.UserInfoKey.sender: "bob@example.com"],
+            fallbackTitle: "Bob"
+        )
+        XCTAssertEqual(result, "bob@example.com")
+    }
+
+    /// `CKSenderID` of `Some("")` is non-nil but empty — the
+    /// `?.isEmpty == false ? ... : nil` filter must skip it and fall
+    /// through to `sender`. Without the empty-string filter, willPresent
+    /// would propagate "" downstream and the chatGUID-`hasSuffix("")`
+    /// match-anything bug would re-surface. Companion to the inline-
+    /// path empty-string filter in resolveChatGUID below.
+    func testResolveSenderHandleSkipsEmptyCKSenderID() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [
+                UNNotificationContentParser.UserInfoKey.ckSenderID: "",
+                UNNotificationContentParser.UserInfoKey.sender: "real-sender@example.com"
+            ],
+            fallbackTitle: "Title"
+        )
+        XCTAssertEqual(result, "real-sender@example.com",
+            "Some(\"\") on CKSenderID must filter to nil and fall through to sender — drift here re-introduces the empty-handle propagation bug")
+    }
+
+    /// Both `CKSenderID` and `sender` empty/missing → fall to title.
+    /// Pin the title fallback as the last-resort; without it the empty
+    /// strings would propagate as senderHandle and break thread match.
+    func testResolveSenderHandleSkipsEmptySenderAndFallsToTitle() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [UNNotificationContentParser.UserInfoKey.sender: ""],
+            fallbackTitle: "Real Title"
+        )
+        XCTAssertEqual(result, "Real Title")
+    }
+
+    /// All three keys empty/missing → empty string. The helper does NOT
+    /// hard-fail — it returns the (possibly empty) fallbackTitle. The
+    /// caller's responsibility is to decide what to do with the empty
+    /// result (currently: applyIncomingNotification's name fallback).
+    func testResolveSenderHandleAllEmptyReturnsEmptyTitle() {
+        let result = NotificationCoordinator.resolveSenderHandle(
+            userInfo: [:],
+            fallbackTitle: ""
+        )
+        XCTAssertEqual(result, "")
+    }
+
+    /// `CKChatIdentifier` is the primary key — picked when present and
+    /// non-empty, ahead of `CKChatGUID`. Drift would silently route to
+    /// the legacy GUID path even when the modern identifier is set.
+    func testResolveChatGUIDPrefersCKChatIdentifierOverCKChatGUID() {
+        let result = NotificationCoordinator.resolveChatGUID(userInfo: [
+            UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "iMessage;+;chat1234567890",
+            UNNotificationContentParser.UserInfoKey.ckChatGUID: "iMessage;-;+15551234567"
+        ])
+        XCTAssertEqual(result, "iMessage;+;chat1234567890",
+            "CKChatIdentifier must win over CKChatGUID — modern iMessage userInfo populates the primary key first")
+    }
+
+    /// Empty `CKChatIdentifier` filters to nil and falls through to
+    /// `CKChatGUID`. **This is the divergent contract** — the structured
+    /// `UNNotificationContentParser.parse` keeps the empty value
+    /// verbatim. Pin both contracts in their respective tests so a
+    /// future "harmonize the two paths" refactor surfaces both pins as
+    /// deliberate changes rather than silently flipping one.
+    func testResolveChatGUIDSkipsEmptyCKChatIdentifierAndFallsToCKChatGUID() {
+        let result = NotificationCoordinator.resolveChatGUID(userInfo: [
+            UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "",
+            UNNotificationContentParser.UserInfoKey.ckChatGUID: "iMessage;-;+15551234567"
+        ])
+        XCTAssertEqual(result, "iMessage;-;+15551234567",
+            "Some(\"\") on CKChatIdentifier must filter to nil and fall through to CKChatGUID — diverges from UNNotificationContentParser.parse, which keeps the empty value")
+    }
+
+    /// Both keys absent → nil. Pin the nil-not-empty-string return so a
+    /// caller using `if let chatGUID = ...` doesn't accidentally treat
+    /// the empty string as a real GUID.
+    func testResolveChatGUIDReturnsNilWhenBothKeysAbsent() {
+        let result = NotificationCoordinator.resolveChatGUID(userInfo: [:])
+        XCTAssertNil(result,
+            "absent CKChatIdentifier + absent CKChatGUID must return nil, not \"\" — callers rely on optional binding to detect the no-thread-known case")
+    }
 }
