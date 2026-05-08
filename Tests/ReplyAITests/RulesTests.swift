@@ -3428,4 +3428,46 @@ final class SmartRuleSeedNamesTests: XCTestCase {
         XCTAssertFalse(RuleEvaluator.matches(.isGroupChat, in: ctx),
             ".isGroupChat must NOT match a 1:1 phone-style chat-id — a `contains` typo would silently misfire on group-named contacts")
     }
+
+    // MARK: - Phonelike-character-set freeze + behavioral pin
+
+    /// Pin the literal phonelike character set used by
+    /// `RuleContext.from(thread:)` to classify a name as a raw phone
+    /// handle (and therefore NOT a known contact). Drift to a
+    /// different set silently mis-classifies E.164 phone names in
+    /// non-US formats as known-contact threads, firing every
+    /// "auto-archive unknown senders" rule against them.
+    func testPhonelikeCharacterSetIsFrozen() {
+        XCTAssertEqual(RuleContext.phonelikeCharacterSet, "+0123456789 ()-")
+        // Every digit must be present.
+        for d in "0123456789" {
+            XCTAssertTrue(RuleContext.phonelikeCharacterSet.contains(d),
+                "phonelike set must contain digit `\(d)` — drift breaks raw-phone classification")
+        }
+        // The four punctuation marks that real phone formats use must
+        // all be present.
+        for c in "+ ()-" {
+            XCTAssertTrue(RuleContext.phonelikeCharacterSet.contains(c),
+                "phonelike set must contain `\(c)` — drift mis-classifies formatted phone names")
+        }
+    }
+
+    /// Behavioral pin: a US-formatted phone name must classify as
+    /// phonelike (sender NOT known). Routes through the public
+    /// `RuleContext.from(thread:)` API so a refactor that moves the
+    /// `.allSatisfy` away from the constant still has to satisfy
+    /// this contract.
+    func testPhonelikeFormatProducesUnknownSender() {
+        let thread = MessageThread(
+            id: "imessage;-;+14155551234",
+            channel: .imessage,
+            name: "+1 (415) 555-1234",
+            avatar: "+",
+            preview: "",
+            time: ""
+        )
+        let ctx = RuleContext.from(thread: thread)
+        XCTAssertFalse(ctx.senderKnown,
+            "a `+1 (415) 555-1234` thread name must classify as phonelike → senderKnown=false; drift in phonelikeCharacterSet would silently misfire")
+    }
 }

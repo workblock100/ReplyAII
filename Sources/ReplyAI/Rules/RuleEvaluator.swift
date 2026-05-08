@@ -32,6 +32,18 @@ struct RuleContext: Sendable {
     /// predicate evaluates against this list.
     var contactGroupNames: [String] = []
 
+    /// Character set that defines a "phonelike" thread display name —
+    /// any name composed entirely of these characters (digits 0-9
+    /// plus `+`, space, `(`, `)`, `-`) is treated as a raw phone
+    /// handle, NOT a saved contact, so `senderKnown` classifies it
+    /// as `false`. The `senderUnknown` rule predicate hinges on this:
+    /// drift here (e.g. dropping the parentheses) silently mis-
+    /// classifies E.164 numbers in Mexican / European format as
+    /// known-contact threads and fires every "auto-archive unknown
+    /// senders" rule against them. Pinned by
+    /// `RulesTests.testPhonelikeCharacterSetIsFrozen`.
+    static let phonelikeCharacterSet: String = "+0123456789 ()-"
+
     /// Build a context from a thread + its latest preview. `senderKnown`
     /// is true when the thread's display name differs from its raw
     /// handle — a reasonable proxy for "this is a contact you have" that
@@ -45,7 +57,7 @@ struct RuleContext: Sendable {
         let name = thread.name
         let isEmail = name.contains("@")
         let isPhonelike = name.hasPrefix("+")
-            || (!name.isEmpty && name.allSatisfy { "+0123456789 ()-".contains($0) })
+            || (!name.isEmpty && name.allSatisfy { RuleContext.phonelikeCharacterSet.contains($0) })
         return RuleContext(
             senderName: name,
             senderHandle: name,
