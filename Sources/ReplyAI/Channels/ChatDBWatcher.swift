@@ -36,13 +36,39 @@ final class ChatDBWatcher: @unchecked Sendable {
     /// `ChatDBWatcherTests.testRestartBackoffCapIsSixtySeconds`.
     static let restartBackoffCap: TimeInterval = 60.0
 
+    /// Default tilde-anchored path the watcher monitors for write/extend
+    /// events. Identical (after tilde expansion) to
+    /// `IMessageChannel.chatDBPath` — the watcher and the reader MUST
+    /// agree on the file location, otherwise the watcher fires onChange
+    /// for one path while the reader queries a different one (and the
+    /// inbox silently never refreshes). Hoisted here so tests can pin
+    /// the watcher's default and a separate cross-file equality test
+    /// captures the watcher↔reader symmetry.
+    static let defaultChatDBPathRaw = "~/Library/Messages/chat.db"
+
+    /// Sibling write-ahead-log path that macOS Messages writes to in
+    /// addition to the main chat.db. Without watching the `-wal` file,
+    /// the watcher misses the bulk of incoming-message events on macOS
+    /// 13+ where SQLite's WAL mode keeps writes off the main db until
+    /// a checkpoint. Drift to a different suffix (`.db-wal2`, no
+    /// hyphen, etc.) silently makes the watcher half-blind.
+    static let defaultChatDBWalPathRaw = "~/Library/Messages/chat.db-wal"
+
+    /// Dispatch queue label for the watcher's serial event-handler queue.
+    /// Visible in Instruments / sample traces. Drift here is cosmetic
+    /// (no functional consequence) but the label is the only signal
+    /// distinguishing this watcher's events from any other dispatch
+    /// queue in a sample, so a copy edit (e.g. dropping the
+    /// `co.replyai.` prefix) makes Instruments output ambiguous.
+    static let dispatchQueueLabel = "co.replyai.chatdb-watcher"
+
     private let paths: [String]
     /// Package-internal so tests can pin the production default after a
     /// no-arg init (see `ChatDBWatcherTests.testDefaultDebounceIsSixHundredMilliseconds`).
     let debounce: TimeInterval
     /// Initial delay before first restart attempt; doubles on each retry, capped at 60 s.
     let restartDelay: TimeInterval
-    private let queue = DispatchQueue(label: "co.replyai.chatdb-watcher", qos: .utility)
+    private let queue = DispatchQueue(label: ChatDBWatcher.dispatchQueueLabel, qos: .utility)
     private var sources: [DispatchSourceFileSystemObject] = []
     private var fds: [Int32] = []
     private var pending: DispatchWorkItem?
@@ -56,8 +82,8 @@ final class ChatDBWatcher: @unchecked Sendable {
 
     init(
         paths: [String] = [
-            (NSString(string: "~/Library/Messages/chat.db").expandingTildeInPath as String),
-            (NSString(string: "~/Library/Messages/chat.db-wal").expandingTildeInPath as String),
+            (NSString(string: ChatDBWatcher.defaultChatDBPathRaw).expandingTildeInPath as String),
+            (NSString(string: ChatDBWatcher.defaultChatDBWalPathRaw).expandingTildeInPath as String),
         ],
         debounce: TimeInterval = ChatDBWatcher.defaultDebounce,
         restartDelay: TimeInterval = ChatDBWatcher.defaultRestartDelay,

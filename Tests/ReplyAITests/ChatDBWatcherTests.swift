@@ -297,6 +297,54 @@ final class ChatDBWatcherTests: XCTestCase {
         _ = fired // silence unused-mutation warning when test trims later
     }
 
+    // MARK: - Hoisted-default freeze + cross-file pin
+
+    /// Pin the raw tilde-anchored chat.db path that `ChatDBWatcher` uses
+    /// as its default first watched path. macOS Messages writes to this
+    /// exact location — drift to a different filename ("chat.sqlite",
+    /// "Messages.db") makes the watcher silently watch a non-existent
+    /// path on shipped builds.
+    func testDefaultChatDBPathRawIsFrozen() {
+        XCTAssertEqual(ChatDBWatcher.defaultChatDBPathRaw,
+                       "~/Library/Messages/chat.db")
+    }
+
+    /// Pin the WAL sibling path. SQLite WAL mode keeps writes in the
+    /// `-wal` file until checkpoint, so without watching this path the
+    /// watcher misses most incoming-message events on macOS 13+.
+    func testDefaultChatDBWalPathRawIsFrozen() {
+        XCTAssertEqual(ChatDBWatcher.defaultChatDBWalPathRaw,
+                       "~/Library/Messages/chat.db-wal")
+    }
+
+    /// Cross-file symmetry pin. The watcher and the reader MUST agree
+    /// on the chat.db location, otherwise the watcher fires onChange
+    /// for one file while the reader queries a different one and the
+    /// inbox silently never refreshes. Both literals must resolve to
+    /// the same absolute path after tilde expansion.
+    func testWatcherAndReaderAgreeOnChatDBPath() {
+        let watcherExpanded = (NSString(string: ChatDBWatcher.defaultChatDBPathRaw)
+                                .expandingTildeInPath as String)
+        XCTAssertEqual(watcherExpanded, IMessageChannel.chatDBPath,
+            "watcher's default first path and reader's chatDBPath must resolve to the same file — drift is silent")
+    }
+
+    /// Pin the WAL sibling is the chat.db path with `-wal` appended.
+    /// Catches a typo where the WAL constant was edited independently
+    /// (e.g. `~/Library/Messages/chat-wal.db`).
+    func testWalPathIsChatDBPathWithWalSuffix() {
+        XCTAssertEqual(ChatDBWatcher.defaultChatDBWalPathRaw,
+                       ChatDBWatcher.defaultChatDBPathRaw + "-wal",
+            "WAL path must be the chat.db path + `-wal` suffix — drift breaks the watcher's WAL coverage on macOS 13+")
+    }
+
+    /// Pin the dispatch queue label. Visible in Instruments / sample
+    /// traces as the only signal distinguishing this watcher's events
+    /// from any other dispatch queue.
+    func testDispatchQueueLabelIsFrozen() {
+        XCTAssertEqual(ChatDBWatcher.dispatchQueueLabel, "co.replyai.chatdb-watcher")
+    }
+
     // MARK: - Helpers
 
     private func waitPast(_ interval: TimeInterval) {
