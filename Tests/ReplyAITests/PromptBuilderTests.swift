@@ -677,6 +677,28 @@ final class PromptBuilderTests: XCTestCase {
             "user-instruction suffix must not drift — `Reply text only.` is what suppresses preamble in every draft")
     }
 
+    /// Pin the cross-module convention: `PromptBuilder.Template.speakerSelf`
+    /// AND `SearchIndex.outgoingSenderLabel` both name the outgoing-side
+    /// "me" speaker label, but they live in different modules. The
+    /// existing `ShortcutsExportHandlerTests` cross-pin both against
+    /// the Shortcut wire-format `outgoingMessageMarker`, so the pair
+    /// is currently locked indirectly via triangulation through that
+    /// third constant. If anyone deletes ShortcutsExport (or removes
+    /// those triangulation pins) the indirect lock evaporates and a
+    /// future "rename to user" edit on either constant could ship
+    /// while the other stays as "me" — silently desyncing the
+    /// PromptBuilder's history shape from SearchIndex's stored
+    /// authorship for every shipped install. Pin the direct equality
+    /// here so the pair stays locked even if the Shortcut triangulation
+    /// goes away. Drift in either constant without the other surfaces
+    /// here as a hard XCTAssertEqual failure rather than a transitive
+    /// miss.
+    func testSpeakerSelfEqualsSearchIndexOutgoingSenderLabel() {
+        XCTAssertEqual(PromptBuilder.Template.speakerSelf,
+                       SearchIndex.outgoingSenderLabel,
+            "PromptBuilder.Template.speakerSelf and SearchIndex.outgoingSenderLabel both name the same outgoing-side `me` speaker label across two modules — drift on either without the other silently desyncs prompt-history shape from search-index authorship")
+    }
+
     func testBuildPromptRoutesRecentMessagesHeaderThroughTemplate() {
         // Drift between source literal and Template constant would let
         // testBuildPromptRecentMessagesHeaderLiteral pass while the
