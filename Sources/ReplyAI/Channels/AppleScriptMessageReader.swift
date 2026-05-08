@@ -348,7 +348,8 @@ struct AppleScriptMessageReader: Sendable {
         }
         let descriptor = script.executeAndReturnError(&errorDict)
         if let err = errorDict {
-            let message = (err[NSAppleScript.errorMessage] as? String) ?? "AppleScript error"
+            let message = (err[NSAppleScript.errorMessage] as? String)
+                ?? AppleScriptReaderError.missingMessageFallback
             throw AppleScriptReaderError.executionError(message)
         }
         return descriptor.stringValue ?? ""
@@ -364,10 +365,37 @@ enum AppleScriptReaderError: LocalizedError, Sendable {
     case scriptCreationFailed
     case executionError(String)
 
+    /// Hoisted user-visible toast for `.scriptCreationFailed`. The
+    /// literal lives in one place so a copy edit lands here rather than
+    /// inside a switch arm in `errorDescription`. Pinned by the
+    /// existing `testScriptCreationFailedCopyExactLiteral` test (which
+    /// now routes through this constant).
+    static let scriptCreationFailedDescription = "Failed to compile AppleScript."
+
+    /// Hoisted user-visible toast prefix for `.executionError`. The
+    /// associated `String` value is appended verbatim — the prefix is
+    /// the only fixed copy in the toast and the only piece worth
+    /// pinning. Drift here ("AppleScript error: ", "Messages.app
+    /// failed: ", etc.) silently changes the lead-in copy on every
+    /// AppleScript runtime failure surfaced to the inbox banner.
+    /// Pinned by the existing `testExecutionErrorCopyExactPrefix` test
+    /// (which now routes through this constant).
+    static let executionErrorDescriptionPrefix = "AppleScript failed: "
+
+    /// Fallback message string `defaultExecutor` substitutes when
+    /// `NSAppleScript.executeAndReturnError` produces an error
+    /// dictionary that lacks an `errorMessage` key. Surfaces verbatim
+    /// inside the `.executionError(message)` value, so it ends up
+    /// concatenated with `executionErrorDescriptionPrefix` in the user
+    /// toast as e.g. "AppleScript failed: AppleScript error". Drift
+    /// here changes the user-visible copy in the rare-but-real case
+    /// where macOS gives us an opaque error dictionary.
+    static let missingMessageFallback = "AppleScript error"
+
     var errorDescription: String? {
         switch self {
-        case .scriptCreationFailed:       "Failed to compile AppleScript."
-        case .executionError(let msg):    "AppleScript failed: \(msg)"
+        case .scriptCreationFailed:    Self.scriptCreationFailedDescription
+        case .executionError(let msg): "\(Self.executionErrorDescriptionPrefix)\(msg)"
         }
     }
 }

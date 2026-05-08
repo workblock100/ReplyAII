@@ -315,18 +315,35 @@ final class AppleScriptMessageReaderTests: XCTestCase {
     // a designer-led rewrite surfaces in code review.
 
     func testScriptCreationFailedCopyExactLiteral() {
-        XCTAssertEqual(
-            AppleScriptReaderError.scriptCreationFailed.errorDescription,
-            "Failed to compile AppleScript."
-        )
+        // Freeze the literal AND verify the case routes through the
+        // hoisted constant — drift between the constant and the
+        // switch arm would silently surface different copy.
+        XCTAssertEqual(AppleScriptReaderError.scriptCreationFailedDescription,
+                       "Failed to compile AppleScript.")
+        XCTAssertEqual(AppleScriptReaderError.scriptCreationFailed.errorDescription,
+                       AppleScriptReaderError.scriptCreationFailedDescription,
+            ".scriptCreationFailed errorDescription must equal the hoisted constant — drift is silent in the inbox banner")
     }
 
     func testExecutionErrorCopyExactPrefix() {
+        // Freeze the prefix literal AND verify the case format
+        // (prefix + raw) routes through the hoisted constant.
+        XCTAssertEqual(AppleScriptReaderError.executionErrorDescriptionPrefix,
+                       "AppleScript failed: ")
         let raw = "syntax error: unexpected end-of-file"
-        XCTAssertEqual(
-            AppleScriptReaderError.executionError(raw).errorDescription,
-            "AppleScript failed: \(raw)"
-        )
+        XCTAssertEqual(AppleScriptReaderError.executionError(raw).errorDescription,
+                       "\(AppleScriptReaderError.executionErrorDescriptionPrefix)\(raw)",
+            ".executionError errorDescription must concatenate the hoisted prefix and the raw message")
+    }
+
+    /// Pin the missing-message fallback used inside `defaultExecutor`
+    /// when NSAppleScript surfaces an error dictionary without an
+    /// `errorMessage` key. Drift here changes the user-visible copy
+    /// in the rare-but-real opaque-error case.
+    func testMissingMessageFallbackIsFrozen() {
+        XCTAssertEqual(AppleScriptReaderError.missingMessageFallback, "AppleScript error")
+        XCTAssertFalse(AppleScriptReaderError.missingMessageFallback.isEmpty,
+            "fallback must be non-empty — empty would yield a toast that looks like a successful operation")
     }
 
     // MARK: - Edge cases on recentChats parsing
