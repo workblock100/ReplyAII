@@ -494,8 +494,8 @@ final class SlackOAuthFlowTests: XCTestCase {
         wait(for: [exp], timeout: 3)
 
         XCTAssertEqual(
-            MockURLProtocol.capturedRequests.first?.value(forHTTPHeaderField: "Content-Type"),
-            "application/x-www-form-urlencoded"
+            MockURLProtocol.capturedRequests.first?.value(forHTTPHeaderField: SlackOAuthFlow.contentTypeHeaderField),
+            SlackOAuthFlow.formURLEncodedContentType
         )
     }
 
