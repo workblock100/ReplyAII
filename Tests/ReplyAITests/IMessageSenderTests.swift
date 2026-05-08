@@ -1265,4 +1265,37 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
         XCTAssertTrue(rendered.contains("send \"body\""),
             "escapedText must appear quoted after `send` in the rendered template — got: \(rendered)")
     }
+
+    /// Pin the `send(_:to:)` thread-channel guard. The new MessageThread-
+    /// based send entrypoint must throw `.unsupported` for every
+    /// channel that isn't `.imessage` or `.sms` — same contract as the
+    /// legacy `send(_:toChatIdentifier:channel:)` path
+    /// (testLegacyByIdentifierUnsupportedForEveryNonAppleChannel) but
+    /// covering the newer entry point. Drift toward "let's let Slack
+    /// fall through to AppleScript" would silently route Slack sends
+    /// through Messages.app, which would either compile-error inside
+    /// AppleScript (no `chat id` matching the Slack ID format) or
+    /// post the text into a misidentified chat. Pin every non-Apple
+    /// channel so a partial-fix regression that only protected one
+    /// channel still surfaces.
+    func testSendByThreadUnsupportedForEveryNonAppleChannel() {
+        let prevHook = IMessageSender.executeHook
+        defer { IMessageSender.executeHook = prevHook }
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+
+        for ch in Channel.allCases where ch != .imessage && ch != .sms {
+            let thread = MessageThread(
+                id: "anything", channel: ch, name: "X",
+                avatar: "X", preview: "", time: ""
+            )
+            XCTAssertThrowsError(
+                try IMessageSender.send("hi", to: thread),
+                "channel \(ch) must throw .unsupported from send(_:to:)"
+            ) { err in
+                guard case IMessageSender.SendError.unsupported = err else {
+                    return XCTFail("channel \(ch) must throw .unsupported from send(_:to:), got \(err)")
+                }
+            }
+        }
+    }
 }
