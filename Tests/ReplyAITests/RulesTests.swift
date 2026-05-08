@@ -3511,4 +3511,64 @@ final class SmartRuleSeedNamesTests: XCTestCase {
         XCTAssertTrue(toast.contains("Remove an existing rule"),
             "tooManyRulesToast must surface the recovery hint — without it the user has no actionable next step")
     }
+
+    /// Pin the cross-channel guard on `.isGroupChat`. The predicate
+    /// implementation is `ctx.channel == .imessage && ctx.chatIdentifier
+    /// .hasPrefix("chat")` — a non-iMessage thread whose chatIdentifier
+    /// happens to start with `"chat"` (e.g. a Slack channel ID that a
+    /// user named `chat-design`, or a ShortcutsExport-imported thread
+    /// with chatIdentifier=`chat-thing`) MUST NOT match `.isGroupChat`.
+    /// The chat.db `chat<digits>` GUID format is an iMessage
+    /// convention; Slack's conversation IDs (`C…`, `D…`, `G…`) don't
+    /// share it, but a user-authored ShortcutsExport or a future
+    /// channel that emits id-as-name could land a `chat`-prefixed
+    /// identifier into a non-iMessage context. Drift toward dropping
+    /// the channel guard would silently mis-fire "auto-archive group
+    /// chats" rules against the entire user population's Slack
+    /// channel-name hashing. Pin TRUE for imessage+prefix and FALSE
+    /// for every other channel with the same prefix to lock the AND
+    /// condition in place.
+    func testIsGroupChatRequiresIMessageChannelEvenWithChatPrefix() {
+        // Cross-channel rejection: Slack with `chat`-prefixed identifier
+        // must NOT match isGroupChat.
+        let slackContext = RuleContext(
+            senderName: "#chat-design",
+            senderHandle: "Cchat123",
+            channel: .slack,
+            lastMessageText: "hey",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "chat-design"
+        )
+        XCTAssertFalse(RuleEvaluator.matches(.isGroupChat, in: slackContext),
+            "Slack channel with `chat`-prefixed identifier must NOT match isGroupChat — drift toward dropping the `channel == .imessage` guard would silently fire group-chat rules across every Slack channel whose name happens to start with `chat`")
+
+        // Same chatIdentifier shape, channel flipped to iMessage: now matches.
+        let imessageContext = RuleContext(
+            senderName: "Group",
+            senderHandle: "chat-design",
+            channel: .imessage,
+            lastMessageText: "hey",
+            isUnread: false,
+            senderKnown: true,
+            chatIdentifier: "chat-design"
+        )
+        XCTAssertTrue(RuleEvaluator.matches(.isGroupChat, in: imessageContext),
+            "control: same identifier in iMessage context DOES match isGroupChat — pinning both legs ensures the AND-condition is what's being tested, not the prefix check alone")
+
+        // Other channels with chat-prefixed identifier — same negative shape.
+        for channel: Channel in [.whatsapp, .teams, .sms, .telegram] {
+            let ctx = RuleContext(
+                senderName: "chat-thing",
+                senderHandle: "chat-thing",
+                channel: channel,
+                lastMessageText: "hey",
+                isUnread: false,
+                senderKnown: true,
+                chatIdentifier: "chat1234567890"
+            )
+            XCTAssertFalse(RuleEvaluator.matches(.isGroupChat, in: ctx),
+                "channel=\(channel.rawValue) with chat-prefixed identifier must NOT match isGroupChat — pinning every non-imessage channel rules out a partial-guard regression that only protected against one of them")
+        }
+    }
 }
