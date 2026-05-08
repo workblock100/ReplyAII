@@ -481,4 +481,18 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         XCTAssertEqual(LocalhostOAuthListener.maxRequestBytes, 8192,
             "maxRequestBytes drift either truncates legitimate Slack codes (too low) or invites memory-pinning by a hostile client (too high)")
     }
+
+    /// OAuth 2 §4.1.2 mandates the authorization code lives under the
+    /// `code` query parameter — providers (Slack, Google, GitHub) all
+    /// emit it under that exact key. The handler used to compare
+    /// against an inline `"code"` literal; a typo there silently
+    /// dropped every successful callback into the missing-code path
+    /// and let the 120 s listener timeout govern, so the flow looked
+    /// broken to the user with no actionable error. Hoisted to
+    /// `LocalhostOAuthListener.codeQueryParameterName`; pin freezes
+    /// the literal.
+    func testCodeQueryParameterNameIsFrozen() {
+        XCTAssertEqual(LocalhostOAuthListener.codeQueryParameterName, "code",
+            "OAuth 2 §4.1.2 specifies the authorization code is delivered under the `code` query parameter — drift here silently drops every callback")
+    }
 }

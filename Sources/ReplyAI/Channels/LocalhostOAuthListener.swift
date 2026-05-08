@@ -38,6 +38,15 @@ final class LocalhostOAuthListener: @unchecked Sendable {
     /// listener cancels.
     static let maxRequestBytes: Int = 8192
 
+    /// OAuth 2 §4.1.2 authorization-code query-parameter name. The provider
+    /// (Slack, Google, GitHub, etc.) returns the code under this exact key
+    /// per the spec — a typo here downgrades every successful callback to
+    /// the missing-code path, which silently drops the request and lets
+    /// the listener's 120 s timeout govern. The flow looks broken to the
+    /// user with no actionable error. Pinned by
+    /// `LocalhostOAuthListenerTests.testCodeQueryParameterNameIsFrozen`.
+    static let codeQueryParameterName = "code"
+
     private let preferredPort: UInt16
     private let timeout: TimeInterval
 
@@ -168,7 +177,7 @@ final class LocalhostOAuthListener: @unchecked Sendable {
             // with an empty string a downstream caller would have to re-validate.
             guard let url = URL(string: "http://localhost\(rawPath)"),
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+                  let code = components.queryItems?.first(where: { $0.name == Self.codeQueryParameterName })?.value,
                   !code.isEmpty
             else { return }
 
