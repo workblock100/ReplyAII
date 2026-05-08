@@ -100,4 +100,38 @@ final class ContactsResolverPhoneDigitsTests: XCTestCase {
         XCTAssertEqual(resolver.normalizedHandle(groupHandle), groupHandle,
             "any handle prefixed with `\(RuleEvaluator.groupChatIdentifierPrefix)` must pass through normalizedHandle unchanged — drift between this guard and .isGroupChat's prefix is silent")
     }
+
+    // MARK: - USPhoneNormalization constants freeze + cross-call-site pin
+
+    /// Pin the two US-country-code constants. Drift in either breaks
+    /// phone-handle deduplication: a contact stored as `+14155551234`
+    /// would no longer match an iMessage handle of `4155551234` and
+    /// contact-name resolution would silently fall back to the raw
+    /// handle.
+    func testUSCountryCodeNormalizationConstantsAreFrozen() {
+        XCTAssertEqual(ContactsResolver.USPhoneNormalization.prefixedLength, 11,
+            "US E.164 prefixed length must be 11 — drift breaks the drop-leading-1 path")
+        XCTAssertEqual(ContactsResolver.USPhoneNormalization.countryCode, "1",
+            "US country code must be string \"1\" — drift to `+1` would miss every digit-only input")
+    }
+
+    /// Cross-call-site invariant: every site that drops the country-
+    /// code prefix must produce identical output for identical input.
+    /// The three call sites are `ContactsResolver.normalizedHandle`,
+    /// `CNContactStoreBackedStoring.phoneDigits`, and
+    /// `AppleScriptMessageReader.prettyPhone`. The first two produce
+    /// the bare 10-digit form; `prettyPhone` produces a formatted
+    /// `+1 (NPA) NXX-XXXX` — different surface, same drop-1 rule. We
+    /// pin the rule by exercising all three on the same 11-digit US
+    /// input.
+    func testElevenDigitUSInputIsHandledIdenticallyAcrossCallSites() {
+        let raw = "16318486282"
+        // Site 1: normalizedHandle → bare 10-digit
+        let resolver = ContactsResolver()
+        XCTAssertEqual(resolver.normalizedHandle(raw), "6318486282")
+        // Site 2: phoneDigits → bare 10-digit
+        XCTAssertEqual(CNContactStoreBackedStoring.phoneDigits(raw), "6318486282")
+        // Site 3: prettyPhone → +1 (NPA) NXX-XXXX
+        XCTAssertEqual(AppleScriptMessageReader.prettyPhone(raw), "+1 (631) 848-6282")
+    }
 }

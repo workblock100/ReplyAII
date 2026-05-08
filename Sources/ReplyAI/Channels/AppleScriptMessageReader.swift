@@ -290,7 +290,8 @@ struct AppleScriptMessageReader: Sendable {
         if s.contains(" ") || s.contains("@") || s.hasPrefix("chat") || s.contains("(") { return s }
         let digits = s.filter(\.isNumber)
         switch digits.count {
-        case 11 where digits.hasPrefix("1"):
+        case ContactsResolver.USPhoneNormalization.prefixedLength
+            where digits.hasPrefix(ContactsResolver.USPhoneNormalization.countryCode):
             // +1 NPA NXX XXXX
             let npa  = digits.dropFirst(1).prefix(3)
             let nxx  = digits.dropFirst(4).prefix(3)

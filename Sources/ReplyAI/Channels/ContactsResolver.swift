@@ -29,6 +29,30 @@ protocol ContactsStoring: Sendable {
 /// actor-isolated. CNContactStore reads are safe from any thread; we
 /// wrap the mutable state in a `Locked<ResolverState>`.
 final class ContactsResolver: @unchecked Sendable {
+    /// US E.164 normalization vocabulary. The two `dropFirst` rules
+    /// in `normalizedHandle` and `CNContactStoreBackedStoring.phoneDigits`
+    /// (and the `case 11 where` arm in
+    /// `AppleScriptMessageReader.prettyPhone`) share an identical
+    /// shape — drop the leading `"1"` country-code from an 11-digit
+    /// US number. The literals `11` and `"1"` were inline at three
+    /// call sites; hoisting them here makes the rule a typed,
+    /// pin-able constant rather than a magic-number coincidence.
+    /// Drift in either constant breaks phone-handle deduplication —
+    /// a contact stored as `+14155551234` would no longer match an
+    /// iMessage handle of `4155551234` and contact-name resolution
+    /// would silently fall back to the raw handle. Pinned by
+    /// `ContactsResolverTests.testUSCountryCodeNormalizationConstantsAreFrozen`.
+    enum USPhoneNormalization {
+        /// Length of an E.164-style US number that includes the
+        /// country-code prefix (1 + 10-digit NPA-NXX-XXXX).
+        static let prefixedLength = 11
+        /// The US country-code prefix itself, stored as a string for
+        /// `String.hasPrefix` matching against the digit-only filter
+        /// output. Drift to `"+1"` would silently miss every digit-
+        /// only input (the `+` was stripped by the digit filter).
+        static let countryCode = "1"
+    }
+
     /// TCC authorization state for the Contacts framework. Tracked
     /// separately from the system's `CNAuthorizationStatus` so tests can
     /// override it via `overrideAccessForTesting(.granted)` without
@@ -191,7 +215,10 @@ final class ContactsResolver: @unchecked Sendable {
         else { return handle }
         let digits = handle.filter(\.isNumber)
         guard digits.count >= 10 else { return handle }
-        if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+        if digits.count == USPhoneNormalization.prefixedLength,
+           digits.hasPrefix(USPhoneNormalization.countryCode) {
+            return String(digits.dropFirst())
+        }
         return digits.count == 10 ? digits : handle
     }
 
@@ -287,10 +314,15 @@ final class CNContactStoreBackedStoring: ContactsStoring, @unchecked Sendable {
 
     /// Strip to digits and drop a leading `1` from 11-digit US numbers so
     /// `+16318486282`, `1-631-848-6282`, `(631) 848-6282`, and `6318486282`
-    /// all share the same key `6318486282`.
+    /// all share the same key `6318486282`. Routes through
+    /// `ContactsResolver.USPhoneNormalization` so the rule stays in
+    /// sync with `normalizedHandle`'s identical drop-leading-1 path.
     static func phoneDigits(_ s: String) -> String {
         let digits = s.filter(\.isNumber)
-        if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+        if digits.count == ContactsResolver.USPhoneNormalization.prefixedLength,
+           digits.hasPrefix(ContactsResolver.USPhoneNormalization.countryCode) {
+            return String(digits.dropFirst())
+        }
         return digits
     }
 
