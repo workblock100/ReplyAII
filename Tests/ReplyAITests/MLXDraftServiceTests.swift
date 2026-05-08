@@ -171,4 +171,107 @@ final class MLXDraftServiceTests: XCTestCase {
         XCTAssertEqual(MLXDraftService.formatBytes(1024 * 1024 * 1024 + 1), "1.0 GB",
                        "1024 MiB + 1 byte must flip to GB form — pin the first-byte-over boundary so a future precision tweak surfaces here, not in user-visible banner copy")
     }
+
+    /// Pin the byte-form download separator characters. The current
+    /// banner reads `"Downloading model · 864 MB of 1.8 GB"` — that's
+    /// space + U+00B7 MIDDLE DOT + space between `model` and the byte
+    /// count, and the literal " of " between completed and total. Both
+    /// shapes match Apple's Storage settings convention. Drift toward
+    /// U+2022 BULLET, an en/em dash, or "/" between completed and total
+    /// would silently change visual rhythm for every shipped user
+    /// staring at a 30-90s download banner. Pin so a future "let's use
+    /// `/` for terseness" lands in code review, not as a kerning shift.
+    func testDownloadingMessageBytesFormUsesMiddleDotAndOfSeparators() {
+        let msg = MLXDraftService.downloadingMessage(
+            completedBytes: 100 * 1024 * 1024,
+            totalBytes:     200 * 1024 * 1024
+        )
+        XCTAssertEqual(msg, "Downloading model · 100 MB of 200 MB",
+                       "byte-form separator shape (space + U+00B7 + space, then ` of `) is the user-visible byte rhythm; drift would silently change it for every download banner")
+        XCTAssertTrue(msg.contains(" \u{00B7} "),
+                      "separator between `model` and the byte count must be space + U+00B7 MIDDLE DOT + space — drift to U+2022 BULLET (`•`) or em-dash would change visual weight without changing source text obviously")
+        XCTAssertTrue(msg.contains(" of "),
+                      "between completed and total must be ` of ` literal — drift to `/` or `→` lands silently in source review unless pinned")
+        XCTAssertFalse(msg.contains(" \u{2022} "),
+                       "byte-form must NOT use U+2022 BULLET — that's the visually-similar but heavier glyph; pinning rules out an autocorrect-style drift")
+    }
+
+    /// Pin the same separator shape for the fraction-form fallback
+    /// banner — the path that fires when `Progress.totalUnitCount`
+    /// briefly reports 0 before the first chunk lands. Drift here would
+    /// produce a banner where the byte form and the fraction form read
+    /// inconsistently within the same download (server stops sending
+    /// Content-Length mid-stream → fallback → look changes). Pin so
+    /// both forms keep the same separator family.
+    func testDownloadingMessageFractionFormUsesMiddleDotSeparator() {
+        let msg = MLXDraftService.downloadingMessage(fraction: 0.42)
+        XCTAssertEqual(msg, "Downloading model · 42%",
+                       "fraction-form must read `Downloading model · NN%` with the same MIDDLE DOT separator as the byte form; drift here would let the two render shapes diverge mid-download")
+        XCTAssertTrue(msg.contains(" \u{00B7} "),
+                      "fraction-form separator must match byte-form's space + U+00B7 MIDDLE DOT + space")
+        XCTAssertFalse(msg.contains(" of "),
+                       "fraction-form must NOT include the byte-form ` of ` separator — drift toward a hybrid rendering would clutter the banner")
+    }
+
+    /// Pin the `Int()` truncation policy in `downloadingMessage(fraction:)`.
+    /// `0.999 * 100 = 99.9`, and `Int(99.9) = 99` — so a banner reading
+    /// 99.9% complete renders as `"99%"`, not `"100%"`. This is the
+    /// "surprising-but-safe" shape: the banner never prematurely flips
+    /// to 100% before the last chunk actually lands. A future refactor
+    /// to `Int(fraction.rounded() * 100)` or `Int((fraction * 100).rounded())`
+    /// would silently flip many in-flight downloads to 100% earlier and
+    /// erode the "still working" signal during the warmup window.
+    func testDownloadingMessageFractionTruncatesAtBoundary() {
+        XCTAssertEqual(MLXDraftService.downloadingMessage(fraction: 0.999),
+                       "Downloading model · 99%",
+                       "0.999 fraction must truncate to 99% (not round to 100%) — drift here would prematurely show 100% before the last byte lands and erode the still-working signal")
+        XCTAssertEqual(MLXDraftService.downloadingMessage(fraction: 0.005),
+                       "Downloading model · 0%",
+                       "0.005 fraction floors to 0% (Int truncation toward zero) — drift to ceiling/round would show 1% before any meaningful progress")
+        XCTAssertEqual(MLXDraftService.downloadingMessage(fraction: 0.5),
+                       "Downloading model · 50%",
+                       "exactly 50% rounds-trips through truncation cleanly (no decimal noise)")
+    }
+
+    /// Pin the no-clamp behavior of `downloadingMessage(fraction:)`.
+    /// `Foundation.Progress.fractionCompleted` is documented to fall in
+    /// 0...1, but in practice we've seen MLX/HuggingFace fire callbacks
+    /// where total is briefly underestimated and the fraction crosses
+    /// 1.0 — `Int(1.5 * 100) = 150` produces `"Downloading model · 150%"`.
+    /// Surprising-but-safe: the banner reveals the upstream miscount
+    /// rather than masking it. Pin so a future "let's clamp to 100%
+    /// for cosmetic safety" lands as a deliberate change — clamping
+    /// would hide an upstream bug from triage.
+    func testDownloadingMessageFractionDoesNotClampAboveOneHundred() {
+        XCTAssertEqual(MLXDraftService.downloadingMessage(fraction: 1.5),
+                       "Downloading model · 150%",
+                       "fraction > 1.0 renders verbatim (no clamp) — drift toward `min(1.0, fraction)` would mask a real upstream Progress miscount under a cosmetic 100% ceiling")
+        XCTAssertEqual(MLXDraftService.downloadingMessage(fraction: 2.0),
+                       "Downloading model · 200%",
+                       "fraction == 2.0 renders 200% — pins the no-clamp policy across both `> 1` and integer multiples")
+    }
+
+    /// Pin the U+2026 HORIZONTAL ELLIPSIS character on `preparingMessage`
+    /// and `warmingMessage`. The literal-equality pins above already lock
+    /// the byte sequence, but a future "normalize ellipses to three
+    /// ASCII dots for grep-friendliness" refactor that ran across the
+    /// repo would change `…` (1 char) to `...` (3 chars) and slip past
+    /// any code review that didn't look character-by-character. Pin the
+    /// trailing character explicitly so the swap surfaces here, not as
+    /// a silent kerning change in the composer banner — Apple Mac
+    /// applications conventionally use U+2026 for tighter kerning vs
+    /// three-dot composition.
+    func testPreparingMessageEndsWithSingleEllipsisCharacter() {
+        XCTAssertEqual(MLXDraftService.preparingMessage.last, "\u{2026}",
+                       "preparingMessage must end with U+2026 HORIZONTAL ELLIPSIS, not three U+002E FULL STOPs — `last` of three dots would be `.`, exposing the swap")
+        XCTAssertFalse(MLXDraftService.preparingMessage.hasSuffix("..."),
+                       "must not end in three ASCII dots — pinning the negative case so a normalize-ellipses refactor lands deliberately")
+    }
+
+    func testWarmingMessageEndsWithSingleEllipsisCharacter() {
+        XCTAssertEqual(MLXDraftService.warmingMessage.last, "\u{2026}",
+                       "warmingMessage must end with U+2026 HORIZONTAL ELLIPSIS — drift to `...` (three dots) changes kerning vs Apple convention")
+        XCTAssertFalse(MLXDraftService.warmingMessage.hasSuffix("..."),
+                       "must not end in three ASCII dots")
+    }
 }
