@@ -342,4 +342,48 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertEqual(IMessagePreview.linkPrefix, "🔗",
             "IMessagePreview.linkPrefix ships verbatim to every link-only sidebar row — bump test + source together when changing the glyph")
     }
+
+    // MARK: - URL collapse policy pins (REP-hoist 2026-05-07)
+
+    /// `collapseSchemes` is the closed set of URL schemes the
+    /// single-URL collapse path actually displays as `🔗 <host>`.
+    /// Drift is silent — adding `ftp` would suddenly start collapsing
+    /// FTP URLs in the sidebar; dropping `https` would stop collapsing
+    /// every secure URL. Pin both the size of the set and its members.
+    func testCollapseSchemesAreFrozen() {
+        XCTAssertEqual(IMessagePreview.collapseSchemes, ["http", "https"],
+            "collapseSchemes drift silently changes which URL schemes render as 🔗 <host> in the sidebar")
+        XCTAssertEqual(IMessagePreview.collapseSchemes.count, 2,
+            "exactly 2 schemes are collapsed today (http, https) — adding a scheme is a deliberate UX change")
+    }
+
+    /// `strippedHostPrefix` is the leading host substring removed
+    /// before display. `www.` is noise on every modern domain; drift
+    /// here either re-introduces "www." in every link chip OR
+    /// over-strips and shows a bare TLD. Pin the literal so any policy
+    /// change is a test edit.
+    func testWWWPrefixIsFrozen() {
+        XCTAssertEqual(IMessagePreview.strippedHostPrefix, "www.",
+            "strippedHostPrefix drift either re-introduces `www.` in every link chip OR over-strips and shows a bare TLD")
+    }
+
+    /// Round-trip a `www.`-prefixed host through the full pipeline to
+    /// pin that the constant is actually wired into the strip path.
+    /// A future refactor that defines the constant but stops using it
+    /// would still pass `testWWWPrefixIsFrozen` (constant value)
+    /// while silently re-introducing `www.` in every preview.
+    func testHostStripRoutesThroughHoistedPrefix() {
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://www.example.com/path"),
+                       "example.com",
+            "singleURLHost must strip `\(IMessagePreview.strippedHostPrefix)` — drift in the strip path is silent in user UX")
+    }
+
+    /// And conversely, a host that DOESN'T start with the prefix must
+    /// pass through verbatim — pinning that the strip path uses the
+    /// hoisted constant rather than a hardcoded `4` index.
+    func testHostStripDoesNotOverstripNonPrefixedHosts() {
+        XCTAssertEqual(IMessagePreview.singleURLHost(in: "https://wwwarchive.org/"),
+                       "wwwarchive.org",
+            "host that starts with `www` but not `\(IMessagePreview.strippedHostPrefix)` must pass through unchanged")
+    }
 }

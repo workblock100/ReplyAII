@@ -32,6 +32,23 @@ enum IMessagePreview {
     /// attachments in `NSAttributedString`.
     static let objectReplacement: Character = "\u{FFFC}"
 
+    /// URL schemes that the single-URL collapse path actually displays
+    /// as `🔗 <host>`. Anything else (mailto, tel, ftp, custom-scheme
+    /// deeplinks) passes through verbatim — see
+    /// `testNonHTTPSchemeDoesNotCollapse`. Hoisted so a future "let's
+    /// also collapse `ftp` URLs" decision is a single-edit + test
+    /// change rather than buried inside a multi-clause guard expression.
+    /// Pinned by `IMessagePreviewTests.testCollapseSchemesAreFrozen`.
+    static let collapseSchemes: Set<String> = ["http", "https"]
+
+    /// Leading host-prefix that's stripped before display. `www.` is
+    /// noise on every modern domain; the host is more readable without
+    /// it. Hoisted so a future stripping policy (also strip `m.` or
+    /// `mobile.`?) lands on this constant rather than re-typed inside
+    /// `singleURLHost`. Pinned by
+    /// `IMessagePreviewTests.testWWWPrefixIsFrozen`.
+    static let strippedHostPrefix = "www."
+
     /// Derive the sidebar preview from a decoded body.
     static func displayString(from body: String?) -> String {
         guard let body, !body.isEmpty else { return nonTextFallback }
@@ -70,14 +87,14 @@ enum IMessagePreview {
 
         guard let url = URL(string: token),
               let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
+              collapseSchemes.contains(scheme),
               let host = url.host, !host.isEmpty
         else { return nil }
 
-        // Strip a leading "www." — the host is more readable without it.
+        // Strip the leading prefix — the host is more readable without it.
         let stripped = host.lowercased()
-        if stripped.hasPrefix("www."), stripped.count > 4 {
-            return String(stripped.dropFirst(4))
+        if stripped.hasPrefix(strippedHostPrefix), stripped.count > strippedHostPrefix.count {
+            return String(stripped.dropFirst(strippedHostPrefix.count))
         }
         return stripped
     }
