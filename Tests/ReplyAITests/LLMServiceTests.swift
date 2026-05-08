@@ -172,4 +172,40 @@ final class LLMServiceTests: XCTestCase {
         XCTAssertEqual(svc.tokenDelay.upperBound, 58_000_000,
             "tokenDelay upper bound — drift above ~58ms makes the composer feel slow")
     }
+
+    /// Constants pin: the named statics that build the production
+    /// defaults must match the inline literals the existing instance
+    /// pins assert against. The instance pins are the contract from
+    /// the production-instantiation path; this pin is the contract
+    /// from the named-constant path. Drift on either alone is
+    /// caught — the no-arg StubLLMService init must route through
+    /// `defaultInitialDelay` / `defaultTokenDelay`, otherwise the
+    /// statics become dead code while inline literals live on in the
+    /// init signature.
+    func testDefaultInitialDelayConstantIs180Ms() {
+        XCTAssertEqual(StubLLMService.defaultInitialDelay, 180_000_000,
+            "defaultInitialDelay drift changes demo-composer cadence — pin so refactors that 'simplify' the constant land in code review")
+    }
+
+    func testDefaultTokenDelayConstantIs22To58Ms() {
+        XCTAssertEqual(StubLLMService.tokenDelayLowerBoundNanoseconds, 22_000_000,
+            "tokenDelayLowerBoundNanoseconds drift breaks the per-token streaming feel")
+        XCTAssertEqual(StubLLMService.tokenDelayUpperBoundNanoseconds, 58_000_000,
+            "tokenDelayUpperBoundNanoseconds drift makes the composer feel slow")
+        XCTAssertEqual(StubLLMService.defaultTokenDelay,
+                       StubLLMService.tokenDelayLowerBoundNanoseconds...StubLLMService.tokenDelayUpperBoundNanoseconds,
+            "defaultTokenDelay must compose from the named lower/upper bounds — drift between them mixes a hardcoded range with the bound constants")
+    }
+
+    /// Round-trip: the no-arg init must route the default args
+    /// through the named static constants, not through inline
+    /// literals. Otherwise the statics become dead code while the
+    /// init signature silently keeps a different value.
+    func testNoArgInitRoutesThroughNamedDefaults() {
+        let svc = StubLLMService()
+        XCTAssertEqual(svc.initialDelay, StubLLMService.defaultInitialDelay,
+            "no-arg StubLLMService init must route initialDelay through defaultInitialDelay")
+        XCTAssertEqual(svc.tokenDelay, StubLLMService.defaultTokenDelay,
+            "no-arg StubLLMService init must route tokenDelay through defaultTokenDelay")
+    }
 }

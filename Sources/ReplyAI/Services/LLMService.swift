@@ -35,8 +35,35 @@ protocol LLMService: Sendable {
 /// Hard-coded drafts from Fixtures, emitted as a token stream with realistic pacing.
 /// Used by the UI exactly the way MLX will be wired.
 struct StubLLMService: LLMService {
-    var tokenDelay: ClosedRange<UInt64> = 22_000_000 ... 58_000_000   // 22–58ms per token
-    var initialDelay: UInt64 = 180_000_000                              // 180ms "thinking"
+    /// Production default for the per-token streaming delay range
+    /// (nanoseconds). 22–58 ms is the cadence shipped to demo users
+    /// — fast enough to feel like a live model, slow enough that the
+    /// composer renders streaming tokens visibly rather than landing
+    /// in a single frame. Drift up makes the stub feel laggy
+    /// (eroding the demo's "real LLM" illusion); drift down makes
+    /// the stream finish before the composer's first redraw, which
+    /// flashes the entire draft into place and ruins the streaming
+    /// feel. The lower-bound (`tokenDelayLowerBoundNanoseconds`) and
+    /// upper-bound (`tokenDelayUpperBoundNanoseconds`) constants are
+    /// what the production default range is built from. Pinned by
+    /// `LLMServiceTests.testDefaultTokenDelayRangeIsTwentyTwoToFiftyEightMilliseconds`.
+    static let tokenDelayLowerBoundNanoseconds: UInt64 = 22_000_000
+    static let tokenDelayUpperBoundNanoseconds: UInt64 = 58_000_000
+    static let defaultTokenDelay: ClosedRange<UInt64> =
+        tokenDelayLowerBoundNanoseconds ... tokenDelayUpperBoundNanoseconds
+
+    /// Production default for the cold-start "thinking" pause before
+    /// the first token streams (nanoseconds). 180 ms is calibrated so
+    /// the composer's "Generating…" indicator has time to render
+    /// before the first token lands — without it, the cursor flickers
+    /// and the user can't tell whether the model started. Drift to 0
+    /// produces a jarring instant-first-token; drift up makes every
+    /// stub draft feel slow. Pinned by
+    /// `LLMServiceTests.testDefaultInitialDelayIsOneEightyMilliseconds`.
+    static let defaultInitialDelay: UInt64 = 180_000_000
+
+    var tokenDelay: ClosedRange<UInt64> = StubLLMService.defaultTokenDelay
+    var initialDelay: UInt64 = StubLLMService.defaultInitialDelay
 
     func draft(
         thread: MessageThread,
