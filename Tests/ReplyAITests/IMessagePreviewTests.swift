@@ -66,6 +66,30 @@ final class IMessagePreviewTests: XCTestCase {
         XCTAssertEqual(IMessagePreview.displayString(from: body), body)
     }
 
+    /// Pin: a body containing one URL plus surrounding whitespace
+    /// (leading newlines, trailing tabs, etc.) STILL collapses to
+    /// `🔗 host`. The implementation passes `trimmed` (the whitespace-
+    /// stripped body) to `singleURLHost`, so the trim happens before
+    /// URL detection and a single-URL token survives the pad.
+    /// Pin both directions of asymmetric padding (only-leading,
+    /// only-trailing, mixed) so a refactor that swaps `trimmed` for
+    /// the raw `body` inside the URL branch surfaces here. Cross-channel
+    /// paste-from-clipboard flows commonly produce exactly this shape
+    /// (the user pastes a URL and the source app appended a newline) —
+    /// drift would silently downgrade those previews from `🔗 host` to
+    /// the verbatim raw URL with whitespace.
+    func testSingleURLWithSurroundingWhitespaceStillCollapses() {
+        XCTAssertEqual(IMessagePreview.displayString(from: "  https://example.com  "),
+                       "🔗 example.com",
+                       "leading + trailing whitespace must be stripped before URL detection — `trimmed` is passed to singleURLHost")
+        XCTAssertEqual(IMessagePreview.displayString(from: "\nhttps://example.com"),
+                       "🔗 example.com",
+                       "leading-only newline must be stripped before URL detection")
+        XCTAssertEqual(IMessagePreview.displayString(from: "https://example.com\t"),
+                       "🔗 example.com",
+                       "trailing-only tab must be stripped before URL detection")
+    }
+
     func testMailtoURLDoesNotCollapse() {
         let body = "mailto:foo@example.com"
         XCTAssertEqual(IMessagePreview.displayString(from: body), body)
