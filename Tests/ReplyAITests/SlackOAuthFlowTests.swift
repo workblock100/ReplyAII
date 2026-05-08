@@ -727,4 +727,29 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertTrue(SlackOAuthFlow.redirectURI.contains(":\(LocalhostOAuthListener.defaultPort)/"),
                       "redirectURI port suffix must match LocalhostOAuthListener.defaultPort — drift desyncs the auth URL the user is sent to from the listener actually bound for the callback")
     }
+
+    // MARK: - Hoisted-constant pins (FormField + ResponseKey)
+    //
+    // The OAuth 2 form-body field names + response JSON keys used to be
+    // raw string literals at every call site (auth URL leg + token-exchange
+    // leg + response parsing). Drift between sites surfaces as
+    // `redirect_uri_mismatch` (auth/exchange leg disagree on field name) or
+    // a generic "response missing ok=true or access_token" (response key
+    // typo silently downgrades every successful exchange). Hoisted to
+    // `SlackOAuthFlow.FormField` and `.ResponseKey`.
+
+    func testFormFieldNameLiteralsAreFrozen() {
+        XCTAssertEqual(SlackOAuthFlow.FormField.clientID,     "client_id")
+        XCTAssertEqual(SlackOAuthFlow.FormField.clientSecret, "client_secret")
+        XCTAssertEqual(SlackOAuthFlow.FormField.scope,        "scope")
+        XCTAssertEqual(SlackOAuthFlow.FormField.redirectURI,  "redirect_uri")
+        XCTAssertEqual(SlackOAuthFlow.FormField.code,         "code")
+    }
+
+    func testResponseKeyLiteralsAreFrozen() {
+        XCTAssertEqual(SlackOAuthFlow.ResponseKey.ok,          "ok")
+        XCTAssertEqual(SlackOAuthFlow.ResponseKey.accessToken, "access_token")
+        XCTAssertEqual(SlackOAuthFlow.ResponseKey.team,        "team")
+        XCTAssertEqual(SlackOAuthFlow.ResponseKey.teamName,    "name")
+    }
 }

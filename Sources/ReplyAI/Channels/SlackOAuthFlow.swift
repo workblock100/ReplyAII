@@ -85,6 +85,33 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
     /// Pinned by `SlackOAuthFlowTests.testTokenExchangeURLIsExactSlackAPIEndpoint`.
     static let tokenExchangeURL = "https://slack.com/api/oauth.v2.access"
 
+    /// OAuth 2 form-body + query-parameter field names. Slack's
+    /// `redirect_uri_mismatch` and `bad_client_id` errors fire when the
+    /// auth-URL leg and the token-exchange leg disagree on either of
+    /// these field names — the bug presents as a flow that opens the
+    /// browser successfully but always fails the exchange with a generic
+    /// error. Hoisting these keeps the two legs coupled to one source
+    /// of truth. Pinned by
+    /// `SlackOAuthFlowTests.testFormFieldNameLiteralsAreFrozen`.
+    enum FormField {
+        static let clientID     = "client_id"
+        static let clientSecret = "client_secret"
+        static let scope        = "scope"
+        static let redirectURI  = "redirect_uri"
+        static let code         = "code"
+    }
+
+    /// JSON keys returned by `oauth.v2.access`. A typo here silently
+    /// downgrades every successful exchange into "response missing
+    /// ok=true or access_token" because the lookup misses. Pinned by
+    /// `SlackOAuthFlowTests.testResponseKeyLiteralsAreFrozen`.
+    enum ResponseKey {
+        static let ok          = "ok"
+        static let accessToken = "access_token"
+        static let team        = "team"
+        static let teamName    = "name"
+    }
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -148,9 +175,9 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 guard let self else { return }
                 var components = URLComponents(string: SlackOAuthFlow.authorizationURL)!
                 components.queryItems = [
-                    URLQueryItem(name: "client_id", value: clientID),
-                    URLQueryItem(name: "scope", value: SlackOAuthFlow.scope),
-                    URLQueryItem(name: "redirect_uri", value: SlackOAuthFlow.redirectURI)
+                    URLQueryItem(name: FormField.clientID,    value: clientID),
+                    URLQueryItem(name: FormField.scope,       value: SlackOAuthFlow.scope),
+                    URLQueryItem(name: FormField.redirectURI, value: SlackOAuthFlow.redirectURI)
                 ]
                 guard let url = components.url else { return }
                 self.urlOpener.open(url)
@@ -190,10 +217,10 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
             value.addingPercentEncoding(withAllowedCharacters: formAllowed) ?? value
         }
         let bodyParts = [
-            "code=\(escape(code))",
-            "client_id=\(escape(clientID))",
-            "client_secret=\(escape(clientSecret))",
-            "redirect_uri=\(SlackOAuthFlow.redirectURI)"
+            "\(FormField.code)=\(escape(code))",
+            "\(FormField.clientID)=\(escape(clientID))",
+            "\(FormField.clientSecret)=\(escape(clientSecret))",
+            "\(FormField.redirectURI)=\(SlackOAuthFlow.redirectURI)"
         ]
         request.httpBody = Data(bodyParts.joined(separator: "&").utf8)
 
@@ -214,8 +241,8 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
             // failure at the moment the OAuth handshake actually broke.
             guard
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let ok = json["ok"] as? Bool, ok,
-                let token = json["access_token"] as? String,
+                let ok = json[ResponseKey.ok] as? Bool, ok,
+                let token = json[ResponseKey.accessToken] as? String,
                 !token.isEmpty
             else {
                 completion(.failure(.tokenExchangeFailed("response missing ok=true or access_token")))
@@ -223,7 +250,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
             }
             // Slack's oauth.v2.access response embeds `team: { id, name }`.
             // Pull the workspace name out so the inbox can show "Connected: ACME".
-            let workspaceName: String = (json["team"] as? [String: Any])?["name"] as? String ?? ""
+            let workspaceName: String = (json[ResponseKey.team] as? [String: Any])?[ResponseKey.teamName] as? String ?? ""
             do {
                 try self.tokenStore.set(token: token, workspaceName: workspaceName)
                 completion(.success(()))
