@@ -348,10 +348,11 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - priority: P1
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: branch superseded — `wip/quality-2026-04-21-221100` (commit db4a329) is no longer on origin and the SHA is unreachable. `Tests/ReplyAITests/DraftEngineTests.swift` on current main covers `modelLoadStatus`, error paths, and stats integration with 51 test cases — the original branch's surface is satisfied by what shipped. Closing this REP so future fires don't keep listing it as open work for a dead branch.
 - claimed_by: human
 - files_to_touch: `Tests/ReplyAITests/DraftEngineTests.swift`
-- scope: Branch `wip/quality-2026-04-21-221100` (commit db4a329) adds DraftEngine test coverage for the error path, stats integration, and `modelLoadStatus` transitions — 115 new test lines. This branch does not overlap with the REP-017 consolidation group (those target RuleEvaluator and early DraftEngine gap coverage). Human should review the test additions, confirm no duplicate function names with any branches merged via REP-017, then merge if clean. Close the branch after merge.
+- scope: Branch `wip/quality-2026-04-21-221100` (commit db4a329) was intended to add DraftEngine test coverage for the error path, stats integration, and `modelLoadStatus` transitions — 115 new test lines. The branch is no longer on origin and its commit SHA is unreachable; the surface area was satisfied by main's incremental DraftEngine test growth (current count: 51 cases including modelLoadStatus checks).
 - success_criteria:
   - Branch merged and closed after review
   - Test count on main grows by the number of new `func test` declarations in this branch
