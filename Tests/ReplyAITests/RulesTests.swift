@@ -1956,7 +1956,7 @@ final class RulesStoreConcurrencyTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("RulesStoreConcurrency-\(UUID())")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("rules.json")
+        return dir.appendingPathComponent(RulesStore.Disk.fileName)
     }
 
     func testConcurrentAddNeverLosesRules() async throws {
@@ -2612,7 +2612,7 @@ final class RulesStoreImportMergeTests: XCTestCase {
     private func tmpURL(_ tag: String) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("ImportMerge-\(tag)-\(UUID().uuidString)")
-            .appendingPathComponent("rules.json")
+            .appendingPathComponent(RulesStore.Disk.fileName)
     }
 
     /// 2-rule store + import with 1 update + 1 new → net +1 rule, action updated.
