@@ -445,4 +445,21 @@ final class SlackSocketClientTests: XCTestCase {
         XCTAssertEqual(SlackSocketClient.defaultReconnectDelay, 5.0,
                        "SlackSocketClient.defaultReconnectDelay drift either hammers Slack's gateway (too low → rate-limit penalties) or stretches perceived outages (too high → menu-bar shows offline copy through brief flaps)")
     }
+
+    // MARK: - Envelope-vocabulary pin
+    //
+    // Slack's Socket Mode `type` discriminator vocabulary used to live as
+    // unhoisted string literals in the dispatch switch. A typo there would
+    // either swallow real events ("event_callback" instead of
+    // "events_callback" routes every real frame into the default-ignore
+    // branch) or stop filtering keepalives ("Ping" capitalized routes every
+    // ping into the default branch and emits it to onEventReceived).
+    // Hoisted to `SlackSocketClient.Envelope`; this test pins the literals.
+
+    func testEnvelopeLiteralsAreFrozen() {
+        XCTAssertEqual(SlackSocketClient.Envelope.typeKey,        "type")
+        XCTAssertEqual(SlackSocketClient.Envelope.ping,           "ping")
+        XCTAssertEqual(SlackSocketClient.Envelope.hello,          "hello")
+        XCTAssertEqual(SlackSocketClient.Envelope.eventsCallback, "events_callback")
+    }
 }

@@ -167,17 +167,30 @@ final class SlackSocketClient: @unchecked Sendable {
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type_ = json["type"] as? String else {
+              let type_ = json[Envelope.typeKey] as? String else {
             return
         }
 
         switch type_ {
-        case "ping", "hello":
+        case Envelope.ping, Envelope.hello:
             return
-        case "events_callback":
+        case Envelope.eventsCallback:
             onEventReceived?(data)
         default:
             break
         }
+    }
+
+    /// Slack Socket Mode envelope vocabulary. Pinned literals so a typo in
+    /// the `type` discriminator can't silently swallow real events (`pong`
+    /// instead of `ping` would route every keepalive into the "default
+    /// ignore" branch but every real event into the `default` branch and
+    /// stop firing `onEventReceived`). Pinned by
+    /// `SlackSocketClientTests.testEnvelopeLiteralsAreFrozen`.
+    enum Envelope {
+        static let typeKey        = "type"
+        static let ping           = "ping"
+        static let hello          = "hello"
+        static let eventsCallback = "events_callback"
     }
 }
