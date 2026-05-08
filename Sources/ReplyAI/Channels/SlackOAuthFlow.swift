@@ -137,6 +137,37 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
     /// AGENTS.md.
     static let contentTypeHeaderField = "Content-Type"
 
+    /// User-visible failure-reason vocabulary surfaced through
+    /// `SlackOAuthError.tokenExchangeFailed(reason)`. The reason ends
+    /// up concatenated with `LocalhostOAuthListener
+    /// .SlackOAuthError.tokenExchangeFailedPrefix`
+    /// ("Slack rejected the connection: ") in the user toast. Each
+    /// reason describes a distinct failure mode and is the only signal
+    /// a user (or support engineer) has to triage which leg of the
+    /// OAuth handshake broke. Drift collapses two failure modes into
+    /// the same toast and breaks triage. Pinned by
+    /// `SlackOAuthFlowTests.testTokenExchangeFailureReasonsAreFrozen`.
+    enum TokenExchangeFailureReason {
+        /// `URL(string:)` returned nil for the hard-coded
+        /// `tokenExchangeURL`. Should be unreachable in production
+        /// (the URL is a static literal); surfaces only if
+        /// `tokenExchangeURL` itself is ever mutated to an invalid
+        /// string at runtime.
+        static let invalidEndpointURL = "invalid endpoint URL"
+
+        /// Slack's response carried no body data. Network completed
+        /// without an error but no bytes — typically indicates the
+        /// server hung up between connection and response.
+        static let emptyResponse = "empty response"
+
+        /// Slack's JSON either lacks `ok: true`, lacks `access_token`,
+        /// or carries an empty `access_token`. Any of those means the
+        /// handshake broke server-side; we route them through one
+        /// reason because the user's recovery action is identical
+        /// (re-attempt the connect flow).
+        static let missingOkOrAccessToken = "response missing ok=true or access_token"
+    }
+
     private let tokenStore: SlackTokenStore
     private let urlOpener: any URLOpener
     private let session: URLSession
@@ -219,7 +250,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
         completion: @escaping (Result<Void, OAuthError>) -> Void
     ) {
         guard let endpointURL = URL(string: SlackOAuthFlow.tokenExchangeURL) else {
-            completion(.failure(.tokenExchangeFailed("invalid endpoint URL")))
+            completion(.failure(.tokenExchangeFailed(SlackOAuthFlow.TokenExchangeFailureReason.invalidEndpointURL)))
             return
         }
 
@@ -258,7 +289,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 return
             }
             guard let data else {
-                completion(.failure(.tokenExchangeFailed("empty response")))
+                completion(.failure(.tokenExchangeFailed(SlackOAuthFlow.TokenExchangeFailureReason.emptyResponse)))
                 return
             }
             // Reject present-but-empty access_token symmetrically with the
@@ -271,7 +302,7 @@ final class SlackOAuthFlow: SlackAuthorizing, @unchecked Sendable {
                 let token = json[ResponseKey.accessToken] as? String,
                 !token.isEmpty
             else {
-                completion(.failure(.tokenExchangeFailed("response missing ok=true or access_token")))
+                completion(.failure(.tokenExchangeFailed(SlackOAuthFlow.TokenExchangeFailureReason.missingOkOrAccessToken)))
                 return
             }
             // Slack's oauth.v2.access response embeds `team: { id, name }`.

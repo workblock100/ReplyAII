@@ -778,4 +778,40 @@ final class SlackOAuthFlowTests: XCTestCase {
         XCTAssertEqual(SlackOAuthFlow.contentTypeHeaderField, "Content-Type",
             "contentTypeHeaderField pinned to canonical capitalization so request shape matches AGENTS.md curl-based debugging artifacts")
     }
+
+    // MARK: - TokenExchangeFailureReason freeze + invariants
+
+    /// Pin the three failure-reason strings. Each is the only triage
+    /// signal a user (or support engineer) has when the OAuth handshake
+    /// breaks — the reason is concatenated with
+    /// `tokenExchangeFailedPrefix` ("Slack rejected the connection: ")
+    /// in the user toast. Drift collapses two failure modes into the
+    /// same toast.
+    func testTokenExchangeFailureReasonsAreFrozen() {
+        XCTAssertEqual(SlackOAuthFlow.TokenExchangeFailureReason.invalidEndpointURL,
+                       "invalid endpoint URL")
+        XCTAssertEqual(SlackOAuthFlow.TokenExchangeFailureReason.emptyResponse,
+                       "empty response")
+        XCTAssertEqual(SlackOAuthFlow.TokenExchangeFailureReason.missingOkOrAccessToken,
+                       "response missing ok=true or access_token")
+    }
+
+    /// Pin the partition invariant: the three reasons are pairwise
+    /// distinct AND non-empty. Collision merges two failure modes
+    /// into one toast (loses triage signal); an empty reason yields
+    /// "Slack rejected the connection: " with a trailing-space dead-
+    /// end toast that looks like a UI bug.
+    func testTokenExchangeFailureReasonsArePairwiseDistinctAndNonEmpty() {
+        let all = [
+            SlackOAuthFlow.TokenExchangeFailureReason.invalidEndpointURL,
+            SlackOAuthFlow.TokenExchangeFailureReason.emptyResponse,
+            SlackOAuthFlow.TokenExchangeFailureReason.missingOkOrAccessToken,
+        ]
+        XCTAssertEqual(Set(all).count, all.count,
+            "failure-reason constants must be pairwise distinct — collision merges two triage signals into one")
+        for r in all {
+            XCTAssertFalse(r.isEmpty,
+                "failure reason must be non-empty — empty produces a trailing-space dead-end toast")
+        }
+    }
 }
