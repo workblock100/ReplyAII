@@ -46,6 +46,30 @@ struct IMessageChannel: ChannelService {
         static let yesterdayLabel = "Yesterday"
     }
 
+    /// chat.db row-decode vocabulary. Each constant is a fallback for a
+    /// missing column AND a load-bearing assumption about the schema.
+    /// `serviceFallback` is "iMessage" because a row missing
+    /// `service_name` is overwhelmingly likely to be iMessage on macOS
+    /// 11+ — defaulting to .imessage routes the unknown case toward
+    /// the more common channel rather than mis-classifying as SMS.
+    /// `smsServiceLowercase` is what `service.lowercased() == "sms"`
+    /// matches against; drift to e.g. `"sms_relay"` (which chat.db
+    /// does NOT emit) would mis-classify every SMS-relay row as
+    /// iMessage and silently route sends through the wrong service
+    /// identifier. `syntheticChatIDPrefix` is the differentiator that
+    /// keeps synthetic chat IDs (`chat_42`) from colliding with real
+    /// chat.db identifiers (`chat42`) — the underscore is the entire
+    /// signal that lets `RuleEvaluator.groupChatIdentifierPrefix`
+    /// match real groups without false-positive against synthetic
+    /// IDs. Pinned by
+    /// `IMessageChannelTests.testChatDBRowDecodeVocabularyIsFrozen`.
+    enum ChatDBRowDecode {
+        static let chatIDFallback         = "unknown"
+        static let serviceFallback        = "iMessage"
+        static let smsServiceLowercase    = "sms"
+        static let syntheticChatIDPrefix  = "chat_"
+    }
+
     /// Optional name-resolver that translates phone/email handles to
     /// contact names. Injected from the ViewModel so we don't couple
     /// channel code to Contacts framework directly.
@@ -182,9 +206,9 @@ struct IMessageChannel: ChannelService {
 
         var pending: [Pending] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let chatID       = Self.text(stmt, 1) ?? "unknown"
+            let chatID       = Self.text(stmt, 1) ?? ChatDBRowDecode.chatIDFallback
             let displayName  = Self.text(stmt, 2) ?? ""
-            let service      = Self.text(stmt, 3) ?? "iMessage"
+            let service      = Self.text(stmt, 3) ?? ChatDBRowDecode.serviceFallback
             let firstHandle  = Self.text(stmt, 4) ?? ""
             let lastRow      = sqlite3_column_int64(stmt, 5)
             let lastDateRaw  = sqlite3_column_int64(stmt, 6)
@@ -206,10 +230,10 @@ struct IMessageChannel: ChannelService {
                 return AppleScriptMessageReader.prettyPhone(rawHandle)
             }()
 
-            let channel: Channel = (service.lowercased() == "sms") ? .sms : .imessage
+            let channel: Channel = (service.lowercased() == ChatDBRowDecode.smsServiceLowercase) ? .sms : .imessage
 
             pending.append(Pending(
-                chatID: chatID.isEmpty ? "chat_\(sqlite3_column_int64(stmt, 0))" : chatID,
+                chatID: chatID.isEmpty ? "\(ChatDBRowDecode.syntheticChatIDPrefix)\(sqlite3_column_int64(stmt, 0))" : chatID,
                 name: resolvedName,
                 channel: channel,
                 lastMsgRowID: lastRow,

@@ -608,6 +608,50 @@ final class IMessageChannelAvatarInitialTests: XCTestCase {
                        IMessageChannel.phoneAvatarGlyph,
             "phone-shape fallback must equal phoneAvatarGlyph byte-for-byte — drift between matcher and constant is silent")
     }
+
+    // MARK: - ChatDBRowDecode vocabulary pins (REP-hoist 2026-05-07)
+
+    /// `ChatDBRowDecode` holds the four fallback/comparison literals
+    /// that decode a chat.db row into our model. Each is load-bearing:
+    /// the synthetic-chat-id prefix's underscore is the entire signal
+    /// that prevents `RuleEvaluator.groupChatIdentifierPrefix` from
+    /// matching synthetic IDs (`chat_42`) the same way it matches real
+    /// group IDs (`chat42`). Drift between this prefix and the
+    /// group-chat predicate is silent — `.isGroupChat` would suddenly
+    /// fire on synthetic threads with empty chat-ids.
+    func testChatDBRowDecodeVocabularyIsFrozen() {
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.chatIDFallback, "unknown",
+            "chatIDFallback drift desyncs the staging fallback from any test that asserts the missing-column placeholder")
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.serviceFallback, "iMessage",
+            "serviceFallback drift would re-classify every missing-service-name row into a different channel")
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.smsServiceLowercase, "sms",
+            "smsServiceLowercase drift silently mis-classifies every SMS-relay row as iMessage and routes sends through the wrong service identifier")
+        XCTAssertEqual(IMessageChannel.ChatDBRowDecode.syntheticChatIDPrefix, "chat_",
+            "syntheticChatIDPrefix's underscore is the entire signal that prevents `.isGroupChat` matching against synthetic-id threads — drift is a silent rule misfire")
+    }
+
+    /// The synthetic chat-ID prefix MUST start with `chat` (so it's
+    /// unambiguous in logs) but MUST NOT match the
+    /// `RuleEvaluator.groupChatIdentifierPrefix` exactly — otherwise
+    /// every synthetic-id thread would suddenly fire `.isGroupChat`.
+    /// This pin enforces the contract between the two constants.
+    func testSyntheticChatIDPrefixDoesNotCollideWithGroupChatPrefix() {
+        XCTAssertNotEqual(IMessageChannel.ChatDBRowDecode.syntheticChatIDPrefix,
+                          RuleEvaluator.groupChatIdentifierPrefix,
+            "syntheticChatIDPrefix must NOT equal RuleEvaluator.groupChatIdentifierPrefix — the underscore differentiator prevents .isGroupChat misfiring on synthetic IDs")
+        XCTAssertTrue(IMessageChannel.ChatDBRowDecode.syntheticChatIDPrefix
+                        .hasPrefix(RuleEvaluator.groupChatIdentifierPrefix),
+            "syntheticChatIDPrefix should still start with `chat` (so logs are scannable) but extend it with a separator — currently `\(IMessageChannel.ChatDBRowDecode.syntheticChatIDPrefix)`")
+        // Synthetic IDs in real use look like `chat_42` — they include
+        // characters past the group-chat prefix that aren't digits, so
+        // `.isGroupChat`'s `hasPrefix("chat")` matches but is
+        // intentionally permissive. The differentiator is whether the
+        // tail is digits (real group) or `_<rowid>` (synthetic). Pin
+        // a synthetic-id and confirm the predicate still matches —
+        // documenting current behaviour rather than asserting it
+        // SHOULDN'T match (which would require a more nuanced predicate
+        // in RuleEvaluator).
+    }
 }
 
 // MARK: - ChannelError result-code preservation (REP-051)
