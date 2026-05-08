@@ -312,6 +312,34 @@ final class Stats: @unchecked Sendable {
 
     // MARK: - Weekly log
 
+    /// Markdown vocabulary the planner/reviewer scripts parse out of
+    /// the weekly log. Each field name maps to a documented stat
+    /// counter; drift on any one would silently break the downstream
+    /// `.automation/` script that aggregates these into the cumulative
+    /// roll-up. The substring tests in `StatsTests` verify presence
+    /// but accept any nearby drift (e.g. mis-pluralisation, casing
+    /// changes); pinning the names here gives a single-edit surface
+    /// for a future "switch to YAML" or "rename a counter" decision.
+    enum WeeklyLogFormat {
+        /// Heading prefix; the date string is appended after `of `.
+        static let headingPrefix         = "# Stats week of "
+        static let rulesFiredEmpty       = "- rulesFiredByAction: {}"
+        static let rulesFiredFieldName   = "rulesFiredByAction"
+        static let draftsGeneratedField  = "draftsGenerated"
+        static let draftsSentField       = "draftsSent"
+        static let messagesIndexedField  = "messagesIndexed"
+        static let ruleLoadSkipsField    = "ruleLoadSkips"
+        static let sessionDurationField  = "sessionDuration"
+
+        /// Format: `- <field>: <value>`. Hoisted so every counter line
+        /// flows through one shape — drift to e.g. `* <field>: ...`
+        /// (asterisk bullet) would silently break the planner's
+        /// dash-prefix line filter.
+        static func line(_ field: String, value: String) -> String {
+            "- \(field): \(value)"
+        }
+    }
+
     /// Serializes current counters to a Markdown snapshot at `url`. Intended
     /// for planner/reviewer scripts that archive weekly stats to
     /// `.automation/logs/stats-YYYY-WW.md`. Zero-value counters are included
@@ -319,20 +347,20 @@ final class Stats: @unchecked Sendable {
     func writeWeeklyLog(to url: URL) throws {
         let snap = snapshot()
         let dateString = ISO8601DateFormatter().string(from: Date()).prefix(10)
-        var lines: [String] = ["# Stats week of \(dateString)", ""]
+        var lines: [String] = ["\(WeeklyLogFormat.headingPrefix)\(dateString)", ""]
 
         let actionsSorted = snap.rulesFiredByAction.sorted { $0.key < $1.key }
         if actionsSorted.isEmpty {
-            lines.append("- rulesFiredByAction: {}")
+            lines.append(WeeklyLogFormat.rulesFiredEmpty)
         } else {
             let pairs = actionsSorted.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
-            lines.append("- rulesFiredByAction: {\(pairs)}")
+            lines.append(WeeklyLogFormat.line(WeeklyLogFormat.rulesFiredFieldName, value: "{\(pairs)}"))
         }
-        lines.append("- draftsGenerated: \(snap.draftsGenerated)")
-        lines.append("- draftsSent: \(snap.draftsSent)")
-        lines.append("- messagesIndexed: \(snap.messagesIndexed)")
-        lines.append("- ruleLoadSkips: \(snap.ruleLoadSkips)")
-        lines.append("- sessionDuration: \(sessionDuration)")
+        lines.append(WeeklyLogFormat.line(WeeklyLogFormat.draftsGeneratedField, value: "\(snap.draftsGenerated)"))
+        lines.append(WeeklyLogFormat.line(WeeklyLogFormat.draftsSentField, value: "\(snap.draftsSent)"))
+        lines.append(WeeklyLogFormat.line(WeeklyLogFormat.messagesIndexedField, value: "\(snap.messagesIndexed)"))
+        lines.append(WeeklyLogFormat.line(WeeklyLogFormat.ruleLoadSkipsField, value: "\(snap.ruleLoadSkips)"))
+        lines.append(WeeklyLogFormat.line(WeeklyLogFormat.sessionDurationField, value: "\(sessionDuration)"))
         lines.append("")
 
         let content = lines.joined(separator: "\n")

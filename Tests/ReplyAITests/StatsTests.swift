@@ -430,6 +430,71 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(stats.snapshot().rulesMatchedCount, 0,
                        "zero rule matches must leave rulesMatchedCount at 0")
     }
+
+    // MARK: - WeeklyLogFormat field-name pins
+
+    /// `Stats.WeeklyLogFormat.*` is the markdown vocabulary the
+    /// planner/reviewer scripts in `.automation/` parse out of the
+    /// weekly log. Drift on a field name (e.g.
+    /// `draftsGenerated` → `draftsCreated`) silently breaks the
+    /// downstream aggregator without raising a build error or
+    /// unit-test failure — the tests above use substring matching
+    /// (`content.contains("draftsGenerated")`), which would also fall
+    /// through silently if the source emitted the wrong name. This
+    /// pin asserts each field name independently so a single rename
+    /// surfaces both at the constant and at the tests that match
+    /// against it.
+    func testWeeklyLogFormatFieldNamesAreFrozen() {
+        XCTAssertEqual(Stats.WeeklyLogFormat.headingPrefix, "# Stats week of ",
+            "weekly-log heading prefix is what `.automation/` scripts grep for to identify a stats archive — drift breaks the aggregator's file-discovery pass")
+        XCTAssertEqual(Stats.WeeklyLogFormat.rulesFiredEmpty, "- rulesFiredByAction: {}",
+            "empty-state line drift either changes the parser shape (`{}` is JSON-empty) or moves the dash bullet — both break the planner's line filter")
+        XCTAssertEqual(Stats.WeeklyLogFormat.rulesFiredFieldName, "rulesFiredByAction",
+            "rulesFiredByAction field-name drift orphans the downstream aggregator's per-action breakdown")
+        XCTAssertEqual(Stats.WeeklyLogFormat.draftsGeneratedField, "draftsGenerated",
+            "draftsGenerated field-name drift breaks the cumulative draft-counter roll-up")
+        XCTAssertEqual(Stats.WeeklyLogFormat.draftsSentField, "draftsSent",
+            "draftsSent field-name drift breaks the acceptance-rate computation in the aggregator")
+        XCTAssertEqual(Stats.WeeklyLogFormat.messagesIndexedField, "messagesIndexed",
+            "messagesIndexed field-name drift orphans the search-index health metric")
+        XCTAssertEqual(Stats.WeeklyLogFormat.ruleLoadSkipsField, "ruleLoadSkips",
+            "ruleLoadSkips field-name drift hides rules.json corruption signal from the aggregator")
+        XCTAssertEqual(Stats.WeeklyLogFormat.sessionDurationField, "sessionDuration",
+            "sessionDuration field-name drift breaks the per-session normalization the aggregator applies")
+    }
+
+    /// `Stats.WeeklyLogFormat.line(_:value:)` is the format every
+    /// counter line flows through. Drift to e.g. `* <field>: ...`
+    /// (asterisk bullet) or `<field> = <value>` would silently break
+    /// the planner's dash-prefix line filter. Pin both the format
+    /// shape and the round-trip through the writeWeeklyLog source
+    /// (every assertion below would fail if either the constant or
+    /// the call site drifted).
+    func testWeeklyLogLineFormatIsExact() {
+        XCTAssertEqual(Stats.WeeklyLogFormat.line("draftsGenerated", value: "42"),
+                       "- draftsGenerated: 42",
+                       "line format `- <field>: <value>` is the planner-script contract — drift breaks every dash-prefixed counter")
+        XCTAssertEqual(Stats.WeeklyLogFormat.line("rulesFiredByAction", value: "{archive: 7}"),
+                       "- rulesFiredByAction: {archive: 7}",
+                       "line format must round-trip the brace-wrapped value verbatim — drift either escapes braces or strips them")
+    }
+
+    func testWeeklyLogLineFormatRoundTripsThroughWriteWeeklyLog() throws {
+        let stats = Stats(fileURL: nil)
+        stats.recordDraftGenerated()
+        stats.recordDraftGenerated()
+        let logURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stats-weekly-log-format-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: logURL) }
+        try stats.writeWeeklyLog(to: logURL)
+        let content = try String(contentsOf: logURL)
+        // Every line in the output must round-trip through the format
+        // — drift in either the constant or the call site is caught.
+        XCTAssertTrue(content.contains(Stats.WeeklyLogFormat.line(Stats.WeeklyLogFormat.draftsGeneratedField, value: "2")),
+            "writeWeeklyLog output must contain the draftsGenerated line in the exact `WeeklyLogFormat.line(...)` shape — source and format constant must not drift")
+        XCTAssertTrue(content.contains(Stats.WeeklyLogFormat.headingPrefix),
+            "writeWeeklyLog output must start with the headingPrefix verbatim — source and constant must not drift")
+    }
 }
 
 // MARK: - REP-149: acceptanceRate nil-vs-zero distinction
