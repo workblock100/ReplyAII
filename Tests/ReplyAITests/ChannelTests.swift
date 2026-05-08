@@ -67,6 +67,56 @@ final class ChannelTests: XCTestCase {
         }
     }
 
+    // MARK: - Cross-file pins: Channel.displayName ↔ <Service>Channel.displayName
+    //
+    // Each ChannelService implementation hard-codes its own `let displayName: String = "..."`
+    // independently of the Channel enum's `label`/`displayName` lookup. The two
+    // sources are both rendered to users (the channel enum drives Settings →
+    // Channels rows and onboarding copy; the service's instance property drives
+    // toasts that say "Sent via <displayName>" and the per-channel filter dropdown
+    // in InboxScreen). Drift between them produces inconsistent labels —
+    // e.g. Settings calls it "Slack" while the toast calls it "Slack DM" —
+    // with no compile-time signal. Pin equality here so a rename of either
+    // side fails this test rather than ships as a UX inconsistency.
+
+    func testSlackChannelDisplayNameMatchesChannelEnum() {
+        XCTAssertEqual(SlackChannel().displayName, Channel.slack.displayName,
+            "SlackChannel.displayName must equal Channel.slack.displayName — drift produces inconsistent labels between Settings (enum) and toasts/filters (service)")
+    }
+
+    func testTeamsChannelDisplayNameMatchesChannelEnum() {
+        XCTAssertEqual(TeamsChannel().displayName, Channel.teams.displayName,
+            "TeamsChannel.displayName must equal Channel.teams.displayName — drift produces inconsistent labels between Settings (enum) and toasts/filters (service)")
+    }
+
+    func testWhatsAppChannelDisplayNameMatchesChannelEnum() {
+        XCTAssertEqual(WhatsAppChannel().displayName, Channel.whatsapp.displayName,
+            "WhatsAppChannel.displayName must equal Channel.whatsapp.displayName — drift produces inconsistent labels between Settings (enum) and toasts/filters (service)")
+    }
+
+    func testSMSChannelDisplayNameMatchesChannelEnum() {
+        XCTAssertEqual(SMSChannel().displayName, Channel.sms.displayName,
+            "SMSChannel.displayName must equal Channel.sms.displayName — drift produces inconsistent labels between Settings (enum) and toasts/filters (service)")
+    }
+
+    func testTelegramChannelDisplayNameMatchesChannelEnum() {
+        XCTAssertEqual(TelegramChannel().displayName, Channel.telegram.displayName,
+            "TelegramChannel.displayName must equal Channel.telegram.displayName — drift produces inconsistent labels between Settings (enum) and toasts/filters (service)")
+    }
+
+    func testServiceChannelPropertyMatchesChannelEnumCase() {
+        // Companion check: the service's `channel: Channel` property must match
+        // the case the cross-pin asserts displayName equality against. A future
+        // refactor that sets `let channel: Channel = .imessage` on SlackChannel
+        // would otherwise pass the displayName pin (both still "Slack") while
+        // the routing layer would forward Slack messages to the iMessage sender.
+        XCTAssertEqual(SlackChannel().channel,    .slack)
+        XCTAssertEqual(TeamsChannel().channel,    .teams)
+        XCTAssertEqual(WhatsAppChannel().channel, .whatsapp)
+        XCTAssertEqual(SMSChannel().channel,      .sms)
+        XCTAssertEqual(TelegramChannel().channel, .telegram)
+    }
+
     func testLabelLiteralsArePinned() {
         // Labels appear verbatim in onboarding ("Connect WhatsApp"),
         // Settings → Channels rows, and the per-channel filter UI.
