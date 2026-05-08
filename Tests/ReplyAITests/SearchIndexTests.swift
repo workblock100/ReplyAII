@@ -1706,4 +1706,32 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
         XCTAssertEqual(SearchIndex.SQL.insertRow, expectedInsert,
             "insertRow column order must match the FTS5 schema; a reorder writes sender bytes into thread_name, etc.")
     }
+
+    /// `productionFileName` is the on-disk handle every install reads
+    /// from. Drift is a silent migration — the install's old index
+    /// stays on disk, the new build creates an empty new one, and
+    /// every `⌘K` palette query returns no results until a re-sync.
+    func testProductionFileNameIsSearchDb() {
+        XCTAssertEqual(SearchIndex.productionFileName, "search.db",
+            "search.db filename is the canonical on-disk handle — drift orphans every install's existing index")
+    }
+
+    /// Round-trip the production URL builder to pin that the path
+    /// actually flows through `productionFileName`. A future refactor
+    /// that defines the constant but inlines a different literal in
+    /// `productionDatabaseURL` would still pass `testProductionFileNameIsSearchDb`
+    /// while silently re-orphaning every install's index.
+    func testProductionDatabaseURLEndsInProductionFileName() {
+        let url = SearchIndex.productionDatabaseURL()
+        XCTAssertEqual(url.lastPathComponent, SearchIndex.productionFileName,
+            "productionDatabaseURL must end in productionFileName — drift between source and constant orphans every install's index")
+    }
+
+    /// And the directory must be the canonical app-support folder so
+    /// factory-reset's single-directory sweep finds the index.
+    func testProductionDatabaseURLLivesInAppSupportSubdirectory() {
+        let url = SearchIndex.productionDatabaseURL()
+        XCTAssertTrue(url.path.contains(Preferences.appSupportDirectoryName),
+            "search.db must sit inside `\(Preferences.appSupportDirectoryName)/` so factory-reset wipes it as part of the directory sweep — got: \(url.path)")
+    }
 }

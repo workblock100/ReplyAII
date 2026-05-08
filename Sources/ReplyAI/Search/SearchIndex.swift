@@ -49,6 +49,16 @@ actor SearchIndex {
         """
     }
 
+    /// On-disk filename for the FTS5 search index. Sits under
+    /// `~/Library/Application Support/ReplyAI/`. Drift here is a silent
+    /// migration: the install's old index stays on disk, the new build
+    /// creates an empty new one, and `⌘K` palette returns no results
+    /// for every message until a re-sync rebuilds. Hoisted alongside
+    /// `Preferences.appSupportDirectoryName` so the on-disk schema is
+    /// discoverable in one place. Pinned by
+    /// `SearchIndexTests.testProductionFileNameIsSearchDb`.
+    static let productionFileName = "search.db"
+
     /// - Parameter databaseURL: Path for the on-disk SQLite file.
     ///   Pass `nil` (the default) for an in-memory database — suitable for
     ///   tests where isolation matters more than persistence.
@@ -70,7 +80,7 @@ actor SearchIndex {
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support/\(Preferences.appSupportDirectoryName)", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-        return root.appendingPathComponent("search.db")
+        return root.appendingPathComponent(Self.productionFileName)
     }
 
     deinit {
