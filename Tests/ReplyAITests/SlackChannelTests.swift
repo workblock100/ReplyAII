@@ -903,6 +903,47 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(SlackChannel.Endpoint.chatPostMessage, "chat.postMessage",
             "Endpoint.chatPostMessage drift breaks send(text:toThreadID:) — every Slack send fails silently with `ok=false, error=unknown_method`")
     }
+
+    // MARK: - Param vocabulary pins (REP-hoist 2026-05-07)
+    //
+    // The five Slack Web API parameter keys (`limit`, `types`,
+    // `exclude_archived`, `channel`, `text`) are documented Slack
+    // parameter names. Drift silently ignores the parameter — Slack
+    // accepts unknown query params and applies its defaults — so the
+    // listing returns archived channels, the limit reverts to 100,
+    // types defaults to public_channel only, etc.
+
+    func testParamKeyLiteralsAreFrozen() {
+        XCTAssertEqual(SlackChannel.Param.limit, "limit",
+            "Param.limit drift silently reverts the page size to Slack's default of 100 — recentThreads's minAPILimit/maxAPILimit clamp does nothing")
+        XCTAssertEqual(SlackChannel.Param.types, "types",
+            "Param.types drift silently drops the `im,mpim,public_channel,private_channel` filter — recentThreads returns only public channels")
+        XCTAssertEqual(SlackChannel.Param.excludeArchived, "exclude_archived",
+            "Param.excludeArchived drift silently includes archived channels in the sidebar")
+        XCTAssertEqual(SlackChannel.Param.channel, "channel",
+            "Param.channel drift breaks both messages(forThreadID:) and send(text:toThreadID:) — Slack ignores the query and the call no-ops or 400s")
+        XCTAssertEqual(SlackChannel.Param.text, "text",
+            "Param.text drift breaks send(text:toThreadID:) — Slack accepts the call but stores no body, the message ships empty")
+    }
+
+    /// Pin the conversation-types filter as the exact 4-value
+    /// comma-separated list. Drift drops a category from the inbox
+    /// without any UX feedback — e.g. dropping `mpim` would silently
+    /// hide every multi-person group DM from the sidebar with no
+    /// error visible to the user.
+    func testConversationTypesFilterIsFrozen() {
+        XCTAssertEqual(SlackChannel.conversationTypesFilter, "im,mpim,public_channel,private_channel",
+            "conversationTypesFilter drift silently drops categories from the sidebar — `mpim` for group DMs is the most easily-overlooked")
+    }
+
+    /// Pin the `exclude_archived` value as the literal string `"true"`.
+    /// Slack's API takes the value as a stringified bool, not a JSON
+    /// bool — drift to `"1"` or `Bool(true).description` silently
+    /// includes every archived channel in the sidebar.
+    func testExcludeArchivedValueIsFrozen() {
+        XCTAssertEqual(SlackChannel.excludeArchivedValue, "true",
+            "excludeArchivedValue must be the literal string `true` — Slack's API expects a stringified bool, not `1` or some other truthy value")
+    }
 }
 
 // MARK: - Test doubles

@@ -49,6 +49,40 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
         static let chatPostMessage      = "chat.postMessage"
     }
 
+    /// Slack Web API query-parameter vocabulary. Each key maps to a
+    /// documented Slack parameter name (`conversations.list` accepts
+    /// `limit`, `types`, `exclude_archived`; `conversations.history`
+    /// accepts `channel`, `limit`; `chat.postMessage` accepts `channel`,
+    /// `text`). Drift on these keys silently ignores the parameter
+    /// (Slack accepts unknown query params and applies its defaults)
+    /// — the listing returns archived channels, the limit reverts to
+    /// 100, types defaults to public_channel only, etc. Hoisted so a
+    /// future endpoint addition lands on the same vocabulary.
+    enum Param {
+        static let limit            = "limit"
+        static let types            = "types"
+        static let excludeArchived  = "exclude_archived"
+        static let channel          = "channel"
+        static let text             = "text"
+    }
+
+    /// Conversation-types filter passed to `conversations.list`.
+    /// `im`=DMs, `mpim`=multi-person group DMs, `public_channel` and
+    /// `private_channel`=workspace channels. The four-type combination
+    /// is what surfaces ReplyAI's "all my conversations" semantics —
+    /// drift drops a category from the inbox without any UX feedback
+    /// (e.g. dropping `mpim` would silently hide every multi-person
+    /// group DM from the sidebar). Pinned by
+    /// `SlackChannelTests.testConversationTypesFilterIsFrozen`.
+    static let conversationTypesFilter = "im,mpim,public_channel,private_channel"
+
+    /// Slack `conversations.list` `exclude_archived` value. Pinned to
+    /// the literal string `true` (Slack's API takes the value as a
+    /// stringified bool, not a JSON bool). Drift to `"1"` or
+    /// `Bool(true).description` would silently include every archived
+    /// channel in the sidebar.
+    static let excludeArchivedValue = "true"
+
     private let tokenStore: SlackTokenStore
     private let http: SlackHTTPClient
     private let oauthFlowFactory: SlackOAuthFlowFactory
@@ -89,12 +123,12 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             endpoint: Endpoint.conversationsList,
             token: creds.token,
             params: [
-                "limit": String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
+                Param.limit: String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
                 // im   = direct messages
                 // mpim = multi-person group DMs
                 // public_channel + private_channel = workspace channels
-                "types": "im,mpim,public_channel,private_channel",
-                "exclude_archived": "true",
+                Param.types: Self.conversationTypesFilter,
+                Param.excludeArchived: Self.excludeArchivedValue,
             ]
         )
         return try Self.parseThreads(data, workspaceName: creds.workspaceName)
@@ -108,8 +142,8 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             endpoint: Endpoint.conversationsHistory,
             token: creds.token,
             params: [
-                "channel": id,
-                "limit": String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
+                Param.channel: id,
+                Param.limit: String(min(max(limit, Self.minAPILimit), Self.maxAPILimit)),
             ]
         )
         return try Self.parseMessages(data)
@@ -126,8 +160,8 @@ final class SlackChannel: ChannelService, @unchecked Sendable {
             endpoint: Endpoint.chatPostMessage,
             token: creds.token,
             json: [
-                "channel": id,
-                "text": text,
+                Param.channel: id,
+                Param.text: text,
             ]
         )
         // Slack acks 200 OK even when the API call failed; the body has
