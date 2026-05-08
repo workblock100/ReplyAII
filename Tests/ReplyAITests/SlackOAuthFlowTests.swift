@@ -981,4 +981,119 @@ final class SlackOAuthFlowTests: XCTestCase {
                        SlackOAuthFlow.contentTypeHeaderField,
             "URLSessionSlackClient.Header.contentTypeField must equal SlackOAuthFlow.contentTypeHeaderField — both name the standard `Content-Type` HTTP header; drift breaks body negotiation on either Slack request path")
     }
+
+    // MARK: - Token-exchange body shape pins
+
+    /// Pin that `redirect_uri` is sent VERBATIM in the token-exchange
+    /// body, NOT percent-encoded. The other three fields (`code`,
+    /// `client_id`, `client_secret`) all route through the
+    /// RFC-3986-strict `escape()` helper, but `redirect_uri` is
+    /// concatenated raw because Slack's `redirect_uri_mismatch` check
+    /// compares the token-exchange leg's value against the literal
+    /// registered in the app config — drift to a percent-encoded form
+    /// (`http%3A%2F%2Flocalhost%3A4242%2Fcallback`) silently fails the
+    /// exchange even though the *decoded* values are identical. A
+    /// future refactor that DRY'd all four fields through the same
+    /// `escape()` helper would re-introduce the bug. Pin so the
+    /// asymmetry is intentional and visible.
+    func testTokenExchangeBodyDoesNotPercentEncodeRedirectURI() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let body = MockURLProtocol.capturedRequests.first?.httpBody
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+
+        XCTAssertTrue(
+            body.contains("redirect_uri=http://localhost:4242/callback"),
+            "redirect_uri must appear verbatim with raw `:` and `/` — drift toward percent-encoding fails Slack's redirect_uri_mismatch check; got: \(body)"
+        )
+        XCTAssertFalse(
+            body.contains("redirect_uri=http%3A"),
+            "redirect_uri MUST NOT be percent-encoded (`http%3A%2F%2F…`) — Slack compares the literal against the registered URI; drift here surfaces as a generic tokenExchangeFailed with no UI hint pointing at encoding")
+        XCTAssertFalse(
+            body.contains("%2Fcallback"),
+            "the trailing `/callback` must remain a raw forward slash, not `%2Fcallback` — pinning rules out a partial-escape regression from a future helper that touched the path slash")
+    }
+
+    /// Pin the form-body field ORDER. `bodyParts` builds `[code,
+    /// client_id, client_secret, redirect_uri]` in exactly that
+    /// sequence and joins on `&`. Slack accepts any order, but the
+    /// curl-based debugging artifacts in AGENTS.md (and the captured
+    /// request fixtures in this test file's MockURLProtocol) all
+    /// assume this byte sequence. A future refactor to a
+    /// `[String: String]` dict would yield a non-deterministic order
+    /// (or alphabetical: `client_id, client_secret, code, redirect_uri`),
+    /// changing every captured request byte-for-byte. Pin the index
+    /// of each `field=` substring so the swap surfaces here, not as
+    /// every-test-fixture drifting in lockstep.
+    func testTokenExchangeBodyKeyOrderIsCodeClientIDClientSecretRedirectURI() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let body = MockURLProtocol.capturedRequests.first?.httpBody
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+
+        guard
+            let codeRange         = body.range(of: "code="),
+            let clientIDRange     = body.range(of: "client_id="),
+            let clientSecretRange = body.range(of: "client_secret="),
+            let redirectURIRange  = body.range(of: "redirect_uri=")
+        else {
+            XCTFail("body missing one of the four expected fields: \(body)")
+            return
+        }
+        XCTAssertLessThan(codeRange.lowerBound, clientIDRange.lowerBound,
+            "field order must be code → client_id → client_secret → redirect_uri; got: \(body)")
+        XCTAssertLessThan(clientIDRange.lowerBound, clientSecretRange.lowerBound,
+            "client_id must precede client_secret; got: \(body)")
+        XCTAssertLessThan(clientSecretRange.lowerBound, redirectURIRange.lowerBound,
+            "client_secret must precede redirect_uri; got: \(body)")
+    }
+
+    /// Pin the form-body field separator. `bodyParts.joined(separator: "&")`
+    /// — `&` is the only correct delimiter for
+    /// `application/x-www-form-urlencoded`. Drift to `;` (a legacy HTML5
+    /// alternative) or `,` corrupts the body on Slack's side without a
+    /// clear UI signal — Slack returns `invalid_form_data` which
+    /// surfaces as a generic `tokenExchangeFailed`. Pin both the
+    /// expected count of `&` separators and the negative `;` case.
+    func testTokenExchangeBodySeparatorIsAmpersand() {
+        MockURLProtocol.stubbedResponseJSON = ["ok": true, "access_token": "x"]
+        let exp = expectation(description: "authorize completes")
+        let flow = SlackOAuthFlow(
+            keychain: keychain,
+            urlOpener: MockURLOpener(),
+            session: mockSession,
+            listenerFactory: { _, _ in MockOAuthCallbackListener(code: "c") }
+        )
+        flow.authorize(clientID: "id", clientSecret: "sec") { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 3)
+
+        let body = MockURLProtocol.capturedRequests.first?.httpBody
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+
+        // Four fields → exactly three `&` separators (none of `id`,
+        // `sec`, `c` contain `&` after the unreserved-only escape).
+        let ampersandCount = body.filter { $0 == "&" }.count
+        XCTAssertEqual(ampersandCount, 3,
+            "exactly 3 `&` separators expected for 4 form fields; got count=\(ampersandCount), body=\(body)")
+        XCTAssertFalse(body.contains(";"),
+            "form body must NOT use `;` as a separator — drift to RFC 1866 HTML5-style separator silently fails Slack's invalid_form_data check; got: \(body)")
+    }
 }
