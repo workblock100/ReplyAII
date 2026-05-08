@@ -1098,6 +1098,23 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
         )
     }
 
+    /// Composition pin: `chatGUID1to1Separator` MUST equal
+    /// `<chatGUIDFieldSeparator><chatGUID1to1Marker><chatGUIDFieldSeparator>`.
+    /// Today both sides happen to be `";-;"` but that's an emergent
+    /// property — if a future refactor changes `chatGUID1to1Marker`
+    /// from `-` to (say) `_` to support a new chat-style, the
+    /// separator must follow or the synthesis path emits malformed
+    /// GUIDs while the validator still accepts the old shape. Pin
+    /// asserts the composition relationship so a one-side rename
+    /// surfaces as a deliberate change rather than a silent
+    /// desync. Mirrors the pattern of pinning emergent equalities
+    /// on top of individual frozen-literal pins.
+    func testChatGUID1to1SeparatorComposesFromFieldSeparatorAndMarker() {
+        let composed = "\(IMessageSender.chatGUIDFieldSeparator)\(IMessageSender.chatGUID1to1Marker)\(IMessageSender.chatGUIDFieldSeparator)"
+        XCTAssertEqual(IMessageSender.chatGUID1to1Separator, composed,
+            "chatGUID1to1Separator must equal <chatGUIDFieldSeparator><chatGUID1to1Marker><chatGUIDFieldSeparator>; if any of the three components is renamed independently of the others, the synthesis path emits a GUID the validator rejects")
+    }
+
     /// `appleScriptErrorPrefix` is the format prefix used at BOTH the
     /// emit site (`SendError.scriptFailure("\(prefix)\(code): \(msg)")`)
     /// AND the retry-detection site
