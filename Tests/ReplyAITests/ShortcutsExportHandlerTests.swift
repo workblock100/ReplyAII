@@ -459,13 +459,25 @@ final class ShortcutsExportHandlerTests: XCTestCase {
             "queryItems.first(where:) returns the first matching item; the second `data=…` is dropped")
     }
 
+    // MARK: - Hoisted-constant pin
+    //
+    // The `data` query parameter name is the only contract between the
+    // user-authored Shortcut and the parser. Drift is invisible to the
+    // user — every export silently throws `malformedPayload` and the
+    // inbox simply doesn't update. Pin freezes the literal.
+
+    func testQueryParameterNameIsFrozen() {
+        XCTAssertEqual(ShortcutsExportHandler.payloadQueryParameterName, "data",
+            "drift in the wire-format query name silently fails every Shortcut export — the user sees nothing happen and gets no error to act on")
+    }
+
     // MARK: - Helpers
 
     private func makeURL(payload: String) throws -> URL {
         var comps = URLComponents()
         comps.scheme = "replyai"
         comps.host = "import-messages"
-        comps.queryItems = [URLQueryItem(name: "data", value: payload)]
+        comps.queryItems = [URLQueryItem(name: ShortcutsExportHandler.payloadQueryParameterName, value: payload)]
         return try XCTUnwrap(comps.url)
     }
 }

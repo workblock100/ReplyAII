@@ -46,13 +46,23 @@ struct ShortcutsExportHandler: Sendable {
         let messages: [Message]
     }
 
+    /// Wire-format query parameter name carrying the JSON payload. The
+    /// user-authored Shortcut emits `replyai://import-messages?data=<encoded>`;
+    /// the parser looks for the same `data` key. Drift between Shortcut
+    /// and parser is invisible to the user — every export silently
+    /// throws `malformedPayload` and the inbox simply doesn't update.
+    /// Hoisted from the inline literal so the contract is greppable and
+    /// pinned. Pinned by
+    /// `ShortcutsExportHandlerTests.testQueryParameterNameIsFrozen`.
+    static let payloadQueryParameterName = "data"
+
     /// Parse `[Export]` out of a `replyai://import-messages?data=…` URL.
     /// Throws `.malformedPayload` for any structural failure (missing
     /// `data` param, malformed JSON, missing required fields).
     static func parse(url: URL) throws -> [Export] {
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let items = comps.queryItems,
-              let raw = items.first(where: { $0.name == "data" })?.value,
+              let raw = items.first(where: { $0.name == Self.payloadQueryParameterName })?.value,
               !raw.isEmpty,
               let data = raw.data(using: .utf8)
         else { throw ShortcutsExportError.malformedPayload }
