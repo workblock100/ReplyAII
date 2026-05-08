@@ -602,6 +602,51 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "no rows in → no messages out; the parser must accept an empty AppleScript result")
     }
 
+    /// Pin the whitespace-trim policy on the direction column. The
+    /// parser's `parts[1].trimmingCharacters(in: .whitespaces)` strip
+    /// means a row like `"hi||  outgoing  "` (AppleScript can pad
+    /// values when the runtime coerces certain types to text) maps
+    /// `.me` exactly the same as the unpadded `"hi||outgoing"` shape.
+    /// Drift toward "preserve verbatim" would silently flip every such
+    /// padded row to `.them` because the comparison `dir.lowercased()
+    /// == outgoingDirectionValue` would fail with embedded spaces. The
+    /// inverse (drift toward `.trimmingCharacters(.whitespacesAndNewlines)`)
+    /// would also affect line endings; leave that surface to the
+    /// existing CRLF / line-ending pins. This pin only locks the
+    /// embedded-space case at the direction column.
+    func testMessagesForChatTrimsWhitespaceAroundDirectionLiteral() throws {
+        // Three padding shapes that should ALL map to .me. AppleScript
+        // tends to emit a literal text representation that may include
+        // a trailing space; the parser must absorb that.
+        let raw = """
+        leading-space||  outgoing
+        trailing-space||outgoing
+        both-sides|| outgoing
+        """
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 10)
+        XCTAssertEqual(msgs.count, 3)
+        XCTAssertTrue(msgs.allSatisfy { $0.from == .me },
+            "every whitespace-padded `outgoing` direction must trim to `.me` — drift toward verbatim comparison would silently flip every padded row to `.them`")
+    }
+
+    /// Pin the same whitespace-trim contract on the `incoming` direction
+    /// literal. Padding maps to `.them` (which is also the default for
+    /// any unrecognized direction string), so the parser would *appear*
+    /// to handle padded `incoming` correctly even if the trim were
+    /// removed — but the trim still matters because a future refactor
+    /// might add a third direction literal whose `.them`-vs-something-
+    /// else distinction depends on exact-string equality. Pin both
+    /// sides so the trim contract is locked symmetrically.
+    func testMessagesForChatTrimsWhitespaceAroundIncomingDirectionLiteral() throws {
+        let raw = "padded||  incoming  "
+        let reader = makeReader(returning: raw)
+        let msgs = try reader.messagesForChat(chatGUID: "iMessage;-;+12014623980", limit: 5)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertEqual(msgs[0].from, .them,
+            "padded `incoming` direction must trim and map to `.them` (which is also the default for unknown directions, but pin the trim so the explicit-vs-default distinction is locked)")
+    }
+
     // MARK: - AppleScript template invariants
 
     /// Pin the AppleScript source emitted by `recentChats()`. The script
