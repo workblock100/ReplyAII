@@ -978,6 +978,33 @@ final class DraftEngineTests: XCTestCase {
             "lowConfidenceThreshold must stay strictly less than MLXDraftService.defaultDraftConfidence — otherwise every MLX draft routes through cmp-lowconf")
     }
 
+    // MARK: - primingKey format pin
+
+    /// Pin the priming-task dictionary key format. Used at FOUR call
+    /// sites (`prime`, `evict`, `invalidate`, `dismiss`) to look up
+    /// the in-flight prime task for a (threadID, tone) pair. Drift
+    /// between any two sites silently leaks tasks because the
+    /// cancel-side lookup misses the entry the prime-side stored.
+    func testPrimingKeyFormatRoundTripsAndIsStable() {
+        // Format roundtrip: `<threadID>:<tone-rawValue>` byte-for-byte.
+        XCTAssertEqual(DraftEngine.primingKey(threadID: "t1", tone: .warm),
+                       "t1:Warm")
+        XCTAssertEqual(DraftEngine.primingKey(threadID: "t1", tone: .direct),
+                       "t1:Direct")
+        XCTAssertEqual(DraftEngine.primingKey(threadID: "t1", tone: .playful),
+                       "t1:Playful")
+
+        // Pairwise distinct across (threadID, tone) — collision would
+        // mean one entry's cancel hits the other's task.
+        let keys = [
+            DraftEngine.primingKey(threadID: "t1", tone: .warm),
+            DraftEngine.primingKey(threadID: "t1", tone: .direct),
+            DraftEngine.primingKey(threadID: "t2", tone: .warm),
+        ]
+        XCTAssertEqual(Set(keys).count, keys.count,
+            "primingKey must produce distinct strings for each (thread, tone) pair — collision merges tasks")
+    }
+
 }
 
 // MARK: - Test-only mock LLM services (REP-038)

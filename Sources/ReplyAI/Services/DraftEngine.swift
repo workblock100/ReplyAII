@@ -45,6 +45,19 @@ final class DraftEngine {
         var isLowConfidence: Bool { confidence < Self.lowConfidenceThreshold }
     }
 
+    /// Format the priming-task dictionary key. Used at FOUR call sites
+    /// (`prime`, `evict`, `invalidate`, `dismiss`) to look up or store
+    /// the in-flight prime task for a (threadID, tone) pair.
+    /// `primingTasks` is a separate dictionary from `tasks`/`drafts`
+    /// because prime() can fire before a real Key exists, but the
+    /// lookup MUST agree across the four sites — drift between any
+    /// two means evict/invalidate/dismiss can't find the task to
+    /// cancel, leaving a silent leak. Pinned by
+    /// `DraftEngineTests.testPrimingKeyFormatRoundTripsAndIsStable`.
+    static func primingKey(threadID: String, tone: Tone) -> String {
+        "\(threadID):\(tone.rawValue)"
+    }
+
     private(set) var drafts: [Key: DraftState] = [:]
 
     /// Non-nil while the LLM service is loading weights (downloading or
@@ -86,7 +99,7 @@ final class DraftEngine {
     func prime(thread: MessageThread, tone: Tone, history: [Message]) {
         let key = Key(threadID: thread.id, tone: tone)
         if let existing = drafts[key], existing.isDone || !existing.text.isEmpty { return }
-        let primingKey = "\(thread.id):\(tone.rawValue)"
+        let primingKey = Self.primingKey(threadID: thread.id, tone: tone)
         primingTasks[primingKey]?.cancel()
         generate(thread: thread, tone: tone, history: history)
         primingTasks[primingKey] = tasks[key]
@@ -108,7 +121,7 @@ final class DraftEngine {
         for key in keys {
             tasks[key]?.cancel()
             tasks[key] = nil
-            primingTasks["\(key.threadID):\(key.tone.rawValue)"] = nil
+            primingTasks[Self.primingKey(threadID: key.threadID, tone: key.tone)] = nil
             drafts[key] = nil
         }
     }
@@ -125,7 +138,7 @@ final class DraftEngine {
         for key in keys {
             tasks[key]?.cancel()
             tasks[key] = nil
-            primingTasks["\(key.threadID):\(key.tone.rawValue)"] = nil
+            primingTasks[Self.primingKey(threadID: key.threadID, tone: key.tone)] = nil
             drafts[key] = DraftState()
         }
     }
@@ -137,7 +150,7 @@ final class DraftEngine {
         let key = Key(threadID: threadID, tone: tone)
         tasks[key]?.cancel()
         tasks[key] = nil
-        primingTasks["\(threadID):\(tone.rawValue)"] = nil
+        primingTasks[Self.primingKey(threadID: threadID, tone: tone)] = nil
         drafts[key] = nil
         store?.delete(threadID: threadID)
     }
