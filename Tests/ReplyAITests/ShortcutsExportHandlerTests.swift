@@ -503,6 +503,91 @@ final class ShortcutsExportHandlerTests: XCTestCase {
             "ShortcutsExportHandler.outgoingMessageMarker must equal SearchIndex.outgoingSenderLabel — drift desyncs imported-thread authorship from search")
     }
 
+    /// Pin that the parsed thread's `chatGUID` is set verbatim to the
+    /// payload's `id`. This is the route key `IMessageSender.chatGUID(for:)`
+    /// uses to reach the send target — drift to e.g. `chatGUID: nil`
+    /// or `chatGUID: "\(channel.rawValue):\(id)"` would silently break
+    /// every send originating from a Shortcuts-imported thread (the
+    /// sender's `chatGUID(for:)` would fall through to the synthesis
+    /// path and emit a malformed `iMessage;-;<channel>:<id>` GUID that
+    /// Messages.app rejects with `errOSAScriptError`). Pin both the
+    /// equality and the negative case (chatGUID is non-nil).
+    func testParsedThreadChatGUIDEqualsPayloadID() throws {
+        let payload = """
+        [{
+            "id": "iMessage;-;+15555550100",
+            "displayName": "Maya Lee",
+            "preview": "p",
+            "channel": "imessage",
+            "messages": []
+        }]
+        """
+        let url = try makeURL(payload: payload)
+        let exports = try ShortcutsExportHandler.parse(url: url)
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.chatGUID, "iMessage;-;+15555550100",
+            "imported-thread chatGUID must equal payload `id` verbatim — IMessageSender.chatGUID(for:) routes through this; drift would break send for every Shortcuts-imported thread")
+        XCTAssertEqual(exports[0].thread.id, exports[0].thread.chatGUID,
+            "imported-thread id and chatGUID must be the same value — both come from payload `id` and IMessageSender's send path round-trips through chatGUID; pin so a future `chatGUID: id + suffix` refactor surfaces here")
+    }
+
+    /// Pin that the `channel` field in the wire format is INDEPENDENT
+    /// of the `id` field's shape. A user-authored Shortcut could
+    /// emit `id: "iMessage;-;+15..."` (iMessage-shaped GUID) but
+    /// `channel: "slack"` (because the user repurposed an imessage
+    /// payload for a Slack export); the parser must NOT auto-correct
+    /// the channel based on the id format — the user's Shortcut owns
+    /// the channel field. Drift toward "if id starts with `iMessage;`
+    /// then force channel to .imessage" would silently override the
+    /// Shortcut's intent for any cross-channel import.
+    func testChannelFieldOverridesAnyInferenceFromIDShape() throws {
+        let payload = """
+        [{
+            "id": "iMessage;-;+15555550100",
+            "displayName": "Cross-channel",
+            "preview": "p",
+            "channel": "slack",
+            "messages": []
+        }]
+        """
+        let url = try makeURL(payload: payload)
+        let exports = try ShortcutsExportHandler.parse(url: url)
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.channel, .slack,
+            "channel field must override any iMessage-shape inference from id — Shortcut authors own the channel; a future `if id.hasPrefix(\"iMessage;\")` heuristic would silently corrupt cross-channel intent")
+        XCTAssertTrue(exports[0].thread.id.hasPrefix("iMessage;"),
+            "control: the test relies on an iMessage-shaped id; pinning the prefix lets the assertion above be unambiguous about what's being overridden")
+    }
+
+    /// Pin the empty-string `channel` fallback. A payload with
+    /// `"channel": ""` would `lowercased()` to `""`, then
+    /// `Channel(rawValue: "")` is nil, so the chain falls through to
+    /// `defaultChannel` (.imessage). Same shape as the
+    /// "unknown-string falls to imessage" case but pins the
+    /// present-but-empty leg specifically. Drift toward filtering empty
+    /// before the lowercased-rawValue lookup (e.g. `channel?.isEmpty == false`)
+    /// is a behavior-no-op today but pinning the present-but-empty
+    /// shape catches a future refactor that accidentally treats `""`
+    /// as "no field" and sends it through a different default route.
+    func testEmptyChannelStringFallsBackToImessage() throws {
+        let payload = """
+        [{
+            "id": "T1",
+            "displayName": "Empty Channel",
+            "preview": "p",
+            "channel": "",
+            "messages": []
+        }]
+        """
+        let url = try makeURL(payload: payload)
+        let exports = try ShortcutsExportHandler.parse(url: url)
+        XCTAssertEqual(exports.count, 1)
+        XCTAssertEqual(exports[0].thread.channel, ShortcutsExportHandler.defaultChannel,
+            "present-but-empty channel string must route through defaultChannel — same as missing-field path. Drift here is invisible until a future `channel?.isEmpty == false` filter changes the fallback shape")
+        XCTAssertEqual(exports[0].thread.channel, .imessage,
+            "control: defaultChannel is .imessage at the time of writing; double-pinned via the constant + the literal so a defaultChannel rebrand and an empty-string filter both have to update tests")
+    }
+
     // MARK: - Helpers
 
     private func makeURL(payload: String) throws -> URL {
