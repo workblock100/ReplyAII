@@ -70,6 +70,31 @@ struct IMessageChannel: ChannelService {
         static let syntheticChatIDPrefix  = "chat_"
     }
 
+    /// Lowercased substrings the chat.db open path matches against the
+    /// `sqlite3_errmsg` payload to classify a generic SQLITE_CANTOPEN /
+    /// SQLITE_AUTH failure as Full-Disk-Access-denied. macOS does NOT
+    /// always return SQLITE_AUTH (23) on FDA denial — in practice the
+    /// kernel returns SQLITE_CANTOPEN (14) with an `errmsg` string
+    /// containing "unable to open database file", and some seed/macOS
+    /// builds embed the word "authorization" in the underlying mach
+    /// reply. These substrings are the entire signal that routes the
+    /// failure into `ChannelError.permissionDenied(hint:)` (which
+    /// surfaces the "grant FDA in System Settings" recovery prose)
+    /// instead of the generic `databaseError(code:message:)` toast
+    /// (which is dead-end copy from the user's POV). Drift to a
+    /// different substring (capitalization, punctuation, or a phrase
+    /// that doesn't appear in real macOS errmsg payloads) silently
+    /// flips every FDA-denied user from the recovery path to the
+    /// dead-end toast and breaks the FDA banner trigger. The match
+    /// site lowercases the errmsg so these constants are
+    /// case-folded. Pinned by
+    /// `IMessageChannelTests.testFDAErrorMessageSubstringsAreFrozen`
+    /// and the `testOpenChatDB*PermissionDenied*` family.
+    enum FDADenialErrorMessageSubstring {
+        static let authorization = "authorization"
+        static let unableToOpen  = "unable to open"
+    }
+
     /// Optional name-resolver that translates phone/email handles to
     /// contact names. Injected from the ViewModel so we don't couple
     /// channel code to Contacts framework directly.
@@ -444,9 +469,10 @@ struct IMessageChannel: ChannelService {
             // SQLITE_AUTH (23) is the canonical authorization-denied code.
             // String matching covers the real-world macOS FDA denial path where
             // sqlite3_open_v2 returns SQLITE_CANTOPEN with "unable to open database file".
+            let lowerMsg = msg.lowercased()
             if rc == SQLITE_AUTH
-                || msg.lowercased().contains("authorization")
-                || msg.lowercased().contains("unable to open") {
+                || lowerMsg.contains(FDADenialErrorMessageSubstring.authorization)
+                || lowerMsg.contains(FDADenialErrorMessageSubstring.unableToOpen) {
                 throw ChannelError.permissionDenied(hint: """
                     ReplyAI can't read your Messages database yet. Grant Full Disk Access in \
                     System Settings → Privacy & Security → Full Disk Access, then try again.

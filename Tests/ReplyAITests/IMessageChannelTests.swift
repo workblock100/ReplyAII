@@ -2023,4 +2023,37 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
         XCTAssertEqual(formatted, IMessageChannel.TimeFormat.yesterdayLabel,
             "25h-ago timestamp must render as TimeFormat.yesterdayLabel — drift between matcher and constant is silent")
     }
+
+    // MARK: - FDA-denial error-message substring freeze
+
+    /// Pin the lowercase substrings the chat.db open path matches
+    /// against the SQLite errmsg payload to classify a generic
+    /// SQLITE_CANTOPEN/SQLITE_AUTH failure as FDA-denied. These two
+    /// substrings are the entire signal that routes the failure into
+    /// `permissionDenied(hint:)` (with recovery prose) instead of
+    /// `databaseError(code:message:)` (a dead-end toast). Drift here
+    /// silently flips every FDA-denied user from recovery copy to the
+    /// generic toast — captured here so a future refactor that
+    /// casefolds, splits, or rephrases either substring is a review
+    /// surface.
+    func testFDAErrorMessageSubstringsAreFrozen() {
+        XCTAssertEqual(IMessageChannel.FDADenialErrorMessageSubstring.authorization,
+                       "authorization")
+        XCTAssertEqual(IMessageChannel.FDADenialErrorMessageSubstring.unableToOpen,
+                       "unable to open")
+    }
+
+    /// Pin the case-folding contract: the open-DB site lowercases the
+    /// errmsg before matching, so the constants themselves must be
+    /// already-lowercased. A capitalized constant ("Unable to open")
+    /// would never match anything because the site call-folds the
+    /// haystack but not the needle.
+    func testFDAErrorMessageSubstringsAreLowercase() {
+        XCTAssertEqual(IMessageChannel.FDADenialErrorMessageSubstring.authorization,
+                       IMessageChannel.FDADenialErrorMessageSubstring.authorization.lowercased(),
+            "authorization substring must already be lowercase — match site case-folds the haystack only")
+        XCTAssertEqual(IMessageChannel.FDADenialErrorMessageSubstring.unableToOpen,
+                       IMessageChannel.FDADenialErrorMessageSubstring.unableToOpen.lowercased(),
+            "unableToOpen substring must already be lowercase — match site case-folds the haystack only")
+    }
 }
