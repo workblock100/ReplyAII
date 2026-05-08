@@ -1726,6 +1726,44 @@ final class InboxViewModelChatGUIDDeduplicationTests: XCTestCase {
             "nil chatGUID with non-matching senderHandle must create a new thread")
     }
 
+    /// New threads created from a notification must land at index 0 (top
+    /// of inbox), NOT appended at the end. The implementation
+    /// (`threads.insert(..., at: 0)`) matches what the existing bump-to-
+    /// top tests prove for the "match found → refresh" path, but the
+    /// "no match → create new" path's insertion position is not asserted
+    /// by `testIncomingNotificationWithNilGUIDCreatesNewThread` (it only
+    /// checks count). A future "use threads.append for new entries"
+    /// refactor (e.g. to preserve scroll-anchor on the inbox) would still
+    /// pass that count check while putting the most urgent unread
+    /// notification BELOW every existing thread — the user's eye lands on
+    /// stale threads, not the new one. Pin the position so the contract
+    /// is explicit in CI.
+    func testIncomingNotificationCreatesNewThreadAtIndexZero() {
+        let vm = makeVM(threads: [
+            MessageThread(id: "t-existing-1", channel: .imessage, name: "Existing One",
+                          avatar: "E1", preview: "old1", time: "08:00",
+                          chatGUID: "iMessage;-;+15550000001"),
+            MessageThread(id: "t-existing-2", channel: .imessage, name: "Existing Two",
+                          avatar: "E2", preview: "old2", time: "09:00",
+                          chatGUID: "iMessage;-;+15550000002")
+        ])
+
+        vm.applyIncomingNotification(
+            senderHandle: "+19998887777",
+            preview: "Brand new conversation",
+            chatGUID: "iMessage;-;+19998887777"
+        )
+
+        XCTAssertEqual(vm.threads.count, 3,
+                       "non-matching notification must create a new thread")
+        XCTAssertEqual(vm.threads.first?.preview, "Brand new conversation",
+                       "the newly created thread must land at index 0 (top of inbox), not appended at end — the user's eye lands on the most recent unread")
+        XCTAssertEqual(vm.threads.first?.name, "+19998887777",
+                       "the new thread's display name comes from the senderHandle (no contact resolution at notification time)")
+        XCTAssertEqual(vm.threads.first?.unread, 1,
+                       "newly-created notification thread starts with unread = 1")
+    }
+
     // MARK: - chatDBAvailable gate + side-effects (autopilot 2026-05-07)
 
     /// `applyIncomingNotification` must short-circuit when chat.db sync is
