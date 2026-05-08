@@ -161,6 +161,46 @@ enum IMessageSender {
     /// Hoisted so a future copy edit lands on a named constant.
     static let scriptParseFailureCopy = "NSAppleScript failed to parse"
 
+    /// AppleScript `tell application` target. The only process that
+    /// exposes the `chat id` reference and `send` verb we use is the
+    /// system Messages.app — addressing any other application would
+    /// either compile-error inside AppleScript or post the text to a
+    /// different process entirely. Hoisting from the inline literal in
+    /// the send template means a future "let's use the SMS service
+    /// instead" or "rename to Messages.app" refactor lands on one
+    /// named constant. Pinned by
+    /// `IMessageSenderTests.testAppleScriptApplicationTargetIsFrozen`.
+    static let appleScriptApplicationTarget = "Messages"
+
+    /// AppleScript binding name for the resolved chat reference inside
+    /// the send template. Used at two coupled sites — the assignment
+    /// (`set <name> to a reference to chat id "..."`) and the send
+    /// destination (`send "..." to <name>`). Drift between the two
+    /// silently breaks every send with an "undefined identifier"
+    /// AppleScript error. Hoisting routes both sites through one
+    /// constant so a refactor that "shortens the variable name" can't
+    /// only touch one site. Pinned by
+    /// `IMessageSenderTests.testAppleScriptChatBindingNameIsFrozen`.
+    static let appleScriptChatBindingName = "targetChat"
+
+    /// Render the canonical AppleScript send template for a given
+    /// already-escaped body and chat GUID. The template is the wire
+    /// format Messages.app consumes — the four-line shape (tell-opener,
+    /// chat-id reference, send statement, end-tell closer) is the
+    /// contract. Hoisting from `sendRaw`'s inline `let source = """…"""`
+    /// gives one named place to assert exact equality against the
+    /// expected literal in tests, complementing the per-substring pins
+    /// in `IMessageSenderAppleScriptTemplateTests`. Pinned by
+    /// `IMessageSenderTests.testAppleScriptSendSourceMatchesExpectedTemplate`.
+    static func appleScriptSendSource(escapedText: String, escapedGUID: String) -> String {
+        """
+        tell application "\(appleScriptApplicationTarget)"
+            set \(appleScriptChatBindingName) to a reference to chat id "\(escapedGUID)"
+            send "\(escapedText)" to \(appleScriptChatBindingName)
+        end tell
+        """
+    }
+
     /// Delay between a -1708 failure and the retry attempt.
     /// Defaults to 0.5 s in production; set to 0.0 in tests to avoid slow paths.
     nonisolated(unsafe) static var retryDelay: TimeInterval = defaultRetryDelay
@@ -221,12 +261,7 @@ enum IMessageSender {
 
         // `chat id "<guid>"` matches an existing chat by its GUID. `send`
         // posts the message as the current user.
-        let source = """
-        tell application "Messages"
-            set targetChat to a reference to chat id "\(escapedGUID)"
-            send "\(escapedText)" to targetChat
-        end tell
-        """
+        let source = Self.appleScriptSendSource(escapedText: escapedText, escapedGUID: escapedGUID)
 
         // Capture executor once so test hooks can't be swapped mid-flight.
         let executor: (String) throws -> Void = executeHook ?? { src in

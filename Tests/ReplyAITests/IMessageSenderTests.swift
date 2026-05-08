@@ -1131,4 +1131,76 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
                        "NSAppleScript failed to parse",
             "scriptParseFailureCopy drift breaks support-engineer log grep on the pre-execution-syntax-failure path")
     }
+
+    /// `appleScriptApplicationTarget` is the `tell application "<X>"`
+    /// process name. Drift to anything other than "Messages" addresses
+    /// either a non-existent application (compile error) or a different
+    /// process (silent send to the wrong place). Pin the literal so a
+    /// "let's quote with single ticks" or "Messages.app" rewrite is
+    /// surfaced in code review.
+    func testAppleScriptApplicationTargetIsFrozen() {
+        XCTAssertEqual(IMessageSender.appleScriptApplicationTarget, "Messages",
+            "AppleScript application target drift breaks every send — Messages.app is the only process that exposes `chat id` + `send`")
+    }
+
+    /// `appleScriptChatBindingName` is the local-variable name shared
+    /// between the assignment line (`set <name> to a reference to chat
+    /// id "..."`) and the send line (`send "..." to <name>`). Drift on
+    /// only one site emits AppleScript that fails at runtime with
+    /// "undefined identifier"; pinning the constant routes both sites
+    /// through one source of truth so any rename touches both.
+    func testAppleScriptChatBindingNameIsFrozen() {
+        XCTAssertEqual(IMessageSender.appleScriptChatBindingName, "targetChat",
+            "binding-name drift between the set-site and send-site silently breaks every send with an undefined-identifier error")
+    }
+
+    /// Render-equality pin: `appleScriptSendSource` for a fixed
+    /// (text, guid) pair must match the expected four-line literal
+    /// byte-for-byte. Complements the per-substring `contains` pins in
+    /// `IMessageSenderAppleScriptTemplateTests` — those assert each
+    /// line is present, this asserts no extra lines crept in (e.g. a
+    /// stray `delay 1` or `display notification` line) and the leading
+    /// indentation matches what AppleScript compiles cleanly.
+    func testAppleScriptSendSourceMatchesExpectedTemplate() {
+        let rendered = IMessageSender.appleScriptSendSource(
+            escapedText: "hello",
+            escapedGUID: "iMessage;-;+15551234567"
+        )
+        let expected = """
+        tell application "Messages"
+            set targetChat to a reference to chat id "iMessage;-;+15551234567"
+            send "hello" to targetChat
+        end tell
+        """
+        XCTAssertEqual(rendered, expected,
+            "AppleScript send template drift — extra/missing lines or indent change would break script compilation or change the send semantics")
+    }
+
+    /// Round-trip pin: the rendered template must thread the inputs
+    /// through the assignment site and the send site verbatim, AND
+    /// must use the hoisted constants (not inline duplicates) at both
+    /// the application-target and binding-name positions. Catches a
+    /// refactor that rewrites the builder to bypass `appleScriptApplicationTarget`
+    /// or `appleScriptChatBindingName` — the literal-pins above would
+    /// still pass on the constants while the builder silently used
+    /// hardcoded strings.
+    func testAppleScriptSendSourceUsesHoistedConstants() {
+        let rendered = IMessageSender.appleScriptSendSource(
+            escapedText: "body",
+            escapedGUID: "iMessage;+;chatX"
+        )
+        // application target appears inside `tell application "..."`
+        XCTAssertTrue(rendered.contains("tell application \"\(IMessageSender.appleScriptApplicationTarget)\""),
+            "builder must thread `appleScriptApplicationTarget` constant into the tell-opener — got: \(rendered)")
+        // binding name appears in both the set site and the send site
+        XCTAssertTrue(rendered.contains("set \(IMessageSender.appleScriptChatBindingName) to a reference to chat id"),
+            "builder must thread `appleScriptChatBindingName` into the set-site — got: \(rendered)")
+        XCTAssertTrue(rendered.contains("to \(IMessageSender.appleScriptChatBindingName)"),
+            "builder must thread `appleScriptChatBindingName` into the send-site — got: \(rendered)")
+        // input arguments must round-trip through the rendered string.
+        XCTAssertTrue(rendered.contains("\"iMessage;+;chatX\""),
+            "escapedGUID must appear quoted in the rendered template — got: \(rendered)")
+        XCTAssertTrue(rendered.contains("send \"body\""),
+            "escapedText must appear quoted after `send` in the rendered template — got: \(rendered)")
+    }
 }
