@@ -2025,7 +2025,7 @@ final class InboxViewModelThreadCacheTests: XCTestCase {
         XCTAssertEqual(json[0]["id"] as? String, "t1")
         XCTAssertEqual(json[0]["displayName"] as? String, "Alice")
         XCTAssertEqual(json[0]["chatGUID"] as? String, "iMessage;-;+11")
-        XCTAssertEqual(json[0]["channel"] as? String, "imessage")
+        XCTAssertEqual(json[0]["channel"] as? String, Channel.imessage.rawValue)
     }
 
     /// Fresh ViewModel with no threads + cache present → threads populated from cache.
