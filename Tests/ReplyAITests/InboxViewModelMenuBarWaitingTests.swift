@@ -154,4 +154,50 @@ final class InboxViewModelMenuBarWaitingTests: XCTestCase {
         vm.threads = [thread(id: "x", unread: 0)]
         XCTAssertTrue(vm.menuBarWaitingThreads.isEmpty)
     }
+
+    // MARK: - Invariant 5: order is preserved from `threads`
+    //
+    // The MenuBarExtra popover renders waiting threads top-to-bottom in
+    // the order this property emits them. The implementation is a plain
+    // `Array.filter`, which preserves source order — but the existing
+    // `testMixedReadAndUnreadOnlyShowsUnread` projects through `Set(...)`,
+    // which loses order. A future refactor that switches to e.g.
+    // `threads.sorted(by: { $0.time > $1.time }).filter(...)` (recency-
+    // sort the menu) or to a Dictionary-backed lookup would still pass
+    // every existing assertion while silently changing the menu's row
+    // order — confusing for users who learned where each thread sits.
+    // Pin the source-order invariant so any reordering edit lands as a
+    // deliberate code-review diff, not a stealth UX change.
+    func testWaitingPreservesSourceOrderFromThreadsArray() {
+        let threads = [
+            thread(id: "first-unread",  unread: 1),
+            thread(id: "read-middle",   unread: 0),
+            thread(id: "second-unread", unread: 7),
+            thread(id: "third-unread",  unread: 2),
+        ]
+        let vm = InboxViewModel(threads: threads, contacts: fastContacts(), defaults: freshDefaults())
+        XCTAssertEqual(
+            vm.menuBarWaitingThreads.map(\.id),
+            ["first-unread", "second-unread", "third-unread"],
+            "menuBarWaitingThreads must preserve the order of `threads` — the menu-bar popover surfaces rows top-to-bottom in this order; a sort-on-the-way-out refactor would still pass set-based tests"
+        )
+    }
+
+    // Same invariant under the silently-ignored filter — pin separately
+    // because a refactor could introduce ordering drift only inside the
+    // ignore-filter branch (e.g. `threads.subtract(ignored).sorted(...)`).
+    func testWaitingPreservesSourceOrderEvenWithSilentlyIgnored() {
+        let threads = [
+            thread(id: "unread-a",  unread: 1),
+            thread(id: "ignored",   unread: 9),
+            thread(id: "unread-b",  unread: 1),
+        ]
+        let vm = InboxViewModel(threads: threads, contacts: fastContacts(), defaults: freshDefaults())
+        vm.silentlyIgnoredThreadIDs = ["ignored"]
+        XCTAssertEqual(
+            vm.menuBarWaitingThreads.map(\.id),
+            ["unread-a", "unread-b"],
+            "filter ordering must be preserved when silentlyIgnoredThreadIDs removes mid-list rows"
+        )
+    }
 }
