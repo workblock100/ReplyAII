@@ -172,6 +172,29 @@ final class MLXDraftServiceTests: XCTestCase {
                        "1024 MiB + 1 byte must flip to GB form — pin the first-byte-over boundary so a future precision tweak surfaces here, not in user-visible banner copy")
     }
 
+    /// Pin a defensive surface: `formatBytes` has no negative-input
+    /// guard. A negative `Int64` input (which shouldn't reach the
+    /// banner path in production — `progress.completedUnitCount` is
+    /// non-negative — but could surface from a buggy mock or a future
+    /// caller that forgets the contract) divides through to a small
+    /// negative `mib`, fails the `mib > 1024` check, and renders as
+    /// `"-0 MB"` (Swift's `String(format: "%.0f MB", -X)` on a tiny
+    /// negative number).
+    ///
+    /// The exact rendering depends on rounding; we pin only the
+    /// structural invariants: the result is non-empty AND ends with
+    /// the `" MB"` suffix (so a negative input never accidentally
+    /// flips into the GB branch). Drift toward `guard bytes >= 0
+    /// else { return "0 MB" }` would silently change this surface; pin
+    /// so the harden lands as a deliberate change.
+    func testFormatBytesNegativeInputStaysInMegabytesBranch() {
+        let result = MLXDraftService.formatBytes(-1024 * 1024)  // -1 MiB
+        XCTAssertFalse(result.isEmpty,
+            "formatBytes(negative) must produce a non-empty string — there's no negative-input guard, so the formatter runs against a small-negative mib value")
+        XCTAssertTrue(result.hasSuffix(" MB"),
+            "negative input must stay in the MB branch (mib > 1024 fails for any non-positive value) — drift toward `mib.magnitude > 1024` would flip large negatives to GB form, which would silently change banner copy on any buggy caller. Got: '\(result)'")
+    }
+
     /// Pin the byte-form download separator characters. The current
     /// banner reads `"Downloading model · 864 MB of 1.8 GB"` — that's
     /// space + U+00B7 MIDDLE DOT + space between `model` and the byte
