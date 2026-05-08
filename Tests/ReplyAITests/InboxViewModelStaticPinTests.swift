@@ -79,6 +79,25 @@ final class InboxViewModelStaticPinTests: XCTestCase {
     /// One test pinning all five together because the keys form a
     /// coherent contract — they MUST all start with the
     /// `wipeNamespacePrefix` so the wipe logic finds them.
+    /// `InboxViewModel.sentToToast(recipient:)` is the
+    /// success-path toast copy after a real send. Format is `"Sent
+    /// to <recipient>"` — drift to e.g. `"Sent: <recipient>"` or
+    /// `"Sent (<recipient>)"` would silently change the toast users
+    /// see on every successful send. Pinned in
+    /// `InboxViewModelTests.swift` via `testSentToToastFormatRoundTrips`,
+    /// but that file is in the three-skip workaround so the
+    /// canonical pin doesn't fire under the autopilot's standard merge
+    /// gate. Mirror here so toast-copy drift surfaces under the
+    /// three-skip run too.
+    func testSentToToastFormatMirroredPin() {
+        XCTAssertEqual(InboxViewModel.sentToToast(recipient: "Maya"),
+                       "Sent to Maya",
+            "sentToToast format must round-trip — `Sent to <name>` is what users see on every successful send; drift would silently change toast copy on every shipped install")
+        XCTAssertEqual(InboxViewModel.sentToToast(recipient: ""),
+                       "Sent to ",
+            "empty recipient still produces the prefix verbatim — pin so a future `guard !recipient.isEmpty` shim that suppresses the toast lands as a deliberate change, not a silent UX drop")
+    }
+
     func testInboxPersistenceKeysAreFrozen() {
         XCTAssertEqual(InboxViewModel.archivedKey, "pref.inbox.archivedThreadIDs",
             "archivedKey drift orphans archived-thread state on every shipped user — they keep seeing rows they thought they archived")
