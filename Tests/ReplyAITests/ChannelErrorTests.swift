@@ -118,4 +118,40 @@ final class ChannelErrorTests: XCTestCase {
             XCTFail("expected .databaseError, got \(err)")
         }
     }
+
+    // MARK: - Hoisted user-visible copy pins
+    //
+    // The two parameterless cases (`authorizationDenied`,
+    // `databaseCorrupted`) carry user-visible toast copy that lives in a
+    // switch arm in production code. Hoisted to `static let` so a) copy
+    // review can land on the constant rather than greping a switch, and
+    // b) tests pin the exact bytes a returning user sees. These pins
+    // catch a future "let's reword" landing without UX review.
+
+    func testAuthorizationDeniedCopyIsFrozen() {
+        XCTAssertEqual(
+            ChannelError.authorizationDeniedCopy,
+            "This channel isn't connected yet. Open Settings to sign in.",
+            "authorizationDenied copy assumes the inbox surfaces a tap-target that opens channel settings — drift desyncs copy from UX"
+        )
+        // And the case maps to the constant.
+        XCTAssertEqual(
+            ChannelError.authorizationDenied.errorDescription,
+            ChannelError.authorizationDeniedCopy,
+            "authorizationDenied case must route through the hoisted constant — drift here would make the toast different from the test-pinned copy"
+        )
+    }
+
+    func testDatabaseCorruptedCopyIsFrozen() {
+        XCTAssertEqual(
+            ChannelError.databaseCorruptedCopy,
+            "The Messages database appears corrupted. Try signing out of iCloud Messages and back in to rebuild it.",
+            "databaseCorrupted copy steers the user to their own recovery path; rewording requires QA"
+        )
+        XCTAssertEqual(
+            ChannelError.databaseCorrupted.errorDescription,
+            ChannelError.databaseCorruptedCopy,
+            "databaseCorrupted case must route through the hoisted constant"
+        )
+    }
 }

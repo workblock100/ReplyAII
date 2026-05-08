@@ -90,13 +90,33 @@ enum ChannelError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .permissionDenied(let hint):           hint
-        case .authorizationDenied:                  "This channel isn't connected yet. Open Settings to sign in."
+        case .authorizationDenied:                  Self.authorizationDeniedCopy
         case .unavailable(let s):                   s
         case .query(let s):                         s
         case .databaseError(_, let message):        message
-        case .databaseCorrupted:
-            "The Messages database appears corrupted. Try signing out of iCloud Messages and back in to rebuild it."
+        case .databaseCorrupted:                    Self.databaseCorruptedCopy
         case .networkError(let s):                  s
         }
     }
+
+    /// User-visible toast copy for `authorizationDenied`. Hoisted from
+    /// the inline literal so a) onboarding/Settings UX copy review can
+    /// land here without grepping a switch arm, b) tests can pin the
+    /// exact string a returning user sees instead of re-typing it. The
+    /// "Open Settings" verb assumes the inbox surfaces a tap-target
+    /// that opens the channel-settings sheet — drift in either direction
+    /// (asking the user to do something the UI no longer supports, or
+    /// not asking when the UI does support it) is a copy/UX desync that
+    /// only QA catches today. Pinned by
+    /// `ChannelErrorTests.testAuthorizationDeniedCopyIsFrozen`.
+    static let authorizationDeniedCopy =
+        "This channel isn't connected yet. Open Settings to sign in."
+
+    /// User-visible toast copy for `databaseCorrupted`. Same hoisting
+    /// rationale as `authorizationDeniedCopy` — the recovery instruction
+    /// ("sign out of iCloud Messages and back in") assumes the user
+    /// understands they own that recovery path; copy review and the test
+    /// pin both belong here, not in a switch arm.
+    static let databaseCorruptedCopy =
+        "The Messages database appears corrupted. Try signing out of iCloud Messages and back in to rebuild it."
 }
