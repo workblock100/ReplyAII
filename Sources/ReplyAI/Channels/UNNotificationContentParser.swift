@@ -38,26 +38,22 @@ enum UNNotificationContentParser {
     /// `chatGUID` is populated from `userInfo[CKChatIdentifier]` or `userInfo[CKChatGUID]`.
     ///
     /// **Divergence with `NotificationCoordinator.willPresent`**: two
-    /// paths exist for resolving the same notification fields, and they
-    /// disagree on two contracts:
+    /// paths exist for resolving the same notification fields. The
+    /// sender-key contract (parser tries `ckSenderID` → `sender` →
+    /// `title`) was previously divergent from willPresent (which only
+    /// tried `sender` → `title`); they are now aligned — both paths
+    /// follow the same three-step order.
     ///
-    /// 1. **Sender key**: this parser checks `ckSenderID` → `sender` →
-    ///    `title` (three steps); willPresent skips `ckSenderID` and only
-    ///    checks `sender` → `title`. Modern iMessage / Continuity
-    ///    payloads populate `CKSenderID` but not always `sender`, so
-    ///    willPresent on those falls through to the title (contact
-    ///    display name) while this parser returns the raw handle.
-    ///
-    /// 2. **Empty `CKChatIdentifier`**: this parser keeps a present-
-    ///    but-empty `CKChatIdentifier` verbatim (no fallback to
-    ///    `CKChatGUID`), pinned by `testEmptyCKChatIdentifierIsNotFalledBack`.
-    ///    The inline willPresent path filters present-but-empty values
-    ///    to nil and falls through to `CKChatGUID`.
-    ///
-    /// If this parser ever replaces the inline path, harmonize both
-    /// contracts deliberately — the pinned tests on each side will
-    /// fail and force a real decision rather than a silent behavior
-    /// flip in production notification handling.
+    /// One contract still diverges: **empty `CKChatIdentifier`**.
+    /// This parser keeps a present-but-empty `CKChatIdentifier`
+    /// verbatim with no fallback to `CKChatGUID`, pinned by
+    /// `testEmptyCKChatIdentifierIsNotFalledBack`. The inline
+    /// willPresent path filters present-but-empty values to nil and
+    /// falls through to `CKChatGUID`. If this parser ever replaces
+    /// the inline path, harmonize the empty-chatGUID contract
+    /// deliberately — the pinned test will fail and force a real
+    /// decision rather than a silent behavior flip in production
+    /// notification handling.
     static func parse(_ content: UNNotificationContent) -> ParsedMessageNotification? {
         let senderHandle: String
         if let ckSender = content.userInfo[UserInfoKey.ckSenderID] as? String, !ckSender.isEmpty {

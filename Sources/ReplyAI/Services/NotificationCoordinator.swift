@@ -191,31 +191,28 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     ) {
         let content = notification.request.content
         let categoryID = content.categoryIdentifier
-        // Read `sender` only (not `CKSenderID`) and fall back to title.
-        // The empty-string check prevents an empty `sender` value from
-        // bypassing the title fallback — without it, a malformed
-        // notification with `userInfo["sender"] = ""` would propagate an
-        // empty handle into applyIncomingNotification and (because
-        // `chatGUID.hasSuffix("")` is true for every string) match the
-        // first thread by accident.
+        // Sender resolution: `CKSenderID` → `sender` → title. Each step
+        // skips a present-but-empty value rather than letting it
+        // through, so a malformed notification with e.g.
+        // `userInfo["sender"] = ""` falls through to the next step
+        // instead of propagating an empty handle into
+        // applyIncomingNotification (which would let
+        // `chatGUID.hasSuffix("")` match the first thread by accident).
         //
-        // **Divergence with `UNNotificationContentParser.parse`**:
-        // the parser checks `UserInfoKey.ckSenderID` first, then
-        // `UserInfoKey.sender`, then `content.title` — three steps —
-        // while this inline path skips the `ckSenderID` step. Modern
-        // iMessage / Continuity notifications populate `CKSenderID`
-        // but not always `sender`, so willPresent on those payloads
-        // falls straight through to the title (the contact display
-        // name, e.g. "Mom") instead of the raw handle. The two paths
-        // diverged when the parser was extracted as a structured
-        // alternative; harmonizing means routing willPresent through
-        // `UNNotificationContentParser.parse(content)` and accepting
-        // the parser's empty-CKChatIdentifier-no-fallback semantics
-        // (pinned by `testEmptyCKChatIdentifierIsNotFalledBack`).
-        // Until that's done, this comment + the parser's mirror
-        // divergence note are the only places that surface the gap.
+        // This three-step order mirrors `UNNotificationContentParser.parse`,
+        // which is the structured equivalent. The two paths previously
+        // diverged on this contract (willPresent skipped `CKSenderID`,
+        // which modern iMessage / Continuity payloads populate but
+        // legacy `sender` does not); the divergence note in the parser
+        // header documented the gap and is now superseded by the
+        // alignment here. The chatGUID-empty-string contract still
+        // diverges between the two paths — see the cross-reference
+        // below for that one.
+        let rawCKSender = content.userInfo[UNNotificationContentParser.UserInfoKey.ckSenderID] as? String
         let rawSender = content.userInfo[UNNotificationContentParser.UserInfoKey.sender] as? String
-        let senderHandle = (rawSender?.isEmpty == false ? rawSender : nil) ?? content.title
+        let senderHandle = (rawCKSender?.isEmpty == false ? rawCKSender : nil)
+            ?? (rawSender?.isEmpty == false ? rawSender : nil)
+            ?? content.title
         let preview = content.body
         // CKChatIdentifier is the primary key iMessage userInfo uses for the conversation;
         // CKChatGUID is the older fallback. Either uniquely identifies the chat.db thread.
