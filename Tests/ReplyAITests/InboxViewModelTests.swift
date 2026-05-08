@@ -3559,6 +3559,28 @@ final class InboxViewModelMessagesForThreadTests: XCTestCase {
             "an empty time label leaves the inbox row's time chip blank — every notification-driven row would render with no temporal cue")
     }
 
+    /// Pin the empty-result sync-failure copy. The sidebar truncates
+    /// `error · <msg>` to ~24 message chars, so the first 24 chars
+    /// must read sensibly on their own. The full message is also a
+    /// documented hook the pivot's "stop saying chat.db" rewrite must
+    /// explicitly land against — pin makes the next edit a deliberate
+    /// one-line diff against an exact prior wording.
+    func testEmptyChatDBSyncFailureMessageIsFrozen() {
+        XCTAssertEqual(InboxViewModel.emptyChatDBSyncFailureMessage,
+                       "No conversations returned. chat.db may be empty on this account.",
+                       "drift in this sync-failure copy changes the sidebar `error · ...` pill the user sees when iMessage sync runs to completion but returns zero rows")
+
+        // Sidebar pill renders `error · <msg.prefix(24)>`. Pin the
+        // truncated form so a future copy rewrite that pushes the
+        // first 24 chars past a sentence break surfaces in review.
+        XCTAssertEqual(String(InboxViewModel.emptyChatDBSyncFailureMessage.prefix(24)),
+                       "No conversations returne",
+                       "first 24 chars of the failure copy are what the sidebar pill actually shows — drift here is what users see, not the full string")
+
+        XCTAssertFalse(InboxViewModel.emptyChatDBSyncFailureMessage.isEmpty,
+            "an empty failure message renders the sidebar as `error · ` with nothing after — gives the user no signal at all")
+    }
+
     /// Pin the parameterized "Sent to <recipient>" success-toast
     /// format. Drift on the prefix ("Sent" → "Delivered") changes the
     /// confirmation copy users see after every send.

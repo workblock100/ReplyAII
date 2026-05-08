@@ -452,6 +452,21 @@ final class InboxViewModel {
     /// `InboxViewModelTests.testIncomingNotificationTimeLabelIsFrozen`.
     static let incomingNotificationTimeLabel: String = "now"
 
+    /// Sidebar `error · ...` pill copy when iMessage sync runs to
+    /// completion but returns zero rows. The 24-char prefix the
+    /// SidebarView truncates to surfaces "No conversations return"
+    /// — enough for the user to understand the inbox isn't broken,
+    /// just empty. Hoisted from the inline `.failed(...)` payload so
+    /// the wording lives next to the other sidebar copy and a future
+    /// "stop saying chat.db (pivot)" edit lands in code review with a
+    /// deliberate diff against the pin. The string still references
+    /// `chat.db` because (a) that's the only path that reaches it
+    /// today and (b) the pivot's "remove iMessage-specific copy"
+    /// pass is human-claimed work — the pin is here to make the next
+    /// rewrite a single-line, reviewable change. Pinned by
+    /// `InboxViewModelTests.testEmptyChatDBSyncFailureMessageIsFrozen`.
+    static let emptyChatDBSyncFailureMessage = "No conversations returned. chat.db may be empty on this account."
+
     /// Format the user-visible "Sent to <recipient>" toast surfaced by
     /// the composer after a successful send. The recipient is the
     /// thread's display name (contact name when available, otherwise
@@ -724,7 +739,7 @@ final class InboxViewModel {
                     syncStatus = .idle
                 } else {
                     viewState = .empty(.noMessages)
-                    syncStatus = .failed("No conversations returned. chat.db may be empty on this account.")
+                    syncStatus = .failed(Self.emptyChatDBSyncFailureMessage)
                 }
                 return
             }
