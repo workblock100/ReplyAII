@@ -32,10 +32,10 @@ final class ChannelStubAuthGateEdgeTests: XCTestCase {
 
     override func tearDownWithError() throws {
         let keychain = KeychainHelper(service: testService)
-        keychain.delete(key: "sms-token")
-        keychain.delete(key: "whatsapp-token")
-        keychain.delete(key: "teams-token")
-        keychain.delete(key: "telegram-bot-token")
+        keychain.delete(key: SMSChannel.keychainTokenKey)
+        keychain.delete(key: WhatsAppChannel.keychainTokenKey)
+        keychain.delete(key: TeamsChannel.keychainTokenKey)
+        keychain.delete(key: TelegramChannel.keychainTokenKey)
     }
 
     // MARK: - Empty-token bypass (pinned current behavior)
