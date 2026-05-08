@@ -24,12 +24,24 @@ enum IMessageSender {
         case messageTooLong(Int)
         case invalidChatGUID(String)
 
+        /// User-visible toast copy. Each constant is the exact string
+        /// the inbox surfaces — keep them actionable ("Re-grant in
+        /// System Settings → …") rather than diagnostic. Hoisted from
+        /// the `errorDescription` switch so copy review lives in one
+        /// place and a future "soften the wording" edit lands in
+        /// clearly-named constants instead of a type-conformance
+        /// method. Pinned by `IMessageSendErrorCopyTests`'
+        /// `*ToastCopyIsFrozen` cluster.
+        static let notAuthorizedToast = "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation."
+        static let unsupportedToast   = "This thread can't be sent to (unsupported channel)."
+        static let timedOutToast      = "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
+
         var errorDescription: String? {
             switch self {
             case .scriptFailure(let s): s
-            case .notAuthorized:        "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation."
-            case .unsupported:          "This thread can't be sent to (unsupported channel)."
-            case .timedOut:             "Messages.app did not respond within the timeout. It may be busy with iCloud sync."
+            case .notAuthorized:        Self.notAuthorizedToast
+            case .unsupported:          Self.unsupportedToast
+            case .timedOut:             Self.timedOutToast
             case .messageTooLong(let n): "Message too long (\(n) chars, max \(IMessageSender.maxMessageLength))."
             case .invalidChatGUID(let g): "Invalid chat GUID '\(g)': must match iMessage;[+-];<identifier>."
             }

@@ -78,4 +78,55 @@ final class IMessageSendErrorCopyTests: XCTestCase {
                            "\(c) must surface a non-empty description")
         }
     }
+
+    // MARK: - Hoisted-constant pins (REP-hoist 2026-05-07)
+    //
+    // The three parameterless toast strings (`notAuthorizedToast`,
+    // `unsupportedToast`, `timedOutToast`) live as `static let` on
+    // `IMessageSender.SendError` so a copy review can edit them in
+    // isolation without grepping through a switch arm in a non-UI
+    // file. Each pin asserts BOTH the constant equals the literal AND
+    // the case routes through the constant — catching a future drift
+    // between switch and constant.
+
+    func testNotAuthorizedToastCopyIsFrozen() {
+        XCTAssertEqual(IMessageSender.SendError.notAuthorizedToast,
+                       "Messages.app denied ReplyAI. Re-grant in System Settings → Privacy & Security → Automation.",
+            "notAuthorizedToast literal must not drift — the System Settings deep-link path is the user's only recovery action")
+    }
+
+    func testUnsupportedToastCopyIsFrozen() {
+        XCTAssertEqual(IMessageSender.SendError.unsupportedToast,
+                       "This thread can't be sent to (unsupported channel).",
+            "unsupportedToast literal must not drift — surfaces every time the user tries to send into a non-iMessage / non-SMS-relay channel")
+    }
+
+    func testTimedOutToastCopyIsFrozen() {
+        XCTAssertEqual(IMessageSender.SendError.timedOutToast,
+                       "Messages.app did not respond within the timeout. It may be busy with iCloud sync.",
+            "timedOutToast literal must not drift — the `iCloud sync` hint is the user's only signal to wait rather than retry")
+    }
+
+    /// Routing pins: the case must produce the constant byte-for-byte.
+    /// Catches a refactor that defines the constant but rebuilds the
+    /// switch arm with a slightly-different inline literal — every
+    /// constant-only test would still pass while every user toast
+    /// silently desyncs from the documented copy.
+    func testNotAuthorizedCaseRoutesThroughHoistedConstant() {
+        XCTAssertEqual(IMessageSender.SendError.notAuthorized.errorDescription,
+                       IMessageSender.SendError.notAuthorizedToast,
+            ".notAuthorized errorDescription must equal the hoisted constant — drift is silent in user UX")
+    }
+
+    func testUnsupportedCaseRoutesThroughHoistedConstant() {
+        XCTAssertEqual(IMessageSender.SendError.unsupported.errorDescription,
+                       IMessageSender.SendError.unsupportedToast,
+            ".unsupported errorDescription must equal the hoisted constant — drift is silent in user UX")
+    }
+
+    func testTimedOutCaseRoutesThroughHoistedConstant() {
+        XCTAssertEqual(IMessageSender.SendError.timedOut.errorDescription,
+                       IMessageSender.SendError.timedOutToast,
+            ".timedOut errorDescription must equal the hoisted constant — drift is silent in user UX")
+    }
 }
