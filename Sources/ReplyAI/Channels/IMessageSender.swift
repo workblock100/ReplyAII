@@ -118,6 +118,17 @@ enum IMessageSender {
     /// `retryDelay` (see `defaultSendTimeout` rationale).
     static let defaultRetryDelay: TimeInterval = 0.5
 
+    /// Format prefix for `SendError.scriptFailure` messages emitted from
+    /// the NSAppleScript error path. The retry-on-transient logic uses
+    /// `msg.contains("\(prefix)\(eventNotHandledErrorCode)")` to detect
+    /// the -1708 case — drift between the emit-site format and the
+    /// contains check would silently disable the retry path
+    /// (`errAEEventNotHandled` is transient during iCloud sync; without
+    /// retry, every send during sync fails to the user). Hoisting
+    /// couples the two sites to one constant. Pinned by
+    /// `IMessageSenderTests.testAppleScriptErrorPrefixIsFrozen`.
+    static let appleScriptErrorPrefix = "AppleScript error "
+
     /// Delay between a -1708 failure and the retry attempt.
     /// Defaults to 0.5 s in production; set to 0.0 in tests to avoid slow paths.
     nonisolated(unsafe) static var retryDelay: TimeInterval = defaultRetryDelay
@@ -202,7 +213,7 @@ enum IMessageSender {
                     throw SendError.notAuthorized
                 }
                 let msg = error[NSAppleScript.errorMessage] as? String ?? "\(error)"
-                throw SendError.scriptFailure("AppleScript error \(code): \(msg)")
+                throw SendError.scriptFailure("\(Self.appleScriptErrorPrefix)\(code): \(msg)")
             }
         }
 
@@ -220,7 +231,7 @@ enum IMessageSender {
                 // -1708 (errAEEventNotHandled) is transient — retry once after
                 // a short wait. All other errors propagate immediately.
                 if case .scriptFailure(let msg) = err,
-                   msg.contains("AppleScript error \(Self.eventNotHandledErrorCode)") {
+                   msg.contains("\(Self.appleScriptErrorPrefix)\(Self.eventNotHandledErrorCode)") {
                     Thread.sleep(forTimeInterval: Self.retryDelay)
                     do {
                         try executor(source)

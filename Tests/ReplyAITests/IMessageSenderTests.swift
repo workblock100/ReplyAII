@@ -1097,4 +1097,28 @@ final class IMessageSenderAppleScriptTemplateTests: XCTestCase {
             "synthesizing via the hoisted constants and re-validating via the same constants must round-trip"
         )
     }
+
+    /// `appleScriptErrorPrefix` is the format prefix used at BOTH the
+    /// emit site (`SendError.scriptFailure("\(prefix)\(code): \(msg)")`)
+    /// AND the retry-detection site
+    /// (`msg.contains("\(prefix)\(eventNotHandledErrorCode)")`). Drift
+    /// between the two would silently disable the retry path for
+    /// `errAEEventNotHandled` (-1708) which fires transiently during
+    /// iCloud sync — every send during sync would fail to the user
+    /// instead of retrying after `retryDelay`. Pin the literal so a
+    /// future refactor that touches one site without the other trips
+    /// here.
+    func testAppleScriptErrorPrefixIsFrozen() {
+        XCTAssertEqual(IMessageSender.appleScriptErrorPrefix, "AppleScript error ",
+            "appleScriptErrorPrefix drift between emit-site and retry-detection silently disables the -1708 retry path during iCloud sync")
+    }
+
+    /// The retry-detection contains-check uses `prefix + code` as one
+    /// haystack-needle. Pin the composite string so a future
+    /// constant-defined-but-not-used drift trips here too.
+    func testRetryDetectionNeedleComposesPrefixAndEventNotHandledCode() {
+        let needle = "\(IMessageSender.appleScriptErrorPrefix)\(IMessageSender.eventNotHandledErrorCode)"
+        XCTAssertEqual(needle, "AppleScript error -1708",
+            "retry-detection needle must compose `appleScriptErrorPrefix + eventNotHandledErrorCode` byte-for-byte — drift in either silently disables retry")
+    }
 }
