@@ -65,4 +65,26 @@ final class TelegramChannelTests: XCTestCase {
         let messages = try await channel.messages(forThreadID: "any", limit: 10)
         XCTAssertTrue(messages.isEmpty)
     }
+
+    /// Mirrors the empty-token bypass pin shared across the four
+    /// channel stubs (SMS, Teams, Telegram, WhatsApp). Auth gate uses
+    /// `keychain.get(key:) != nil`, so empty-string token is treated
+    /// as 'authorized'. Pin so a future `?.isEmpty == false` tightening
+    /// surfaces consistently across the cluster.
+    ///
+    /// Telegram's keychain service uses the divergent `co.replyai.telegram`
+    /// reverse-DNS form (vs the `ReplyAI-<Channel>` convention the
+    /// other three use); the bypass behavior is identical regardless.
+    func testTelegramChannelEmptyTokenBypassesAuthGate() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "", for: TelegramChannel.keychainTokenKey)
+        let channel = TelegramChannel(keychain: keychain)
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertTrue(threads.isEmpty,
+            "Telegram stub treats empty-string bot token as 'authorized' — gate uses != nil despite the divergent reverse-DNS keychain service name")
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty,
+            "messages auth gate symmetric with recentThreads on empty-string token")
+    }
 }

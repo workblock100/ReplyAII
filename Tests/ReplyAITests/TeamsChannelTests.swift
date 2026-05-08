@@ -59,4 +59,23 @@ final class TeamsChannelTests: XCTestCase {
         let messages = try await channel.messages(forThreadID: "any", limit: 10)
         XCTAssertTrue(messages.isEmpty)
     }
+
+    /// Mirrors `WhatsAppChannelTests.testWhatsAppChannelEmptyTokenBypassesAuthGate`
+    /// and `SMSChannelTests.testSMSChannelEmptyTokenBypassesAuthGate`
+    /// for the Teams stub. The four channel stubs share the auth-gate
+    /// predicate `keychain.get(key:) != nil` — empty-string token
+    /// passes. Pin the cluster so a future `?.isEmpty == false`
+    /// tightening surfaces consistently across all four stubs.
+    func testTeamsChannelEmptyTokenBypassesAuthGate() async throws {
+        let keychain = KeychainHelper(service: testService)
+        try keychain.set(value: "", for: TeamsChannel.keychainTokenKey)
+        let channel = TeamsChannel(keychain: keychain)
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertTrue(threads.isEmpty,
+            "Teams stub treats empty-string token as 'authorized' — gate uses != nil")
+        let messages = try await channel.messages(forThreadID: "any", limit: 10)
+        XCTAssertTrue(messages.isEmpty,
+            "messages auth gate symmetric with recentThreads on empty-string token")
+    }
 }
