@@ -20,6 +20,48 @@ import Foundation
 ///   0x82 b0 b1 b2 b3    → length = UInt32(b0 | b1<<8 | b2<<16 | b3<<24)
 enum AttributedBodyDecoder {
 
+    // MARK: - typedstream binary-format constants
+
+    /// typedstream's primitive-string type tag. The first 0x2B in the
+    /// archive body is reliably the NSString (or NSMutableString) text
+    /// payload — class-name C strings use a different encoding without
+    /// this prefix. Hoisted from the inline `bytes[cursor] == 0x2B`
+    /// checks at TWO sites (`extractText`'s scan loop + the
+    /// `readPrimitiveString` doc-comment reference) so a future
+    /// typedstream-format change can be reasoned about as a single
+    /// constant edit. Pinned by `AttributedBodyDecoderTests`'
+    /// `*PrimitiveStringTypeTag*` cluster.
+    static let primitiveStringTypeTag: UInt8 = 0x2B
+
+    /// typedstream variable-length integer markers. `0x7F` is the
+    /// boundary below which a single byte encodes the length directly;
+    /// `0x81` introduces a 2-byte little-endian length; `0x82` introduces
+    /// a 4-byte little-endian length. Drift on any one silently changes
+    /// how a length-prefixed string is parsed — strings beyond the
+    /// 7-bit boundary either get parsed at a wrong offset (truncated /
+    /// embedded length-byte appears in the text payload) or get
+    /// rejected as malformed when they shouldn't.
+    static let lengthFormatShortBoundary: UInt8 = 0x7F
+    static let lengthFormat16BitMarker:   UInt8 = 0x81
+    static let lengthFormat32BitMarker:   UInt8 = 0x82
+
+    /// Sanity cap on a primitive-string length. iMessage attributedBody
+    /// payloads are bounded by message-size limits well below this; any
+    /// length declaration above this bound indicates a malformed blob
+    /// (or a hostile one). Drift up wastes memory on bogus inputs;
+    /// drift down rejects legitimate long messages. Pinned by the
+    /// existing `testThirtyTwoBitLengthDecodes` and behavioral tests.
+    static let primitiveStringMaxLength: Int = 65_535
+
+    /// "streamtyped" magic header byte sequence — Apple's typedstream
+    /// signature. The header lives at the start of every typedstream
+    /// archive; without these bytes the blob isn't a typedstream and
+    /// `extractText` should bail. Drift here (e.g. someone capitalising
+    /// the magic to "Streamtyped") would silently classify every real
+    /// attributedBody as non-typedstream and return nil for every
+    /// message.
+    static let streamtypedMagicString: String = "streamtyped"
+
     // MARK: - Public
 
     /// Returns the plain-text content of a typedstream NSAttributedString blob,
@@ -37,7 +79,7 @@ enum AttributedBodyDecoder {
         var cursor = bodyStart
 
         while cursor < bytes.count {
-            if bytes[cursor] == 0x2B {
+            if bytes[cursor] == Self.primitiveStringTypeTag {
                 if let (text, next) = readPrimitiveString(bytes: bytes, at: cursor + 1) {
                     parts.append(text)
                     cursor = next
@@ -62,7 +104,7 @@ enum AttributedBodyDecoder {
     /// Finds the "streamtyped" magic within the first 20 bytes and returns the
     /// index of the first byte of the archive body (past magic + version byte).
     static func streamtypedBodyStart(_ bytes: [UInt8]) -> Int? {
-        let magic: [UInt8] = Array("streamtyped".utf8)   // 11 bytes
+        let magic: [UInt8] = Array(Self.streamtypedMagicString.utf8)   // 11 bytes
         let limit = min(20 + magic.count, bytes.count)
         guard let pos = findBytes(magic, in: bytes, from: 0, limit: limit) else { return nil }
         let after = pos + magic.count + 1                 // +1 skips the version byte
@@ -76,7 +118,7 @@ enum AttributedBodyDecoder {
     static func readPrimitiveString(bytes: [UInt8], at index: Int) -> (String, Int)? {
         guard let (length, start) = readLength(bytes: bytes, at: index) else { return nil }
         let end = start + length
-        guard length > 0, length <= 65_535, end <= bytes.count else { return nil }
+        guard length > 0, length <= Self.primitiveStringMaxLength, end <= bytes.count else { return nil }
         guard let text = String(bytes: bytes[start..<end], encoding: .utf8) else { return nil }
         return (text, end)
     }
@@ -87,14 +129,14 @@ enum AttributedBodyDecoder {
     static func readLength(bytes: [UInt8], at index: Int) -> (length: Int, next: Int)? {
         guard index < bytes.count else { return nil }
         let b = bytes[index]
-        if b <= 0x7F { return (Int(b), index + 1) }
-        if b == 0x81 {
+        if b <= Self.lengthFormatShortBoundary { return (Int(b), index + 1) }
+        if b == Self.lengthFormat16BitMarker {
             guard index + 2 < bytes.count else { return nil }
             let lo = UInt16(bytes[index + 1])
             let hi = UInt16(bytes[index + 2]) << 8
             return (Int(lo | hi), index + 3)
         }
-        if b == 0x82 {
+        if b == Self.lengthFormat32BitMarker {
             guard index + 4 < bytes.count else { return nil }
             var len: UInt32 = 0
             for k in 0..<4 { len |= UInt32(bytes[index + 1 + k]) << (8 * k) }

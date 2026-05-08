@@ -316,4 +316,84 @@ final class AttributedBodyDecoderTests: XCTestCase {
         XCTAssertNil(AttributedBodyDecoder.extractText(from: Data(bytes)),
             "streamtyped magic past the search window must NOT be accepted — opens a path for prefix-injection attacks otherwise")
     }
+
+    // MARK: - typedstream binary-format constant pins
+
+    /// `AttributedBodyDecoder.primitiveStringTypeTag` is the 0x2B byte
+    /// that marks the start of every NSString text payload in
+    /// typedstream. The two production sites (`extractText`'s scan
+    /// loop + the documented invariant in `readPrimitiveString`) must
+    /// agree — drift away from 0x2B silently misclassifies real
+    /// attributedBody payloads.
+    func testPrimitiveStringTypeTagIs0x2B() {
+        XCTAssertEqual(AttributedBodyDecoder.primitiveStringTypeTag, 0x2B,
+            "primitiveStringTypeTag is the typedstream string-payload marker — drift breaks NSString recovery for every iMessage attributedBody")
+    }
+
+    /// Length-format markers pin: `0x7F` is the inline-length boundary,
+    /// `0x81` introduces a 2-byte little-endian length, `0x82`
+    /// introduces a 4-byte little-endian length. Drift on any one
+    /// silently changes how a length-prefixed string is parsed —
+    /// strings beyond the 7-bit boundary either get parsed at a wrong
+    /// offset (truncated / embedded length-byte appears in the text
+    /// payload) or get rejected as malformed when they shouldn't.
+    func testLengthFormatMarkersAreFrozen() {
+        XCTAssertEqual(AttributedBodyDecoder.lengthFormatShortBoundary, 0x7F,
+            "lengthFormatShortBoundary drift either misroutes legitimate short-form strings to the 16-bit path or routes 16-bit strings through the inline-length path")
+        XCTAssertEqual(AttributedBodyDecoder.lengthFormat16BitMarker, 0x81,
+            "lengthFormat16BitMarker drift breaks 256–65535-byte string parsing — strings get rejected as malformed")
+        XCTAssertEqual(AttributedBodyDecoder.lengthFormat32BitMarker, 0x82,
+            "lengthFormat32BitMarker drift breaks parsing for the rare >65535-byte payload")
+    }
+
+    /// Marker distinctness: the three byte values must remain pairwise
+    /// distinct so the if/else chain in `readLength` routes each input
+    /// to the correct branch. A future refactor that consolidated two
+    /// branches under the same value would silently mis-decode every
+    /// length-prefix byte that fell into the consolidated bucket.
+    func testLengthFormatMarkersArePairwiseDistinct() {
+        let markers: [UInt8] = [
+            AttributedBodyDecoder.lengthFormatShortBoundary,
+            AttributedBodyDecoder.lengthFormat16BitMarker,
+            AttributedBodyDecoder.lengthFormat32BitMarker,
+        ]
+        XCTAssertEqual(Set(markers).count, markers.count,
+            "length-format markers must remain pairwise distinct — overlapping markers route a real length byte to the wrong decoder branch")
+    }
+
+    /// `primitiveStringMaxLength` caps how long a single primitive
+    /// string can be. iMessage messages are bounded well below this;
+    /// drift up wastes memory on bogus inputs, drift down rejects
+    /// legitimate long messages.
+    func testPrimitiveStringMaxLengthIs65535() {
+        XCTAssertEqual(AttributedBodyDecoder.primitiveStringMaxLength, 65_535,
+            "primitiveStringMaxLength drift either accepts pathologically long inputs (DoS surface) or rejects legitimate long messages")
+    }
+
+    /// `streamtypedMagicString` is the 11-byte signature every
+    /// typedstream archive starts with. Drift would silently classify
+    /// every real attributedBody as non-typedstream.
+    func testStreamtypedMagicStringIsExact() {
+        XCTAssertEqual(AttributedBodyDecoder.streamtypedMagicString, "streamtyped",
+            "streamtypedMagicString is Apple's typedstream signature — drift makes every real iMessage attributedBody read as non-typedstream and return nil")
+        XCTAssertEqual(AttributedBodyDecoder.streamtypedMagicString.utf8.count, 11,
+            "magic string must remain 11 bytes — the streamtypedBodyStart search window arithmetic depends on this length")
+    }
+
+    /// Round-trip witness: extractText for a payload built with the
+    /// hoisted constants must succeed. A future "constant-defined-but-
+    /// not-used" refactor would let the literal pins above pass while
+    /// the production source silently re-introduced inline literals.
+    func testExtractTextRoundTripsThroughHoistedConstants() {
+        var bytes: [UInt8] = []
+        bytes += Array(AttributedBodyDecoder.streamtypedMagicString.utf8)
+        bytes += [0x04]                                                      // version byte
+        bytes += [0x40, 0x84, 0x84, 0x87]                                    // class-name preamble (matches existing fixtures)
+        bytes += [AttributedBodyDecoder.primitiveStringTypeTag]              // 0x2B
+        bytes += [0x05]                                                      // inline-length 5
+        bytes += Array("Hello".utf8)
+        let decoded = AttributedBodyDecoder.extractText(from: Data(bytes))
+        XCTAssertEqual(decoded, "Hello",
+            "round-trip through hoisted constants must extract the payload — drift between source and constant in either direction would fail this")
+    }
 }
