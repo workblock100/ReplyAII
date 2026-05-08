@@ -936,4 +936,28 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertNil(result,
             "absent CKChatIdentifier + absent CKChatGUID must return nil, not \"\" — callers rely on optional binding to detect the no-thread-known case")
     }
+
+    /// Pin the case where BOTH `CKChatIdentifier` and `CKChatGUID` are
+    /// `Some("")`. The chained `?.isEmpty == false ? ... : nil` filter
+    /// must skip BOTH legs when each is present-but-empty — same shape
+    /// as the resolveSenderHandle both-empty pin above (these two
+    /// helpers are siblings on the willPresent path and share the
+    /// same isEmpty-filter pattern). Drift toward dropping either
+    /// filter would silently propagate `""` as the chatGUID and let
+    /// the inbox's `chatGUID.hasSuffix("")` match-anything regression
+    /// re-surface, where every notification would attach to the first
+    /// thread in the list. The existing
+    /// `testResolveChatGUIDSkipsEmptyCKChatIdentifierAndFallsToCKChatGUID`
+    /// covers ID="" + GUID=valid; the existing both-keys-absent test
+    /// covers neither-present. This both-empty case is the diagonal
+    /// neither covers — a realistic shape for a service-extension
+    /// emitting empty strings instead of omitting keys entirely.
+    func testResolveChatGUIDReturnsNilWhenBothKeysPresentButEmpty() {
+        let result = NotificationCoordinator.resolveChatGUID(userInfo: [
+            UNNotificationContentParser.UserInfoKey.ckChatIdentifier: "",
+            UNNotificationContentParser.UserInfoKey.ckChatGUID: ""
+        ])
+        XCTAssertNil(result,
+            "both Some(\"\") legs must filter to nil — drift on either filter re-introduces the empty-chatGUID propagation that lets `chatGUID.hasSuffix(\"\")` match every thread")
+    }
 }
