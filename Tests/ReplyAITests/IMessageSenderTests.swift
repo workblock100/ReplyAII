@@ -969,6 +969,36 @@ final class IMessageSenderCombinedEscapeTests: XCTestCase {
                        "tab is a legal AppleScript literal character and must not be escaped")
     }
 
+    // Carriage return (U+000D) is NOT in the escape replacement list —
+    // only `\\`, `"`, and `\n` get rewritten. A bare CR therefore reaches
+    // the AppleScript double-quoted literal verbatim. AppleScript treats
+    // CR inside `"..."` as a string-internal newline (it doesn't terminate
+    // the literal the way an unescaped `"` would). Pin both legs:
+    //   1. CR-only payload: byte-for-byte identity (no `\\r` substitution).
+    //   2. CR mixed with `\n`: the `\n` is rewritten to the two-byte
+    //      escape sequence; the surrounding CR survives untouched.
+    // A future "harden control-character escaping" edit that adds
+    // `\r → \\r` (or strips CR entirely) flips this contract — the test
+    // forces the change to be deliberate rather than a silent
+    // ambient-quoting tweak.
+    func testEscapeCarriageReturnPassesThroughVerbatim() {
+        let crOnly = "alpha\rbeta"
+        XCTAssertEqual(
+            IMessageSender.escapeForAppleScriptLiteral(crOnly),
+            "alpha\rbeta",
+            "carriage return is not in the escape list and must reach the AppleScript literal verbatim"
+        )
+
+        let crLF = "before\r\nafter"
+        // `\n` becomes the two-character `\\n` AppleScript escape; the
+        // leading CR survives in the same position.
+        XCTAssertEqual(
+            IMessageSender.escapeForAppleScriptLiteral(crLF),
+            "before\r\\nafter",
+            "CRLF input emits a verbatim CR followed by the AppleScript `\\n` escape — order and bytes pinned"
+        )
+    }
+
     // MARK: - maxMessageLength constant pin
     //
     // The 4096 cap is shipped as the user-visible "too long" boundary —
