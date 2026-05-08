@@ -458,6 +458,67 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(msgs.last?.text, "", "missing text defaults to empty string via `?? \"\"`")
     }
 
+    /// Pin the timestamp fallback: `Double(m.ts ?? "").map { ... }` must
+    /// fail to nil when `ts` is absent, present-but-empty, or a
+    /// non-numeric string. The downstream `time` field is the empty
+    /// string in all three cases — the relative formatter never runs.
+    /// Pin the surprising-but-safe behavior so a future "validate ts on
+    /// parse" tightening (which would, e.g., throw on bad ts) lands as
+    /// an explicit refactor rather than silent breakage of resilience to
+    /// malformed Slack history payloads.
+    func testMessagesWithMissingOrEmptyOrNonNumericTSProduceEmptyTime() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"user": "U1", "text": "no ts at all"},
+                {"ts": "", "user": "U2", "text": "present-but-empty ts"},
+                {"ts": "not-a-number", "user": "U3", "text": "non-numeric ts"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 3, "all three malformed-ts messages survive parsing")
+        XCTAssertTrue(msgs.allSatisfy { $0.time == "" },
+            "ts of nil / Some(\"\") / non-numeric must each fall through to time = \"\" via Double(...).map { ... } ?? \"\"")
+        XCTAssertNil(msgs.first?.deliveredAt,
+            "missing ts must produce nil deliveredAt — the date construction short-circuits when Double() returns nil")
+    }
+
+    /// Pin the `ts: "0"` boundary. A literal "0" parses as `Double(0)`,
+    /// which `Date(timeIntervalSince1970: 0)` happily resolves to
+    /// 1970-01-01 UTC. The parser does NOT treat 0 as "missing" —
+    /// `deliveredAt` is non-nil and the relative-time formatter renders
+    /// it. Lock in the "0 is a real timestamp, not a sentinel" semantics
+    /// — drift would silently filter legit-but-old messages or, worse,
+    /// treat 0-valued sentinels as real history.
+    func testMessagesWithZeroTSResolveToEpochDate() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test-token", workspaceName: "Acme")
+        let body = """
+        {
+            "ok": true,
+            "messages": [
+                {"ts": "0", "user": "U1", "text": "epoch message"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let msgs = try await channel.messages(forThreadID: "C100", limit: 10)
+        XCTAssertEqual(msgs.count, 1)
+        XCTAssertNotNil(msgs.first?.deliveredAt,
+            "ts = \"0\" must parse as a real Date(epoch) — the parser treats 0 as a valid Unix timestamp, not a missing-value sentinel")
+        XCTAssertEqual(msgs.first?.deliveredAt, Date(timeIntervalSince1970: 0),
+            "ts = \"0\" must round-trip through Double(\"0\") → 0.0 → Date(timeIntervalSince1970: 0) verbatim")
+        XCTAssertFalse(msgs.first?.time.isEmpty ?? true,
+            "ts = \"0\" produces a real Date so the relative formatter renders a non-empty string — pin so a future drop of the formatter (or guard against zero) lands deliberately")
+    }
+
     // MARK: - Identity
 
     func testSlackChannelIdentifiesAsSlack() {
