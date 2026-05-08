@@ -611,6 +611,37 @@ final class SlackChannelTests: XCTestCase {
         XCTAssertEqual(recorder.lastPostJSON?["text"] as? String, "hi")
     }
 
+    /// Pin the chat.postMessage POST body shape: exactly two keys
+    /// (`channel`, `text`) and nothing else. Existing
+    /// `testSendSucceedsWhenAckOk` only asserts the two known keys are
+    /// SET; it would silently pass if a future refactor added a third
+    /// field (e.g. `parse: "none"`, `link_names: true`, `as_user: true`,
+    /// `unfurl_links: false`) without removing the existing assertions.
+    /// Each of those Slack parameters has user-visible behavior — adding
+    /// `parse: "full"` rewrites bare URLs to clickable links AND parses
+    /// `<#C123>` channel mentions, which is a deliberate product call.
+    /// Pin the count so any silent body-shape extension surfaces here as
+    /// a forced code-review decision rather than a runtime surprise.
+    /// Sibling to the existing SlackOAuthFlow body-shape pin (3 fields:
+    /// code, client_id, client_secret + redirect_uri = 4 in that case)
+    /// from a prior fire — same drift class, same defensive shape.
+    func testSendChatPostMessageBodyShapeIsExactlyTwoKeys() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-shape-pin", workspaceName: "Acme")
+        let body = #"{ "ok": true }"#.data(using: .utf8)!
+        let recorder = RecordingHTTP(payload: body)
+        let channel = SlackChannel(tokenStore: store, http: recorder)
+
+        try await channel.send(text: "hi", toThreadID: "C200")
+
+        let json = try XCTUnwrap(recorder.lastPostJSON,
+            "send must capture a JSON body — the recorder didn't see one")
+        XCTAssertEqual(json.count, 2,
+            "chat.postMessage body must contain EXACTLY {channel, text} — drift toward also-passing parse/link_names/as_user/unfurl_links is a deliberate product call (each Slack parameter has user-visible behavior); pin the count so the extension surfaces here as a forced review rather than a runtime surprise")
+        XCTAssertNotNil(json["channel"], "channel key must be present")
+        XCTAssertNotNil(json["text"], "text key must be present")
+    }
+
     func testSendThrowsNetworkErrorWithSlackErrorString() async throws {
         let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
         try store.set(token: "xoxb-abc", workspaceName: "Acme")
