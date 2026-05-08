@@ -9,11 +9,11 @@ final class RulesTests: XCTestCase {
     /// other test runs have written the key.
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.pinnedKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.pinnedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.pinnedKey)
         super.tearDown()
     }
 
@@ -517,8 +517,8 @@ final class RulesTests: XCTestCase {
         for r in rules { try? store.add(r) }
 
         // Clear any archived/silenced state left behind by a previous test run.
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.silentlyIgnoredKey)
 
         return InboxViewModel(
             threads: threads,
@@ -651,8 +651,8 @@ final class RulesTests: XCTestCase {
         XCTAssertFalse(model.archivedThreadIDs.contains("thread-silent"), "silentlyIgnore must not leak into archivedThreadIDs")
 
         // Clean up
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.silentlyIgnoredKey)
     }
 
     @MainActor
@@ -694,8 +694,8 @@ final class RulesTests: XCTestCase {
         )
 
         // Clean up
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.silentlyIgnoredKey)
     }
 
     @MainActor
@@ -720,8 +720,8 @@ final class RulesTests: XCTestCase {
         XCTAssertTrue(second.archivedThreadIDs.contains("s"))
 
         // Clean up for subsequent tests.
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.silentlyIgnoredKey)
     }
 
     // MARK: - REP-001: lastSeenRowID persistence
@@ -729,8 +729,8 @@ final class RulesTests: XCTestCase {
     @MainActor
     func testLastSeenRowIDPersistsAcrossInstances() async throws {
         // Start with a clean slate.
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.lastSeenRowID")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.lastSeenRowIDKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
 
         let thread = MessageThread(
             id: "watermark-thread", channel: .imessage, name: "Alice",
@@ -766,9 +766,9 @@ final class RulesTests: XCTestCase {
         )
 
         // Clean up.
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.lastSeenRowID")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.archivedThreadIDs")
-        UserDefaults.standard.removeObject(forKey: "pref.inbox.silentlyIgnoredThreadIDs")
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.lastSeenRowIDKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.archivedKey)
+        UserDefaults.standard.removeObject(forKey: InboxViewModel.silentlyIgnoredKey)
     }
 
     @MainActor
@@ -786,7 +786,7 @@ final class RulesTests: XCTestCase {
         defer { d.removePersistentDomain(forName: suite) }
 
         let payload = try JSONEncoder().encode(["watermark-literal": Int64(99)])
-        d.set(payload, forKey: "pref.inbox.lastSeenRowID")
+        d.set(payload, forKey: InboxViewModel.lastSeenRowIDKey)
 
         let thread = MessageThread(
             id: "watermark-literal", channel: .imessage, name: "Pinner",
