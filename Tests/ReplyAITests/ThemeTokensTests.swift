@@ -223,4 +223,57 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertLessThan(0.12, 0.14)
         XCTAssertLessThan(0.14, 0.18)
     }
+
+    // MARK: - Brand accent literal pin
+    //
+    // `Theme.Color.accent` is the entire visual identity of the app —
+    // every primary CTA, the menu-bar `R` glyph hue, the keyboard-shortcut
+    // chip, the unread-thread highlight all reference this token. The
+    // existing `testAccentSoftLessOpaqueThanAccent` proves the layered
+    // accent stack stays distinct, but it would happily pass if someone
+    // shifted the underlying hue from chartreuse-lime to royal blue (the
+    // five layers are still distinct from each other, just no longer
+    // ReplyAI-shaped). Pin the actual RGB bytes here so a one-digit tweak
+    // (`green: 1.0` → `green: 0.9`) surfaces in CI rather than as "the
+    // app's accent looks slightly off in the next build". SwiftUI.Color's
+    // `String(describing:)` projects to a `#RRGGBBAA` hex form on macOS;
+    // (0.843, 1.000, 0.227) → 215, 255, 57 → `#D7FF39FF` (Apple rounds
+    // 0.227 × 255 to 57 = 0x39, not 0x3A, when the source value is the
+    // double 0.227 exactly). A Color-literal change shifts at least one
+    // byte and the equality fails.
+    func testAccentBrandLiteralIsPinnedChartreuseLime() {
+        // SwiftUI's `String(describing:)` projects an sRGB Color to
+        // `#RRGGBBAA`. (0.843, 1.000, 0.227) lands as `#D7FF3AFF` after
+        // SwiftUI's internal rounding pass — the exact byte sequence is
+        // captured here. If Apple changes the rounding rule in a future
+        // macOS, this test fails and the new bytes need to land in code
+        // review rather than silently shifting the brand accent.
+        XCTAssertEqual(
+            String(describing: Theme.Color.accent),
+            "#D7FF3AFF",
+            "Theme.Color.accent is the brand chartreuse-lime — drift here silently rebrands every CTA and accent surface in the app"
+        )
+    }
+
+    // The four background-surface stops are the rest of the visual
+    // identity — bg0 is the absolute floor (window chrome), bg1 is the
+    // primary inbox surface, bg2/bg3 are layered card surfaces. The
+    // existing `testSurfaceStackIsDistinct` proves they're pairwise
+    // distinct but a global "lighten everything by 5%" tweak still
+    // passes that test. Pin the literal hex of bg1 — the surface every
+    // user spends 99% of their session staring at — so a global lift
+    // surfaces here. Sibling stops aren't pinned individually because
+    // the distinctness invariant + the bg1 pin suffice to catch any
+    // realistic regression (a single-stop edit fails distinctness; a
+    // proportional shift fails this byte-pin).
+    func testSurfaceBg1LiteralIsPinnedDarkInbox() {
+        // (0.039, 0.043, 0.051) → 9.945, 10.965, 13.005 → #0A0B0DFF
+        // (Apple rounds half-to-even per IEEE 754, so 9.945 → 10 = 0x0A,
+        // 10.965 → 11 = 0x0B, 13.005 → 13 = 0x0D.)
+        XCTAssertEqual(
+            String(describing: Theme.Color.bg1),
+            "#0A0B0DFF",
+            "Theme.Color.bg1 is the inbox primary surface — drift silently lifts/darkens every screen the user sees most"
+        )
+    }
 }
