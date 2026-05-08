@@ -577,6 +577,37 @@ final class IMessageChannelAvatarInitialTests: XCTestCase {
         let result = IMessageChannel.avatarInitial(for: "🎉 birthday plans")
         XCTAssertEqual(result, "🎉")
     }
+
+    // MARK: - Avatar glyph hoist pins (REP-hoist 2026-05-07)
+    //
+    // The two avatar fallback glyphs (`?` for unknown, `☎` for
+    // phone-shaped handles) live as `static let` on IMessageChannel.
+    // Existing tests above use exact-literal equality which would
+    // silently agree with a refactor that changes both source and
+    // test together; these constant-routing pins are the independent
+    // anchor.
+
+    func testAvatarUnknownGlyphIsFrozen() {
+        XCTAssertEqual(IMessageChannel.unknownAvatarGlyph, "?",
+            "unknownAvatarGlyph drift silently changes the avatar treatment for every empty/whitespace-only thread name")
+    }
+
+    func testAvatarPhoneGlyphIsFrozen() {
+        XCTAssertEqual(IMessageChannel.phoneAvatarGlyph, "☎",
+            "phoneAvatarGlyph drift silently changes the avatar treatment for every unknown phone thread")
+    }
+
+    func testAvatarInitialEmptyRoutesThroughHoistedConstant() {
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: ""),
+                       IMessageChannel.unknownAvatarGlyph,
+            "empty-name fallback must equal unknownAvatarGlyph byte-for-byte — drift between matcher and constant is silent")
+    }
+
+    func testAvatarInitialPhoneFallbackIsTelephoneGlyph() {
+        XCTAssertEqual(IMessageChannel.avatarInitial(for: "+16318486282"),
+                       IMessageChannel.phoneAvatarGlyph,
+            "phone-shape fallback must equal phoneAvatarGlyph byte-for-byte — drift between matcher and constant is silent")
+    }
 }
 
 // MARK: - ChannelError result-code preservation (REP-051)

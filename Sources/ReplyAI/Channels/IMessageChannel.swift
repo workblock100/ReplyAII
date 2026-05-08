@@ -480,10 +480,25 @@ struct IMessageChannel: ChannelService {
         return f.string(from: date)
     }
 
+    /// User-visible fallback glyph when an avatar can't be derived
+    /// from the name (empty after whitespace trim). Surfaces in the
+    /// thread-row avatar slot for genuinely unknown contacts. Hoisted
+    /// so the fallback is pinnable independently of the inline guard.
+    static let unknownAvatarGlyph = "?"
+
+    /// User-visible glyph used in place of an initial when the name
+    /// looks like a phone handle (begins with `+` or `(`). The phone
+    /// receiver glyph signals "this is a number, not a person we
+    /// know" — drift to a different glyph (or to the raw `+` initial)
+    /// silently changes the avatar treatment for every unknown phone
+    /// thread. Pinned by
+    /// `IMessageChannelTests.testAvatarInitialPhoneFallbackIsTelephoneGlyph`.
+    static let phoneAvatarGlyph = "☎"
+
     static func avatarInitial(for name: String) -> String {
         let t = name.trimmingCharacters(in: .whitespaces)
-        guard let first = t.first else { return "?" }
-        if first == "+" || first == "(" { return "☎" }
+        guard let first = t.first else { return Self.unknownAvatarGlyph }
+        if first == "+" || first == "(" { return Self.phoneAvatarGlyph }
         return String(first).uppercased()
     }
 }
