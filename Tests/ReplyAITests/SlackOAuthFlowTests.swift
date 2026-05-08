@@ -814,4 +814,51 @@ final class SlackOAuthFlowTests: XCTestCase {
                 "failure reason must be non-empty — empty produces a trailing-space dead-end toast")
         }
     }
+
+    // MARK: - Cross-file equality pins (OAuth + HTTP literals)
+
+    /// `LocalhostOAuthListener.codeQueryParameterName` and
+    /// `SlackOAuthFlow.FormField.code` are both `"code"` and refer to
+    /// the same OAuth authorization-code identifier — the listener
+    /// extracts it from the callback URL's query string, the flow
+    /// posts it back as a form field on the token-exchange request.
+    /// Drift between them would silently break the OAuth handshake
+    /// at one of the two ends (listener captures `code` but flow
+    /// looks for a different name when building the form body, or
+    /// vice versa). The OAuth spec uses one literal in both places,
+    /// so the two constants must agree. Pin asserts the cross-file
+    /// equality so a future rename of either side surfaces here
+    /// rather than at a production OAuth callback.
+    func testListenerCodeQueryParameterEqualsFlowFormFieldCode() {
+        XCTAssertEqual(LocalhostOAuthListener.codeQueryParameterName,
+                       SlackOAuthFlow.FormField.code,
+            "LocalhostOAuthListener.codeQueryParameterName must equal SlackOAuthFlow.FormField.code — both name the OAuth `code` parameter; drift breaks the handshake at the listener-extract or flow-rebuild step")
+    }
+
+    /// `URLSessionSlackClient.postHTTPMethod` and
+    /// `SlackOAuthFlow.tokenExchangeHTTPMethod` are both `"POST"`
+    /// and refer to the same HTTP verb. Drift would mean one Slack
+    /// API endpoint receives a different method than the other,
+    /// even though both endpoints (chat.postMessage and
+    /// oauth.v2.access) require POST. Cross-pin so a future
+    /// "consolidate the HTTP method literal" refactor is the only
+    /// way the two stay in sync.
+    func testHTTPClientPostMethodEqualsFlowTokenExchangeMethod() {
+        XCTAssertEqual(URLSessionSlackClient.postHTTPMethod,
+                       SlackOAuthFlow.tokenExchangeHTTPMethod,
+            "URLSessionSlackClient.postHTTPMethod must equal SlackOAuthFlow.tokenExchangeHTTPMethod — both name the same HTTP POST verb; drift would silently downgrade either path to a wrong method")
+    }
+
+    /// `URLSessionSlackClient.Header.contentTypeField` and
+    /// `SlackOAuthFlow.contentTypeHeaderField` are both
+    /// `"Content-Type"` and refer to the same standard HTTP header
+    /// name. The two paths use different content-type *values*
+    /// (`application/json` for chat.postMessage, form-urlencoded
+    /// for oauth.v2.access) but the *header name* is identical.
+    /// Drift would silently break body negotiation on either path.
+    func testHTTPClientContentTypeHeaderEqualsFlowContentTypeHeader() {
+        XCTAssertEqual(URLSessionSlackClient.Header.contentTypeField,
+                       SlackOAuthFlow.contentTypeHeaderField,
+            "URLSessionSlackClient.Header.contentTypeField must equal SlackOAuthFlow.contentTypeHeaderField — both name the standard `Content-Type` HTTP header; drift breaks body negotiation on either Slack request path")
+    }
 }
