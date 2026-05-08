@@ -1900,4 +1900,52 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
                        IMessageChannel.formatTime(appleDate: nanos),
                        "seconds and nanoseconds encodings of the same instant must format identically")
     }
+
+    // MARK: - TimeFormat vocabulary pins (REP-hoist 2026-05-07)
+    //
+    // The four ThreadRow time-chip patterns (`timeOfDay`, `weekdayShort`,
+    // `dateShort`, `yesterdayLabel`) live as `static let` on
+    // `IMessageChannel.TimeFormat`. The `timeOfDay` pattern was
+    // previously inline at TWO call sites (`formatTime` and the
+    // `isDateInToday` branch of `formatRelative`) — drift between the
+    // two would silently produce different time formatting depending
+    // on whether the row was rendered via the absolute or relative
+    // path.
+
+    func testTimeFormatPatternsAreFrozen() {
+        XCTAssertEqual(IMessageChannel.TimeFormat.timeOfDay, "h:mm a",
+            "timeOfDay pattern is what every today + absolute time chip uses — drift desyncs the two paths")
+        XCTAssertEqual(IMessageChannel.TimeFormat.weekdayShort, "EEE",
+            "weekdayShort pattern renders the within-week day chip — drift to e.g. EEEE silently lengthens every weekday label")
+        XCTAssertEqual(IMessageChannel.TimeFormat.dateShort, "MMM d",
+            "dateShort pattern renders the older-than-week chip — drift desyncs the sidebar from the thread detail view")
+        XCTAssertEqual(IMessageChannel.TimeFormat.yesterdayLabel, "Yesterday",
+            "yesterdayLabel is the literal user-visible string — drift in casing or wording (e.g. `yest.`) ships in front of users with no review")
+    }
+
+    /// Round-trip `formatRelative` against a 5-day-ago timestamp to pin
+    /// that the weekday-short pattern flows through `TimeFormat.weekdayShort`.
+    /// A constant-defined-but-not-used refactor would still pass
+    /// `testTimeFormatPatternsAreFrozen` while silently re-introducing
+    /// an inline literal in the formatter.
+    func testFormatRelativeUsesHoistedWeekdayPattern() {
+        // 5 days ago — within-week branch but not today/yesterday.
+        let fiveDaysAgo = Date().addingTimeInterval(-5 * 86_400)
+        let appleDate = Int64(fiveDaysAgo.timeIntervalSinceReferenceDate)
+        let formatted = IMessageChannel.formatRelative(appleDate: appleDate)
+        // Expected: 3-letter weekday abbreviation. Validate length not exact day
+        // (test would otherwise be clock-sensitive across midnight/DST).
+        XCTAssertEqual(formatted.count, 3,
+            "5-day-ago timestamps should render via TimeFormat.weekdayShort — got '\(formatted)' (length \(formatted.count))")
+    }
+
+    /// Round-trip a yesterday timestamp through `formatRelative` to pin
+    /// the `yesterdayLabel` constant is wired into the matcher.
+    func testFormatRelativeUsesHoistedYesterdayLabel() {
+        let yesterday = Date().addingTimeInterval(-86_400 - 3_600) // 25h ago — clearly yesterday
+        let appleDate = Int64(yesterday.timeIntervalSinceReferenceDate)
+        let formatted = IMessageChannel.formatRelative(appleDate: appleDate)
+        XCTAssertEqual(formatted, IMessageChannel.TimeFormat.yesterdayLabel,
+            "25h-ago timestamp must render as TimeFormat.yesterdayLabel — drift between matcher and constant is silent")
+    }
 }

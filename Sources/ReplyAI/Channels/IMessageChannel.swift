@@ -29,6 +29,23 @@ struct IMessageChannel: ChannelService {
     /// in sync and the literal can be pinned independently.
     static let deletedMessagePlaceholder = "[deleted]"
 
+    /// `DateFormatter.dateFormat` patterns used by `formatTime` and
+    /// `formatRelative` to render the user-visible time chip on every
+    /// thread row. `timeOfDay` was previously inline at TWO call sites
+    /// (a literal `"h:mm a"` in both `formatTime` and the `isDateInToday`
+    /// branch of `formatRelative`) — drift between the two would silently
+    /// produce different time formatting depending on whether the row's
+    /// time chip was rendered via the absolute or relative path. Hoisted
+    /// alongside `weekdayShort` and `dateShort` so the entire ThreadRow
+    /// time-formatting vocabulary lives in one place. Pinned by
+    /// `IMessageChannelTests.testTimeFormatPatternsAreFrozen`.
+    enum TimeFormat {
+        static let timeOfDay     = "h:mm a"
+        static let weekdayShort  = "EEE"
+        static let dateShort     = "MMM d"
+        static let yesterdayLabel = "Yesterday"
+    }
+
     /// Optional name-resolver that translates phone/email handles to
     /// contact names. Injected from the ViewModel so we don't couple
     /// channel code to Contacts framework directly.
@@ -442,7 +459,7 @@ struct IMessageChannel: ChannelService {
     static func formatTime(appleDate: Int64) -> String {
         let date = Date(timeIntervalSinceReferenceDate: secondsSinceReferenceDate(appleDate: appleDate))
         let f = DateFormatter()
-        f.dateFormat = "h:mm a"
+        f.dateFormat = TimeFormat.timeOfDay
         return f.string(from: date)
     }
 
@@ -451,15 +468,15 @@ struct IMessageChannel: ChannelService {
         let date = Date(timeIntervalSinceReferenceDate: secondsSinceReferenceDate(appleDate: appleDate))
         let cal = Calendar.current
         if cal.isDateInToday(date) {
-            let f = DateFormatter(); f.dateFormat = "h:mm a"
+            let f = DateFormatter(); f.dateFormat = TimeFormat.timeOfDay
             return f.string(from: date)
         }
-        if cal.isDateInYesterday(date) { return "Yesterday" }
+        if cal.isDateInYesterday(date) { return TimeFormat.yesterdayLabel }
         if let days = cal.dateComponents([.day], from: date, to: Date()).day, days < 7 {
-            let f = DateFormatter(); f.dateFormat = "EEE"   // Mon
+            let f = DateFormatter(); f.dateFormat = TimeFormat.weekdayShort   // Mon
             return f.string(from: date)
         }
-        let f = DateFormatter(); f.dateFormat = "MMM d"
+        let f = DateFormatter(); f.dateFormat = TimeFormat.dateShort
         return f.string(from: date)
     }
 
