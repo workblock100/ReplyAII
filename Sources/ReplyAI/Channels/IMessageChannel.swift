@@ -29,6 +29,33 @@ struct IMessageChannel: ChannelService {
     /// in sync and the literal can be pinned independently.
     static let deletedMessagePlaceholder = "[deleted]"
 
+    /// Format the `ChannelError.unavailable(...)` payload thrown when
+    /// the chat.db path resolves but the file isn't on disk — typically
+    /// macOS Messages was never enabled on this account. Hoisted from
+    /// the inline interpolation in `openReadOnly` so the wording lives
+    /// alongside the SQLITE-error fallback below — both produce
+    /// inbox-banner copy that has to read sensibly side-by-side. The
+    /// path is embedded so a triage engineer can tell at a glance
+    /// whether the override path or the production default
+    /// (`~/Library/Messages/chat.db`) failed. Pinned by
+    /// `IMessageChannelTests.testMissingDatabaseErrorMessageFormat`.
+    static func missingDatabaseErrorMessage(path: String) -> String {
+        "No Messages database found at \(path)."
+    }
+
+    /// Format the SQLite-error fallback wording when `db` is nil and
+    /// `sqlite3_errmsg` therefore can't be queried. Almost-never-fires
+    /// path (sqlite3_open_v2 returns SQLITE_OK with a non-nil handle in
+    /// the overwhelming case), but when it does fire the resulting
+    /// `ChannelError` payload IS the only signal to the inbox banner
+    /// AND the only string a support engineer sees in a diagnostic
+    /// dump. Drift to a different format silently changes what shows
+    /// up in user-reported screenshots. Pinned by
+    /// `IMessageChannelTests.testUnknownSQLiteErrorFallbackFormat`.
+    static func unknownSQLiteErrorFallbackMessage(rc: Int32) -> String {
+        "unknown SQLite error \(rc)"
+    }
+
     /// `DateFormatter.dateFormat` patterns used by `formatTime` and
     /// `formatRelative` to render the user-visible time chip on every
     /// thread row. `timeOfDay` was previously inline at TWO call sites
@@ -444,7 +471,7 @@ struct IMessageChannel: ChannelService {
     private func openReadOnly() throws -> OpaquePointer {
         let path = dbPathOverride ?? Self.chatDBPath
         guard FileManager.default.fileExists(atPath: path) else {
-            throw ChannelError.unavailable("No Messages database found at \(path).")
+            throw ChannelError.unavailable(Self.missingDatabaseErrorMessage(path: path))
         }
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX
 
@@ -458,7 +485,7 @@ struct IMessageChannel: ChannelService {
         }
 
         guard rc == SQLITE_OK else {
-            let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown SQLite error \(rc)"
+            let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? Self.unknownSQLiteErrorFallbackMessage(rc: rc)
             sqlite3_close(db)
             // SQLITE_NOTADB (26): file exists but isn't a valid SQLite database —
             // can happen after a macOS crash during iCloud sync. Surface a distinct

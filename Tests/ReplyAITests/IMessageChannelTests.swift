@@ -1998,6 +1998,46 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
             "yesterdayLabel is the literal user-visible string — drift in casing or wording (e.g. `yest.`) ships in front of users with no review")
     }
 
+    // MARK: - openReadOnly error-message format pins
+
+    /// `IMessageChannel.missingDatabaseErrorMessage(path:)` is the
+    /// `ChannelError.unavailable(...)` payload that surfaces in the
+    /// inbox banner when chat.db isn't on disk. The path is embedded
+    /// so triage can tell at a glance whether the override path or
+    /// the production default failed. Drift on the format silently
+    /// changes user-reported screenshots.
+    func testMissingDatabaseErrorMessageFormat() {
+        XCTAssertEqual(
+            IMessageChannel.missingDatabaseErrorMessage(path: "/tmp/chat.db"),
+            "No Messages database found at /tmp/chat.db.",
+            "format `No Messages database found at <path>.` is the inbox-banner copy when chat.db doesn't exist — drift changes what users see in support screenshots")
+        // Production path round-trip: tilde expansion has already
+        // happened by the time openReadOnly hits the format, so the
+        // formatter should embed the absolute path verbatim.
+        let prod = IMessageChannel.missingDatabaseErrorMessage(path: "/Users/me/Library/Messages/chat.db")
+        XCTAssertTrue(prod.contains("/Users/me/Library/Messages/chat.db"),
+            "production-path round-trip: the tilde-expanded absolute path must appear verbatim in the error copy")
+        XCTAssertTrue(prod.hasPrefix("No Messages database found at "),
+            "format prefix must remain stable so a triage engineer can grep the support payload by leading phrase")
+    }
+
+    /// `IMessageChannel.unknownSQLiteErrorFallbackMessage(rc:)` is
+    /// the SQLite-error fallback when `db` is nil and `sqlite3_errmsg`
+    /// can't be queried. Almost-never-fires path, but when it does
+    /// the resulting `ChannelError` payload IS the only signal in
+    /// support reports — drift makes them harder to parse.
+    func testUnknownSQLiteErrorFallbackFormat() {
+        XCTAssertEqual(
+            IMessageChannel.unknownSQLiteErrorFallbackMessage(rc: 14),
+            "unknown SQLite error 14",
+            "format `unknown SQLite error <rc>` is what support sees when sqlite3_errmsg can't run — drift breaks the rc-extraction grep")
+        // Negative rc is unusual but the format must still flow through.
+        XCTAssertEqual(
+            IMessageChannel.unknownSQLiteErrorFallbackMessage(rc: -1),
+            "unknown SQLite error -1",
+            "negative rc must round-trip without a sign-change in the formatter")
+    }
+
     /// Round-trip `formatRelative` against a 5-day-ago timestamp to pin
     /// that the weekday-short pattern flows through `TimeFormat.weekdayShort`.
     /// A constant-defined-but-not-used refactor would still pass
