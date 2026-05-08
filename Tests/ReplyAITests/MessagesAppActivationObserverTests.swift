@@ -23,7 +23,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         center.post(
             name: NSWorkspace.didActivateApplicationNotification,
             object: nil,
-            userInfo: ["bundleID": "com.apple.MobileSMS"]
+            userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID]
         )
 
         // Give the debounce queue a moment to drain (debounce: 0.0 → dispatches async)
@@ -66,9 +66,9 @@ final class MessagesAppActivationObserverTests: XCTestCase {
 
         // Two activations before the debounce window elapses.
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         // Wait for the debounce window to close.
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -90,7 +90,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.onMessagesActivated = { fired = true }
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         // Stop before the debounce fires.
         observer.stop()
@@ -115,7 +115,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.stop()
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertFalse(fired,
@@ -133,7 +133,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.onMessagesActivated = { fired = true }
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertFalse(fired,
@@ -160,7 +160,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         var fired = false
         observer.onMessagesActivated = { fired = true }
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertFalse(fired,
             "after two stop() calls the observer must remain detached")
@@ -202,7 +202,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.onMessagesActivated = { callCount += 1 }
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
                     userInfo: ["bundleID": "com.apple.Safari"])
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
@@ -227,7 +227,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.onMessagesActivated = { /* will be cleared */ }
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         // Clear the callback before the debounce window closes.
         observer.onMessagesActivated = nil
@@ -252,7 +252,7 @@ final class MessagesAppActivationObserverTests: XCTestCase {
         observer.onMessagesActivated = { XCTFail("original callback must not fire after stop") }
 
         center.post(name: NSWorkspace.didActivateApplicationNotification, object: nil,
-                    userInfo: ["bundleID": "com.apple.MobileSMS"])
+                    userInfo: ["bundleID": MessagesAppActivationObserver.messagesAppBundleID])
 
         observer.stop()
 
