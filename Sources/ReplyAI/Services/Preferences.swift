@@ -5,6 +5,16 @@ import Foundation
 /// Factory reset wipes every default whose key starts with `pref.` —
 /// EXCEPT keys listed in `PreferenceKey.wipeExemptions`.
 enum PreferenceKey {
+    /// Namespace prefix every ReplyAI-owned preference key starts with.
+    /// `wipeReplyAIDefaults` matches on this prefix to scrub our keys
+    /// without touching macOS-cached defaults under our bundle ID.
+    /// Drift between the prefix used to *name* keys above and the
+    /// prefix used to *match* keys at wipe time leaves stale state on
+    /// disk after a factory reset — keys named with the new prefix
+    /// remain orphaned because the wipe loop only sweeps the old. Pinned
+    /// by `PreferencesTests.testWipeNamespacePrefixIsFrozen`.
+    static let wipeNamespacePrefix = "pref."
+
     /// Privacy toggle for opt-in crash reports surfaced in `set-privacy`.
     /// Read by the crash-reporting hook at upload time, so flipping it
     /// takes effect without an app restart.
@@ -187,7 +197,8 @@ extension UserDefaults {
     ///   to `.standard` in production; tests pass an isolated suite.
     static func wipeReplyAIDefaults(in defaults: UserDefaults = .standard) {
         for key in defaults.dictionaryRepresentation().keys
-            where key.hasPrefix("pref.") && !PreferenceKey.wipeExemptions.contains(key) {
+            where key.hasPrefix(PreferenceKey.wipeNamespacePrefix)
+            && !PreferenceKey.wipeExemptions.contains(key) {
             defaults.removeObject(forKey: key)
         }
     }

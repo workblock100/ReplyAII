@@ -917,4 +917,47 @@ final class PreferencesLastThreadsCacheURLTests: XCTestCase {
         XCTAssertTrue(url.path.hasPrefix("/"),
                       "cache path must be absolute so behavior doesn't depend on the launching process's cwd")
     }
+
+    // MARK: - Wipe-namespace prefix pin
+    //
+    // The `pref.` prefix appears at every key declaration above and at
+    // the wipe loop's `hasPrefix` filter. Drift between the prefix used
+    // to *name* keys and the prefix used to *match* keys at wipe time
+    // leaves stale state on disk after a factory reset — keys named with
+    // the new prefix remain orphaned because the wipe loop only sweeps
+    // the old. Hoisted to `PreferenceKey.wipeNamespacePrefix`.
+
+    func testWipeNamespacePrefixIsFrozen() {
+        XCTAssertEqual(PreferenceKey.wipeNamespacePrefix, "pref.",
+            "wipeNamespacePrefix drift orphans every newly-named key from the factory-reset path")
+    }
+
+    /// Cross-check: every preference key declared in `PreferenceKey`
+    /// MUST start with the wipe namespace prefix, otherwise factory
+    /// reset silently leaves it on disk. New keys that forget the
+    /// prefix are caught here.
+    func testEveryDeclaredKeyMatchesWipePrefix() {
+        let keys: [String] = [
+            PreferenceKey.crashReports,
+            PreferenceKey.licenseUpdates,
+            PreferenceKey.iCloudSync,
+            PreferenceKey.defaultTone,
+            PreferenceKey.useMLX,
+            PreferenceKey.inboxThreadLimit,
+            PreferenceKey.autoPrime,
+            PreferenceKey.autoApplyRulesOnSync,
+            PreferenceKey.launchCount,
+            PreferenceKey.firstLaunchDate,
+            PreferenceKey.demoModeActive,
+            PreferenceKey.onboardingCompleted,
+            PreferenceKey.iMessageEnabled,
+            PreferenceKey.slackEnabled,
+            PreferenceKey.inboxLastSyncDate,
+            PreferenceKey.voiceExampleMessages,
+        ]
+        for key in keys {
+            XCTAssertTrue(key.hasPrefix(PreferenceKey.wipeNamespacePrefix),
+                "preference key '\(key)' missing wipe namespace prefix — factory reset will leave it orphaned on disk")
+        }
+    }
 }
