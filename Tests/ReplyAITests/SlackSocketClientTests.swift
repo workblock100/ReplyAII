@@ -462,4 +462,103 @@ final class SlackSocketClientTests: XCTestCase {
         XCTAssertEqual(SlackSocketClient.Envelope.hello,          "hello")
         XCTAssertEqual(SlackSocketClient.Envelope.eventsCallback, "events_callback")
     }
+
+    // MARK: - Dispatch edge cases
+
+    /// `type` field present but not a string (e.g. an integer) should
+    /// drop the frame, not crash. The `as? String` cast fails, the
+    /// guard returns. Pin wrong-type tolerance so a future "decode the
+    /// envelope through Codable" refactor doesn't accidentally
+    /// hard-fail on a Slack proxy that mangles the field type — better
+    /// to drop the malformed frame than crash the receive loop. Also
+    /// proves the receive loop survives a malformed frame and continues
+    /// processing subsequent valid frames.
+    func testSlackSocketClientDropsFrameWhenTypeFieldIsNotAString() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        let okExp = expectation(description: "valid frame after malformed predecessor still delivered")
+        client.onEventReceived = { _ in okExp.fulfill() }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        // type as integer instead of string — invalid envelope shape.
+        let nonStringType = #"{"type":123,"payload":{"event":{"type":"message"}}}"#
+        factory.task(at: 0).deliver(message: .string(nonStringType))
+
+        // Follow with a valid frame to prove the receive loop survived
+        // the prior malformed frame and continues processing.
+        let validFrame = #"{"type":"events_callback","payload":{"ok":true}}"#
+        factory.task(at: 0).deliver(message: .string(validFrame))
+
+        await fulfillment(of: [okExp], timeout: 2)
+
+        client.stop()
+    }
+
+    /// `events_callback` envelope with no payload key — the dispatch
+    /// only checks `type`, so the frame is forwarded verbatim and the
+    /// downstream consumer decides what to do. Pin the "minimal
+    /// envelope is still forwarded" semantics so a future "validate
+    /// payload shape" guard inside dispatch is a deliberate change
+    /// rather than silently dropping minimal-but-valid frames.
+    func testSlackSocketClientDeliversEventsCallbackWithoutPayload() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        let exp = expectation(description: "events_callback without payload still forwarded")
+        var received: Data?
+        client.onEventReceived = { data in
+            received = data
+            exp.fulfill()
+        }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        // Slack envelope with only `type` — no `payload`.
+        let frame = #"{"type":"events_callback"}"#
+        factory.task(at: 0).deliver(message: .string(frame))
+
+        await fulfillment(of: [exp], timeout: 2)
+        let parsed = try JSONSerialization.jsonObject(with: XCTUnwrap(received)) as? [String: Any]
+        XCTAssertEqual(parsed?["type"] as? String, "events_callback")
+        XCTAssertNil(parsed?["payload"],
+            "payload absent on the wire must round-trip absent — dispatch must NOT synthesize one")
+
+        client.stop()
+    }
+
+    /// Empty-string `type` value falls into the `default` arm of the
+    /// envelope-type switch and is dropped — same as an unknown type
+    /// like "message_received". Pin the empty-string-as-unknown
+    /// behavior so it can't drift to "swallow as keepalive" or "treat
+    /// as events_callback" by accident — both would silently misroute
+    /// real Slack traffic. Companion to the missing-type-key drop test
+    /// (`testSlackSocketClientDropsMalformedAndMissingTypeFrames`).
+    func testSlackSocketClientDropsFrameWithEmptyTypeValue() async throws {
+        let factory = MockWebSocketTaskFactory()
+        let client = makeClient(factory: factory)
+
+        let okExp = expectation(description: "valid frame still delivered after empty-type predecessor")
+        client.onEventReceived = { _ in okExp.fulfill() }
+
+        client.start()
+        await waitForTasks(1, factory: factory)
+
+        // Empty string for type — Slack should never send this, but
+        // pin tolerance for the malformed shape.
+        let emptyType = #"{"type":"","payload":{"event":{"type":"message"}}}"#
+        factory.task(at: 0).deliver(message: .string(emptyType))
+
+        // Valid frame to prove receive loop survived and processes
+        // subsequent traffic.
+        let validFrame = #"{"type":"events_callback","payload":{"ok":true}}"#
+        factory.task(at: 0).deliver(message: .string(validFrame))
+
+        await fulfillment(of: [okExp], timeout: 2)
+
+        client.stop()
+    }
 }
