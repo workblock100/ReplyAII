@@ -1284,6 +1284,47 @@ final class StatsResetAndGuardTests: XCTestCase {
         XCTAssertEqual(snap.rulesMatchedCount, 0)
     }
 
+    /// Pin that JSON `null` values for any expected key decode IDENTICALLY
+    /// to a missing key. The init uses `decodeIfPresent(_:forKey:) ?? <default>`
+    /// — the docs say `decodeIfPresent` returns nil on both missing keys and
+    /// explicit-null values, but a future refactor that swapped any single
+    /// site to `decode(_:forKey:)` (which throws on null) would silently
+    /// fail to decode any stats.json a third party (or an older build
+    /// writing the schema differently) populated with `null` for an empty
+    /// counter. The existing missing-keys pin
+    /// (`testStatsSnapshotDecodesPartialJSONWithDefaultedMissingKeys`)
+    /// covers absent-key. This fills the explicit-null leg.
+    func testStatsSnapshotDecodesExplicitNullKeysAsDefaults() throws {
+        let url = tempURL()
+        // Every counter set to JSON `null` — must default the same way as
+        // a missing key.
+        let nullJSON = #"""
+        {
+            "rulesFiredByAction": null,
+            "draftsGenerated": null,
+            "draftsSent": null,
+            "draftsGeneratedByTone": null,
+            "draftsSentByTone": null,
+            "messagesIndexed": null,
+            "messagesIndexedByChannel": null,
+            "ruleLoadSkips": null,
+            "rulesMatchedCount": null
+        }
+        """#
+        try Data(nullJSON.utf8).write(to: url)
+
+        let stats = Stats(fileURL: url)
+        let snap = stats.snapshot()
+
+        // Every counter must have defaulted to its empty form — proves
+        // decodeIfPresent treats `null` the same as missing across all
+        // nine fields. Drift on any one site to `decode(_:)` would throw
+        // on this exact JSON and surface as a thrown decode error rather
+        // than reaching this assertion.
+        XCTAssertEqual(snap, Stats.Snapshot(),
+            "JSON null on every field must decode to the all-zero default Snapshot — drift toward `decode(_:forKey:)` (which throws on null) would silently break stats.json read for any third-party tool that wrote nulls instead of omitting keys")
+    }
+
     /// Pin that an on-disk stats.json containing extra/unknown keys (e.g.
     /// from a newer build that's been downgraded) decodes successfully and
     /// silently ignores the unknown keys. This is the symmetric forward-
