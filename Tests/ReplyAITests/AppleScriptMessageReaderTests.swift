@@ -155,12 +155,14 @@ final class AppleScriptMessageReaderTests: XCTestCase {
     }
 
     func testRecentChatsAppliesGroupChatLabelForSyntheticChatID() throws {
-        // Empty name + group-style chat key → "Group chat" label fallback.
+        // Empty name + group-style chat key → group-chat label fallback.
+        // Route through the hoisted constant so a copy edit in
+        // `groupChatDisplayLabel` keeps this assertion green.
         let raw = "||iMessage;+;chat9999999999"
         let reader = makeReader(returning: raw)
         let threads = try reader.recentChats()
         XCTAssertEqual(threads.count, 1)
-        XCTAssertEqual(threads.first?.name, "Group chat")
+        XCTAssertEqual(threads.first?.name, AppleScriptMessageReader.groupChatDisplayLabel)
     }
 
     func testRecentChatsResolvesContactNameViaNameFor() throws {
@@ -178,22 +180,25 @@ final class AppleScriptMessageReaderTests: XCTestCase {
     }
 
     func testRecentChatsFillsEmDashWhenPreviewMissing() throws {
-        // Empty preview cell falls back to "—" so the row isn't visually
-        // blank in the sidebar.
+        // Empty preview cell falls back to the placeholder so the row isn't
+        // visually blank in the sidebar. Routes through the hoisted
+        // constant — a copy edit in `emptyPreviewPlaceholder` keeps this
+        // assertion green.
         let raw = "Alice||iMessage;-;+12014623980||"
         let reader = makeReader(returning: raw)
         let threads = try reader.recentChats()
-        XCTAssertEqual(threads.first?.preview, "—",
-                       "empty preview must fall back to em-dash placeholder")
+        XCTAssertEqual(threads.first?.preview, AppleScriptMessageReader.emptyPreviewPlaceholder,
+                       "empty preview must fall back to the configured placeholder")
     }
 
     func testRecentChatsTreatsMissingValuePreviewAsEmpty() throws {
         // AppleScript can leak the literal string "missing value" into the
-        // preview cell — the parser treats it as empty and falls back to "—".
+        // preview cell — the parser treats it as empty and falls back to
+        // the configured placeholder.
         let raw = "Alice||iMessage;-;+12014623980||missing value"
         let reader = makeReader(returning: raw)
         let threads = try reader.recentChats()
-        XCTAssertEqual(threads.first?.preview, "—")
+        XCTAssertEqual(threads.first?.preview, AppleScriptMessageReader.emptyPreviewPlaceholder)
     }
 
     // MARK: - messagesForChat parsing
@@ -714,5 +719,29 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "outgoingDirectionValue must not be empty — every parsed message routes through this comparison")
         XCTAssertFalse(AppleScriptMessageReader.incomingDirectionValue.isEmpty,
             "incomingDirectionValue must not be empty — drift to empty would break the AppleScript emitter's fallback path")
+    }
+
+    // MARK: - Display-fallback vocabulary freeze
+
+    /// Pin the user-visible em-dash that fills the inbox-row preview slot
+    /// when AppleScript supplied no preview text. This is sidebar copy —
+    /// drift to a different glyph (ASCII `-`, three dots, or empty) is a
+    /// visible UX change, not a refactor.
+    func testEmptyPreviewPlaceholderIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.emptyPreviewPlaceholder, "—",
+            "empty-preview placeholder is sidebar copy — review intentionally before changing")
+        XCTAssertFalse(AppleScriptMessageReader.emptyPreviewPlaceholder.isEmpty,
+            "an empty placeholder defeats the purpose: a blank row would render with no visual cue that there's no preview")
+    }
+
+    /// Pin the group-chat fallback label so a copy edit ("Group chat" →
+    /// "Untitled group" / "Group" / "Unnamed thread") is an intentional
+    /// review surface, not a silent change. Already covered functionally
+    /// by `testRecentChatsAppliesGroupChatLabelForSyntheticChatID`, but
+    /// that test now routes through the constant — this freeze test
+    /// captures the literal value itself.
+    func testGroupChatDisplayLabelIsFrozen() {
+        XCTAssertEqual(AppleScriptMessageReader.groupChatDisplayLabel, "Group chat",
+            "group-chat label is sidebar copy — review intentionally before changing")
     }
 }

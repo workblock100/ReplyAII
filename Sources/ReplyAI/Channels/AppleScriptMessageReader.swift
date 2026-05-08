@@ -53,6 +53,30 @@ struct AppleScriptMessageReader: Sendable {
     /// `AppleScriptMessageReaderTests.testIncomingDirectionLiteralIsFrozen`.
     static let incomingDirectionValue: String = "incoming"
 
+    /// User-visible placeholder rendered in the inbox-row preview slot when
+    /// the parsed AppleScript row carried no preview text (or AppleScript
+    /// leaked a `missing value` sentinel that we then mapped to empty).
+    /// Surfaces in the sidebar — drift to a different glyph (e.g. an ASCII
+    /// hyphen or three dots) is a visible UX change, not just a refactor.
+    /// Pinned by
+    /// `AppleScriptMessageReaderTests.testEmptyPreviewPlaceholderIsFrozen`
+    /// and the existing `testRecentChatsFillsEmDashWhenPreviewMissing` /
+    /// `testRecentChatsTreatsMissingValuePreviewAsEmpty` cluster (which
+    /// now route through this constant rather than asserting the literal).
+    static let emptyPreviewPlaceholder: String = "—"
+
+    /// User-visible thread-name fallback applied when AppleScript emitted
+    /// neither a chat `name` nor a participant handle for a synthetic
+    /// `chat<digits>` GUID — the only case where we know the chat is a
+    /// group but have nothing to label it with. Surfaces in the sidebar.
+    /// Drift here is a UX change (e.g. flipping to "Untitled group" or
+    /// "Group" alone changes the row a user reads). Pinned by
+    /// `AppleScriptMessageReaderTests.testGroupChatDisplayLabelIsFrozen`
+    /// and the existing
+    /// `testRecentChatsAppliesGroupChatLabelForSyntheticChatID` (which
+    /// now routes through this constant).
+    static let groupChatDisplayLabel: String = "Group chat"
+
     /// Executes an AppleScript source string and returns the result as text.
     /// Injectable so tests can verify the script string and return mock data
     /// without touching Messages.app.
@@ -228,7 +252,7 @@ struct AppleScriptMessageReader: Sendable {
                 name = Self.prettyPhone(name)
             }
             if preview == Self.missingValueSentinel { preview = "" }
-            if preview.isEmpty { preview = "—" }
+            if preview.isEmpty { preview = Self.emptyPreviewPlaceholder }
             // Collapse newlines / extra whitespace in previews so they fit one row.
             preview = preview.replacingOccurrences(of: "\n", with: " ")
             threads.append(MessageThread(
@@ -253,7 +277,7 @@ struct AppleScriptMessageReader: Sendable {
         let s = String(last)
         // If it's a phone number, return as-is; if it's an email, return as-is;
         // if it's a synthetic chat key (e.g. "chat1234567890"), label it generically.
-        if s.hasPrefix("chat") { return "Group chat" }
+        if s.hasPrefix("chat") { return groupChatDisplayLabel }
         return s
     }
 
