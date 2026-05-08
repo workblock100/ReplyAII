@@ -651,6 +651,79 @@ final class PromptBuilderTests: XCTestCase {
     /// dropping the space would still pass the existing
     /// `testMultipleVoiceExamplesAllAppearInPrompt` (substring contains)
     /// but would change how the model parses the list boundary.
+    // MARK: - Template literal pins (hoisted constants)
+    //
+    // The `Template` enum holds every prompt-template literal. Pinning the
+    // exact bytes here protects against a refactor that "tightens" the
+    // copy in a way that quietly changes how the model parses a section.
+    // Each pin asserts BOTH the constant equals the literal AND the
+    // rendered prompt routes through the constant — catching drift
+    // between source and constant in either direction.
+
+    func testPromptTemplateLiteralsAreFrozen() {
+        XCTAssertEqual(PromptBuilder.Template.voiceExamplesHeader,
+                       "Style examples from the user's prior messages:",
+            "voice-examples header literal must not drift — it tells the LLM the section is descriptive style, not content to reply to")
+        XCTAssertEqual(PromptBuilder.Template.recentMessagesHeader,
+                       "Recent messages (oldest first):",
+            "recent-messages header literal must not drift — `(oldest first)` parenthetical tells the LLM how to interpret message ordering")
+        XCTAssertEqual(PromptBuilder.Template.emptyHistoryFallback,
+                       "(no messages yet)",
+            "empty-history fallback literal must not drift — parenthesized form signals metadata so the model doesn't echo it back as a reply")
+        XCTAssertEqual(PromptBuilder.Template.speakerSelf, "me",
+            "outgoing-speaker label must remain literal `me` — drift here misattributes messages and silently produces confused replies")
+        XCTAssertEqual(PromptBuilder.Template.userInstructionSuffix,
+                       " tone. Reply text only.",
+            "user-instruction suffix must not drift — `Reply text only.` is what suppresses preamble in every draft")
+    }
+
+    func testBuildPromptRoutesRecentMessagesHeaderThroughTemplate() {
+        // Drift between source literal and Template constant would let
+        // testBuildPromptRecentMessagesHeaderLiteral pass while the
+        // constant silently desynced. Asserting `prompt.contains(Template.X)`
+        // catches that case: source has to keep emitting whatever the
+        // constant currently says.
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [makeMessage("hi")])
+        XCTAssertTrue(prompt.contains(PromptBuilder.Template.recentMessagesHeader),
+            "rendered prompt must contain Template.recentMessagesHeader byte-for-byte — source and constant must not drift")
+    }
+
+    func testBuildPromptRoutesEmptyHistoryFallbackThroughTemplate() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: [])
+        XCTAssertTrue(prompt.contains(PromptBuilder.Template.emptyHistoryFallback),
+            "rendered prompt must contain Template.emptyHistoryFallback byte-for-byte — source and constant must not drift")
+    }
+
+    func testBuildPromptRoutesVoiceExamplesHeaderThroughTemplate() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm,
+                                         history: [], voiceExamples: ["sample"])
+        XCTAssertTrue(prompt.contains(PromptBuilder.Template.voiceExamplesHeader),
+            "rendered prompt must contain Template.voiceExamplesHeader byte-for-byte — source and constant must not drift")
+    }
+
+    func testBuildPromptRoutesSpeakerSelfThroughTemplate() {
+        // The outgoing speaker label is the most easily-typo'd literal:
+        // a refactor that changes "me" → "user" or "I" would still
+        // render a syntactically valid prompt but break every existing
+        // model's "me as draft author" framing.
+        let thread = makeThread(name: "Maya")
+        let history = [Message(from: .me, text: "outgoing", time: "")]
+        let prompt = PromptBuilder.build(thread: thread, tone: .warm, history: history)
+        XCTAssertTrue(prompt.contains("\(PromptBuilder.Template.speakerSelf): outgoing"),
+            "outgoing message must render as `\(PromptBuilder.Template.speakerSelf): <text>` — source and constant must not drift")
+    }
+
+    func testBuildPromptRoutesUserInstructionSuffixThroughTemplate() {
+        let thread = makeThread()
+        let prompt = PromptBuilder.build(thread: thread, tone: .direct, history: [])
+        XCTAssertTrue(prompt.contains(PromptBuilder.Template.userInstructionSuffix),
+            "rendered prompt must contain Template.userInstructionSuffix byte-for-byte — source and constant must not drift")
+    }
+
     func testBuildPromptVoiceExamplesBulletPrefixIsHyphenSpace() {
         let thread = makeThread()
         let prompt = PromptBuilder.build(thread: thread, tone: .warm,

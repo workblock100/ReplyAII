@@ -10,6 +10,25 @@ struct PromptBuilder {
     /// while leaving room for the system prompt and completion.
     static let historyCharBudget = 2_000
 
+    /// Prompt-template vocabulary. These literals are load-bearing: each
+    /// one frames how the model interprets a section of the prompt
+    /// (`Template.recentMessagesHeader`'s "(oldest first)" parenthetical,
+    /// `Template.emptyHistoryFallback`'s parenthesized form that signals
+    /// "metadata, not user text", `Template.userInstructionSuffix`'s
+    /// "Reply text only." that suppresses preamble). Re-typing these at
+    /// every reader/writer is the kind of drift that quietly degrades
+    /// completion quality on long threads. Hoisted to a `Template` enum
+    /// so every reader threads through one source of truth and a
+    /// deliberate copy edit shows up as a single-line diff. Pinned by
+    /// `PromptBuilderTests.testPromptTemplateLiteralsAreFrozen`.
+    enum Template {
+        static let voiceExamplesHeader  = "Style examples from the user's prior messages:"
+        static let recentMessagesHeader = "Recent messages (oldest first):"
+        static let emptyHistoryFallback = "(no messages yet)"
+        static let speakerSelf          = "me"
+        static let userInstructionSuffix = " tone. Reply text only."
+    }
+
     /// User-turn prompt: thread context + instruction line.
     ///
     /// Embedded newlines within individual message texts are collapsed to a
@@ -26,28 +45,28 @@ struct PromptBuilder {
         lines.append("")
 
         if !voiceExamples.isEmpty {
-            lines.append("Style examples from the user's prior messages:")
+            lines.append(Template.voiceExamplesHeader)
             for example in voiceExamples {
                 lines.append("- \(example)")
             }
             lines.append("")
         }
 
-        lines.append("Recent messages (oldest first):")
+        lines.append(Template.recentMessagesHeader)
 
         let truncated = truncate(history, budget: Self.historyCharBudget)
         if truncated.isEmpty {
-            lines.append("(no messages yet)")
+            lines.append(Template.emptyHistoryFallback)
         } else {
             for m in truncated {
-                let speaker = m.from == .me ? "me" : thread.name
+                let speaker = m.from == .me ? Template.speakerSelf : thread.name
                 let text = m.text.replacingOccurrences(of: "\n", with: " ")
                 lines.append("\(speaker): \(text)")
             }
         }
 
         lines.append("")
-        lines.append("Write my next reply in a \(tone.rawValue.lowercased()) tone. Reply text only.")
+        lines.append("Write my next reply in a \(tone.rawValue.lowercased())\(Template.userInstructionSuffix)")
         return lines.joined(separator: "\n")
     }
 
