@@ -116,6 +116,51 @@ final class IMessageSenderTests: XCTestCase {
         XCTAssertEqual(IMessageSender.chatGUID(for: t), "iMessage;-;handle")
     }
 
+    /// Pin that a whitespace-only `thread.chatGUID` is treated as
+    /// PRESENT (not nil) by `chatGUID(for:)`'s `!guid.isEmpty` check —
+    /// a single space passes through verbatim into the sender path,
+    /// then fails `validateChatGUID` because `" ".split(separator: ";")
+    /// .count == 1`. Surprising-but-safe: a malformed or hostile
+    /// chat.db row with a whitespace-only chatGUID surfaces a clear
+    /// `invalidChatGUID(" ")` error instead of silently synthesizing
+    /// a 1:1 GUID from the (probably-incorrect) thread.id. Drift
+    /// toward `(guid?.isEmpty == false && guid.trimmingCharacters(...)
+    /// .isEmpty == false)` would silently flip whitespace-only into
+    /// the synthesis path, where the synthesized GUID `iMessage;-;
+    /// <thread.id>` would be sent against — but that's only correct if
+    /// thread.id IS the right route, which for a row with a malformed
+    /// chatGUID is exactly the thing in doubt. Pin the surfacing-as-
+    /// validation-error contract so a future "isEmpty also rejects
+    /// whitespace" refactor lands deliberately. This pin sits next to
+    /// `testEmptyChatGUIDStringTreatedAsNil` (which pins the OPPOSITE
+    /// shape — empty string DOES route to synthesis) so the two
+    /// boundary cases live together.
+    func testWhitespaceOnlyChatGUIDPassesThroughVerbatimNotSynthesized() {
+        let t = MessageThread(
+            id: "handle", channel: .imessage, name: "X",
+            avatar: "X", preview: "", time: "",
+            chatGUID: " "  // single ASCII space — non-empty but malformed
+        )
+        XCTAssertEqual(IMessageSender.chatGUID(for: t), " ",
+            "whitespace-only chatGUID must pass through verbatim — drift toward `.trimmingCharacters().isEmpty` would silently route to the synthesis path, where the synthesized GUID would target whatever thread.id happens to be (potentially the wrong route)")
+        // Sanity contrast: empty string DOES route to synthesis.
+        let empty = MessageThread(
+            id: "handle", channel: .imessage, name: "X",
+            avatar: "X", preview: "", time: "",
+            chatGUID: ""
+        )
+        XCTAssertEqual(IMessageSender.chatGUID(for: empty), "iMessage;-;handle",
+            "control: empty chatGUID still synthesizes — pinning whitespace-only and empty together makes the boundary explicit")
+        // The whitespace-only case fails validation, so a real send() call would throw.
+        XCTAssertThrowsError(try IMessageSender.validateChatGUID(" ", for: .imessage)) { err in
+            guard case IMessageSender.SendError.invalidChatGUID(let guid) = err else {
+                return XCTFail("expected invalidChatGUID, got: \(err)")
+            }
+            XCTAssertEqual(guid, " ",
+                "the surfaced invalidChatGUID payload must be the offending whitespace verbatim — pin so a future trim-before-validate refactor is visible at the error site, not just at the chatGUID(for:) site")
+        }
+    }
+
     // MARK: - REP-158: chatGUID format for 1:1 vs group thread
 
     func testChatGUIDForOneToOneThreadSynthesized() {
