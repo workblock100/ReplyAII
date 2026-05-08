@@ -320,7 +320,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: S
 - ui_sensitive: false
 - status: done
-- done_on: main commit pending — autopilot-2026-05-03
+- done_on: main `75dc7ee` (rep-016: senderKnown classification — operator-precedence bug fix + 6 tests)
 - claimed_by: autopilot-2026-05-03 (impl reconstructed)
 - files_to_touch: `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Branch `wip/quality-2026-04-21-193800-senderknown-fix` (commit d672ab4) contains a real bug fix: operator-precedence in `RuleContext.from(thread:)` caused `&&` to bind tighter than `||`, so emails and digit-only phone numbers were misclassified as known contacts. The consequence is that the `.senderUnknown` rule predicate silently misfired since initial shipping. This is a correctness bug affecting any user who has set up `.senderUnknown` rules. Human should review the fix (it changes production logic), merge if correct, then check whether sibling wip branches' tests still pass with the corrected logic.
@@ -1111,7 +1111,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: M
 - ui_sensitive: false
 - status: done
-- done_on: main commit pending — autopilot-2026-05-03
+- done_on: main `959a508` (rep-170: contactGroupMatchesName SmartRule predicate + 6 tests)
 - claimed_by: autopilot-2026-05-03
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Channels/ContactsResolver.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: Add `case contactGroupMatchesName(groupName: String)` to `RulePredicate`. `RuleContext` gains `contactGroupNames: [String]` (contact group names for the sender's handle, resolved via `CNContactStore.groups(matching:)` in `ContactsResolver`). `RuleEvaluator` evaluates using `context.contactGroupNames.contains { $0.localizedCaseInsensitiveContains(groupName) }`. Codable discriminator: `"contactGroupMatchesName"`. `SfcRulesView.humanize` gets a new case string. Tests: matching group name matches; non-matching group name doesn't; case-insensitive match; Codable round-trip preserves groupName; empty contactGroupNames returns false.
@@ -1584,7 +1584,7 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - effort: S
 - ui_sensitive: false
 - status: done
-- done_on: main commit pending — autopilot-2026-05-03
+- done_on: main `e974a1b` (rep-221: messages(forThreadID:) AttributedBody fallback regression test)
 - claimed_by: autopilot-2026-05-03
 - files_to_touch: `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: The SQL query selects both `message.text` and `message.attributedBody`. When `text` is NULL, `AttributedBodyDecoder.extractText` is called on the raw blob. Add an in-memory SQLite fixture: one message row with `text = NULL` and a hand-crafted minimal typedstream `attributedBody` blob; call `messages(forThreadID:limit:)`; assert the returned message body matches the decoded string (not nil, not "[deleted]"). Verifies the fallback path is exercised, not just the SQL filter.
