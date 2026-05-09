@@ -835,7 +835,7 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - status: done
 - done_on: main commit 5b7fa77 (`Sources/ReplyAI/Services/GlobalHotkey.swift` exists, ReplyAIApp.swift owns a `GlobalHotkey` instance, GlobalHotkeyContractTests cover the matcher, and ⌘⇧R is surfaced through ObShortcutsView / ObDoneView / SetShortcutsView / SfcMenubarView)
 - claimed_by: human
-- files_to_touch: `Sources/ReplyAI/GlobalHotkey.swift` (new), `Sources/ReplyAI/App/ReplyAIApp.swift`, `Sources/ReplyAI/Resources/Info.plist`
+- files_to_touch: `Sources/ReplyAI/Services/GlobalHotkey.swift` (new), `Sources/ReplyAI/App/ReplyAIApp.swift`, `Sources/ReplyAI/Resources/Info.plist`
 - scope: `NSEvent.addGlobalMonitorForEvents(matching: .keyDown)` to catch `⌘⇧R` from anywhere. On match, `openWindow(id: "inbox")`. Needs `NSAccessibilityUsageDescription`. If Accessibility not granted, show a small banner in the inbox with a deep-link to System Settings. UI-sensitive (new banner surface) → branch-only, human merges.
 - success_criteria: code lands on `wip/...` branch; human reviews banner copy + placement before merge.
 - test_plan: unit-test the key-matching logic (NSEvent parsing of modifier+key tuples).
@@ -848,7 +848,7 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - done_on: main — `Sources/ReplyAI/Channels/SlackChannel.swift` + `SlackOAuthFlow.swift` + `SlackHTTPClient.swift` + `SlackSocketClient.swift` + `LocalhostOAuthListener.swift` + `SlackTokenStore` (in `KeychainHelper.swift`) shipped via the REP-272 / REP-273 / REP-274 chain. AGENTS.md "Priority queue" entry #3 documents the shipped surface. Architect blocker (2026-05-02) flagged the implementation as already in tree; formally flipping status here so future fires don't churn on this one as still-open. Remaining polish (multi-workspace, Socket Mode error-state UI) is tracked separately in AGENTS.md tail.
 - claimed_by: human
 - blocker: null
-- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Sources/ReplyAI/Channels/SlackOAuthFlow.swift`, `Sources/ReplyAI/Channels/SlackHTTPClient.swift`, `Sources/ReplyAI/Channels/SlackSocketClient.swift`, `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift`, `Sources/ReplyAI/Channels/KeychainHelper.swift`, `Sources/ReplyAI/Screens/Surfaces/SetChannelsView.swift`, AGENTS.md
+- files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Sources/ReplyAI/Channels/SlackOAuthFlow.swift`, `Sources/ReplyAI/Channels/SlackHTTPClient.swift`, `Sources/ReplyAI/Channels/SlackSocketClient.swift`, `Sources/ReplyAI/Channels/LocalhostOAuthListener.swift`, `Sources/ReplyAI/Channels/KeychainHelper.swift`, `Sources/ReplyAI/Screens/Settings/SetChannelsView.swift`, AGENTS.md
 - scope: Build the `SlackChannel: ChannelService` impl. OAuth flow spins up a local `NWListener` on `:4242` during auth only, opens the Slack authorize URL via `NSWorkspace.shared.open`, captures the `code`, exchanges for token via `oauth.v2.access`, stores in Keychain. `recentThreads` hits `conversations.list` + `conversations.history`. Socket Mode for real-time wired through `SlackSocketClient`.
 - success_criteria: shipped — see `done_on`.
 - test_plan: SlackChannelTests / SlackOAuthFlowTests / SlackHTTPClientTests / SlackSocketClientTests cover the surface end-to-end with mocked Slack endpoints.
@@ -1653,7 +1653,7 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - ui_sensitive: false
 - status: deprioritized
 - claimed_by: null
-- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Sources/ReplyAI/Models/MessageThread.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
+- files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Sources/ReplyAI/Models/Thread.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: Tapbacks (`associated_message_type 2000–2005`) and delivery receipts are currently filtered at the SQL level by the thread-preview query. Expose `messageType: MessageType` on `Message` where `MessageType` is an enum: `.standard`, `.tapback`, `.deliveryReceipt`, `.unknown(Int)`. The SQL query for `messages(forThreadID:)` adds the `associated_message_type` column. Tapbacks and receipts are still filtered from thread previews (existing behavior preserved) but are now available to callers who want to show reaction summaries or sync status. Tests: standard message has `.standard` type; a row with `associated_message_type = 2000` has `.tapback`; a row with `associated_message_type = 2002` (read receipt) has `.deliveryReceipt`.
 - success_criteria:
   - `MessageType` enum with `.standard`, `.tapback`, `.deliveryReceipt`, `.unknown(Int)` cases
