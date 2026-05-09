@@ -49,7 +49,7 @@ swift test                      # run the XCTest suite — but see the gotcha be
 #    --skip InboxViewModelTests
                                 # plain `swift test` hangs intermittently on the
                                 # Contacts XPC handshake; the three-skip form
-                                # completes in ~19s warm with 1901 passes.
+                                # completes in ~18.5s warm with 1907 passes.
 
 # Xcode path:
 xcodegen generate && open ReplyAI.xcodeproj
