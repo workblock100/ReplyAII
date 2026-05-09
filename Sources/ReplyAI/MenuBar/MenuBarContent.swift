@@ -4,6 +4,24 @@ import SwiftUI
 /// `sfc-menubar` design mock. Renders the same list of waiting threads,
 /// but driven by the live `InboxViewModel` instead of fixture snapshots.
 struct MenuBarContent: View {
+    /// User-visible string vocabulary for the menu-bar popover. Hoisted
+    /// from inline `Text("…")` literals in the view body so a copy review
+    /// can edit one place and so each string can be pinned by a unit test.
+    /// Sibling views (Inbox/Composer/Sidebar) still hold their literals
+    /// inline; this is the first foothold for the broader hoist suggested
+    /// by the 2026-05-09-0811 fire log. `internal` (default access) so
+    /// `@testable import ReplyAI` can reach the constants.
+    enum Strings {
+        /// Empty-state header when there are no waiting threads — short,
+        /// affirmative, doesn't yell at the user. The verb-less ".'"
+        /// keeps it gentle vs "You have nothing to do."
+        static let inboxZeroHeader = "Inbox zero."
+        /// Empty-state subhead — the explanation under the header.
+        /// Reassures the user the app is working; matches the design's
+        /// tone of voice elsewhere ("Nothing needs you right now.").
+        static let inboxZeroSubhead = "Nothing needs you right now."
+    }
+
     @State private var model = InboxViewModel()
     @Environment(\.openWindow) private var openWindow
 
@@ -51,10 +69,10 @@ struct MenuBarContent: View {
     private var waitingList: some View {
         if waitingThreads.isEmpty {
             VStack(spacing: 4) {
-                Text("Inbox zero.")
+                Text(Strings.inboxZeroHeader)
                     .font(Theme.Font.sans(14, weight: .medium))
                     .foregroundStyle(Theme.Color.fg)
-                Text("Nothing needs you right now.")
+                Text(Strings.inboxZeroSubhead)
                     .font(Theme.Font.sans(12))
                     .foregroundStyle(Theme.Color.fgMute)
             }
