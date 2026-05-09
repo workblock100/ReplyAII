@@ -111,11 +111,11 @@ final class Stats: @unchecked Sendable {
     /// while the new build creates a fresh one, and every counter
     /// resets to zero on next launch (with the old data orphaned but
     /// recoverable). The existing
-    /// `StatsTests.testDefaultFileURLEndsWithStatsJSON`
+    /// `StatsDefaultFileURLTests.testDefaultFileURLEndsWithStatsJSON`
     /// asserts the lastPathComponent is `stats.json` against an inline
     /// literal — sibling to that pin, this hoist makes the filename
     /// greppable from the source side and discoverable in one place.
-    /// Pinned by `StatsTests.testProductionFileNameIsStatsDotJSON`.
+    /// Pinned by `StatsDefaultFileURLTests.testProductionFileNameIsStatsDotJSON`.
     static let productionFileName = "stats.json"
 
     /// Serializes pending debounced writes. Two locks kept separate:

@@ -149,7 +149,7 @@ enum KeychainError: LocalizedError, Sendable {
     /// the only signal a triage-engineer has) or rewords the recovery
     /// hint ("Open Keychain Access…") which is the user's only
     /// actionable next step. Pinned by
-    /// `KeychainHelperTests.testUnhandledErrorFallbackToastFormatRoundTrips`.
+    /// `KeychainErrorTests.testUnhandledErrorFallbackToastFormatRoundTrips`.
     static func unhandledErrorFallbackToast(status: OSStatus) -> String {
         "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
     }
