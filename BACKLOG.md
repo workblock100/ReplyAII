@@ -299,6 +299,21 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
   - A fire that ships a regression (e.g. button label changed, inbox window empty) gets caught by the UI tests and the wip merge is skipped
 - test_plan: After the target exists, deliberately introduce a regression on a wip branch (e.g. rename `WelcomeView`'s "Get started" button to "Continue") and verify the smoke-launch step skips the merge with reason "ui-test-failed".
 
+### REP-UI-STR-HOIST-001 — hoist inline UI string literals to per-view `Strings` enums + literal pins
+- priority: P2
+- effort: M (incremental — one view per wip branch)
+- ui_sensitive: true
+- status: in_progress
+- claimed_by: autopilot-2026-05-09-1011 (and successor fires; see progress note)
+- files_to_touch: every `Sources/ReplyAI/**/*.swift` file with inline `Text("…")` literals — one wip branch per view to keep human-review batches small
+- scope: Inline `Text("…")` literals in SwiftUI view bodies make a copy review or rebrand a many-file diff with no test coverage flagging changes. The 2026-05-09-0811 fire log identified this as the next leverage point after the constant-pin work was exhausted on the model layer. Pattern: introduce a per-view `enum Strings` at the top of the View struct (`internal` access so `@testable import ReplyAI` reaches it), move each rendered string to a `static let` with a doc-comment explaining the design intent, then add `XCTAssertEqual` pins for each string + shape invariants (period suffix, leading uppercase, length cap). Sibling that already follows this pattern: `OAuthError.timeoutToast / listenerFailedPrefix / tokenExchangeFailedPrefix`. Each view ships on its own wip branch — UI-touching → human reviews the rendered output before merge. Strings shared across many views (e.g. brand letter `"R"`, brand name `"ReplyAI"`) get a separate consolidation pass into `Sources/ReplyAI/BrandStrings.swift` rather than per-file enums; the comment on `MenuBarContent.Strings.brandLetter` (in flight on the wip branch below) documents that boundary so a future fire doesn't migrate piecemeal.
+- progress_2026-05-09-1011 (autopilot): first wip branch in flight at `wip/autopilot-2026-05-09-1011-menubar-strings-hoist` — 3 commits, 7 hoisted strings (2 empty-state + 2 footer + 3 header) on `MenuBarContent`, 9 XCTest pins (`MenuBarContentStringsTests.swift`, +105 lines). All tests green under the three-skip gate (1909 → 1918, 0 failures). Awaiting human visual review that the empty-state, header, and footer all render identically to current main before merge.
+- success_criteria:
+  - Each shipping View has either (a) all inline `Text("…")` literals hoisted to a `Strings` enum with literal-pin tests, OR (b) a documented reason its strings are unique to that view (rare — most strings are reusable).
+  - At least 5 views complete (currently 1 in flight: `MenuBarContent`).
+  - Brand-shared strings (`"R"`, `"ReplyAI"`, `"⌘K"`, etc.) move to `Sources/ReplyAI/BrandStrings.swift` after the per-view passes settle the per-view boundaries.
+- test_plan: Each wip branch adds N XCTest pins where N = number of hoisted strings + shape invariants. The three-skip gate must remain green; build must remain clean; smoke-launch's 3-layer gate must pass. Human reviews rendered output and merges if visually identical.
+
 ### REP-AUDIT-260505 — audit findings from manual UI walkthrough on 2026-05-05
 - priority: P1
 - effort: S
