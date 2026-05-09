@@ -99,6 +99,54 @@ final class ThemeTokensTests: XCTestCase {
         }
     }
 
+    /// Pin the byte-exact RGB literal of every per-channel dot color.
+    /// `testChannelColorsAreDistinct` proves no two channels collide, and
+    /// `ChannelTests.testDotColorMatchesThemeChannelToken` proves the
+    /// `Channel.dotColor` switch wires each case to the matching token —
+    /// neither catches a literal edit that shifts a channel's hue without
+    /// breaking distinctness or wiring (e.g. someone "tones down" the
+    /// Slack purple from `#C57FE0` to `#9F70C0`, both still distinct from
+    /// every other channel and still wired through the switch). These
+    /// colors are the per-channel brand identity rendered in every
+    /// sidebar dot, avatar corner badge, and channel-filter chip — drift
+    /// silently rebrands the channel signal across every screen. Bytes
+    /// derive from the Color literal in `Sources/ReplyAI/Theme/Theme.swift`
+    /// run through SwiftUI's `String(describing:)` projection (sRGB →
+    /// `#RRGGBBAA`). A single-digit edit on any literal flips one byte
+    /// and surfaces here in CI rather than as a visual regression.
+    func testChannelColorLiteralsArePinned() {
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelIMessage),
+            "#34C759FF",
+            "Theme.Color.channelIMessage is iOS-green — drift silently rebrands every iMessage thread badge"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelWhatsApp),
+            "#25D366FF",
+            "Theme.Color.channelWhatsApp matches WhatsApp brand green — drift breaks brand recognition on the channel chip"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelSlack),
+            "#C57FE0FF",
+            "Theme.Color.channelSlack is the dark-mode-friendly Slack purple — Slack is the priority non-iMessage channel post-pivot, drift here is high-visibility"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelTeams),
+            "#6264A7FF",
+            "Theme.Color.channelTeams matches Teams brand purple — drift silently rebrands every Teams thread"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelSMS),
+            "#5AC8FAFF",
+            "Theme.Color.channelSMS is iOS classic blue — drift breaks SMS-vs-iMessage visual distinction in the sidebar"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.channelTelegram),
+            "#29B6F6FF",
+            "Theme.Color.channelTelegram is the dark-mode-friendly Telegram blue — drift here breaks brand recognition on the channel chip"
+        )
+    }
+
     // MARK: - Semantic color identity
 
     /// Warn / err / ok are surfaced as status chips, banners, and inline
