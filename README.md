@@ -45,9 +45,9 @@ Drop the files listed in [Resources/Fonts/README.md](Resources/Fonts/README.md) 
 
 Expected:
 
-- `InterTight-Regular.ttf`, `-Medium.ttf`, `-SemiBold.ttf`, `-Bold.ttf`
+- `InterTight[wght].ttf` (single variable-weight axis file — `Theme.Font.sans(_:weight:)` calls `.weight(weight)` on `.custom("Inter Tight", …)` to interpolate)
 - `InstrumentSerif-Italic.ttf`
-- `JetBrainsMono-Regular.ttf`, `-Medium.ttf`
+- `JetBrainsMono-Regular.ttf`, `-Medium.ttf` (per-weight static files — `.custom("JetBrains Mono", …).weight(_:)` is unreliable on the Mono family, so these ship as separate PostScript names)
 
 All OFL-licensed. Until installed, Theme.Font falls back to the system font silently — visible but not pixel-perfect.
 
