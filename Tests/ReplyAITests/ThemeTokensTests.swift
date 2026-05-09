@@ -161,6 +161,34 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertNotEqual(err,  ok,  "err and ok must be visually distinct")
     }
 
+    /// Pin the byte-exact hex of every semantic status color.
+    /// `testSemanticColorsAreDistinct` proves the three never collide,
+    /// but it would happily pass if a designer "softened" the err red
+    /// from `#FF8B7A` (warm coral) to a neon `#FF1010` — both still
+    /// distinct from warn and ok, but the entire alarm vocabulary of
+    /// the app shifts. Pin each literal here so a one-digit edit
+    /// surfaces in CI rather than as inconsistent banner color across
+    /// builds. `ok` happens to share its hex with `channelIMessage`
+    /// (`#34C759`) at the moment because both intentionally render iOS
+    /// system green; a future split keeps the pin local to each token.
+    func testSemanticColorLiteralsArePinned() {
+        XCTAssertEqual(
+            String(describing: Theme.Color.warn),
+            "#FFB347FF",
+            "Theme.Color.warn is the warm-amber chip — drift here silently restyles every 'X waiting' / 'paused' surface"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.err),
+            "#FF8B7AFF",
+            "Theme.Color.err is the warm-coral alarm — drift here silently restyles every error banner / failure pill in the app"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.ok),
+            "#34C759FF",
+            "Theme.Color.ok is iOS-green — drift here silently restyles every 'sent' / 'connected' / 'done' affirmation chip"
+        )
+    }
+
     // MARK: - Accent stack
 
     /// The accent token is layered as accent / accentSoft / accentSofter /
