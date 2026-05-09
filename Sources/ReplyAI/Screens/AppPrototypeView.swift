@@ -79,9 +79,10 @@ struct AppPrototypeView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
                         .background(Capsule(style: .continuous).fill(Theme.Color.accent))
-                        // REP-AUDIT-260505 issue #1 fix candidate: SwiftUI's
-                        // `.buttonStyle(.plain)` + `.background(Shape().fill())`
-                        // restricts hit-testing to the Text glyphs only, not
+                        // REP-AUDIT-260505 issue #1 fix (shipped main `80b6aad`,
+                        // 2026-05-09): SwiftUI's `.buttonStyle(.plain)` +
+                        // `.background(Shape().fill())` restricts hit-testing
+                        // to the Text glyphs only, not
                         // the surrounding capsule fill. The keyboard shortcut
                         // `⌘⇧O` works because it bypasses hit-testing; the
                         // mouse click misses the capsule fill region. Routing
