@@ -2206,11 +2206,18 @@ final class IMessageChannelFormatTimeTests: XCTestCase {
     /// Round-trip a yesterday timestamp through `formatRelative` to pin
     /// the `yesterdayLabel` constant is wired into the matcher.
     func testFormatRelativeUsesHoistedYesterdayLabel() {
-        let yesterday = Date().addingTimeInterval(-86_400 - 3_600) // 25h ago — clearly yesterday
-        let appleDate = Int64(yesterday.timeIntervalSinceReferenceDate)
+        // Construct yesterday-at-noon via Calendar so the test is independent
+        // of current clock time. A naïve `now - 25h` delta misclassifies as
+        // "day before yesterday" when run between 00:00 and ~01:00 local —
+        // 25h before 00:30 is 23:30 two days ago, which `isDateInYesterday`
+        // correctly rejects, surfacing as "Thu" instead of "Yesterday".
+        let cal = Calendar.current
+        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: Date()))!
+        let yesterdayNoon = yesterdayStart.addingTimeInterval(12 * 3_600)
+        let appleDate = Int64(yesterdayNoon.timeIntervalSinceReferenceDate)
         let formatted = IMessageChannel.formatRelative(appleDate: appleDate)
         XCTAssertEqual(formatted, IMessageChannel.TimeFormat.yesterdayLabel,
-            "25h-ago timestamp must render as TimeFormat.yesterdayLabel — drift between matcher and constant is silent")
+            "yesterday-noon timestamp must render as TimeFormat.yesterdayLabel — drift between matcher and constant is silent")
     }
 
     // MARK: - FDA-denial error-message substring freeze
