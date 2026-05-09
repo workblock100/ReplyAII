@@ -600,4 +600,36 @@ final class ThemeTokensTests: XCTestCase {
             "sans(.regular) and sans(.bold) must be distinct — Inter Tight is a single variable-weight TTF and the .weight() modifier on the resolved Font is what differentiates them; dropping it would render every weight as the same axis position"
         )
     }
+
+    /// `Theme.Font.serifItalic(_:)` is the InstrumentSerif-Italic display
+    /// face used for every onboarding hero ("you" pull-quote, "Teach
+    /// ReplyAI how you text."), every empty-state hero ("Inbox zero."),
+    /// and every error screen heading. Previously had ZERO test
+    /// coverage. Pin two structural invariants that catch the most
+    /// likely regressions: (a) caller-passed size flows through to the
+    /// resolved Font (a "let's use a default size" refactor that
+    /// ignored the parameter would silently shrink every onboarding
+    /// hero), (b) serifItalic at a given size is distinct from sans +
+    /// mono at the same size (catches a regression that swapped
+    /// InstrumentSerif-Italic for the default sans face).
+    func testSerifItalicSizeArgumentFlowsThrough() {
+        XCTAssertNotEqual(
+            Theme.Font.serifItalic(14),
+            Theme.Font.serifItalic(38),
+            "serifItalic(14) and serifItalic(38) must be distinct fonts — caller-passed size must flow through to the resolved Font, otherwise every onboarding hero would render at the same size regardless of the call-site argument"
+        )
+    }
+
+    func testSerifItalicProducesDistinctFontFromSansAndMono() {
+        // Same size to isolate the family-name difference.
+        let serif = Theme.Font.serifItalic(14)
+        let sans  = Theme.Font.sans(14)
+        let mono  = Theme.Font.mono(14)
+        XCTAssertNotEqual(serif, sans,
+            "serifItalic and sans must resolve to distinct fonts at the same size — a regression that swapped InstrumentSerif-Italic for the default sans face would silently un-italicize every onboarding hero")
+        XCTAssertNotEqual(serif, mono,
+            "serifItalic and mono must resolve to distinct fonts at the same size — a regression here would silently mono-space every onboarding hero")
+        XCTAssertNotEqual(sans, mono,
+            "sans and mono are already distinct via different .custom names; pin the relationship so all three Theme.Font helpers' family-routing surfaces here at the same size")
+    }
 }
