@@ -279,11 +279,21 @@ Implementation chose Carbon `RegisterEventHotKey` over `NSEvent.addGlobalMonitor
 
 The end-to-end OAuth + send/receive surface has shipped. `Sources/ReplyAI/Channels/SlackChannel.swift` conforms to `ChannelService`; `SlackOAuthFlow` drives `LocalhostOAuthListener` on `127.0.0.1:4242` and exchanges via `oauth.v2.access`; `SlackTokenStore` persists `(token, workspaceName)` in Keychain; Settings → Channels (`SetChannelsView.swift`) renders the Connect/Disconnect UX. `SlackHTTPClient` covers `conversations.list` + `conversations.history`; `SlackSocketClient` handles Socket Mode receive. Remaining polish: multi-workspace (currently single-token) and Socket Mode error-state UI.
 
-### 4. Better AttributedBodyDecoder
+### 4. ~~Better AttributedBodyDecoder~~ — DEPRIORITIZED (post-pivot)
 
-- Current scanner misses nested `NSMutableAttributedString` payloads and returns nil for some rich-text messages.
-- Port https://github.com/dgelessus/python-typedstream to Swift (it's well-documented) or vendor a minimal parser covering class-ref / length / UTF-8 blob extraction for `NSString` + `NSAttributedString`.
-- Test against a corpus of real `attributedBody` blobs harvested from chat.db (sanitized — no real content in the repo).
+The 2026-04-23 strategic-direction pivot explicitly calls out
+`AttributedBodyDecoder` rich-text parsing improvements as
+deprioritized (existing code stays as reference; don't invest new
+cycles). The current scanner already does a real typedstream 0x2B
+tag scan for the common path (commit `e760a12`, REP-003) and is
+covered by 28 XCTest cases including hand-crafted hex fixtures for
+nested `NSMutableAttributedString`, UTF-8 emoji, and malformed blobs.
+A nested-payload edge case may still return nil on some rich-text
+messages, but per the pivot, the answer there is to lean on
+alternative message sources (AppleScript, Accessibility API, UN
+notification capture) rather than to keep deepening the typedstream
+parser. Left here so a future un-pivot doesn't need to re-derive
+the open work.
 
 ## Testing expectations
 
