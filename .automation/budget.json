@@ -1,5 +1,5 @@
 {
-  "comment": "Soft caps read by the worker/planner prompts. Violations abort the run with a log entry, they don't fail loudly. Tune these as the team's pain threshold reveals itself.",
+  "comment": "Soft caps from the legacy 7-agent pipeline (worker/planner/reviewer/etc.). As of the 2026-05 single-agent pivot the active scheduled task is `replyai-autopilot` only and its budget lives in ~/.claude/scheduled-tasks/replyai-autopilot/SKILL.md (out-of-tree); these per-role caps are reference-only until the multi-agent pipeline is reactivated. Violations historically aborted the run with a log entry, they didn't fail loudly. Tune these once the team's pain threshold reveals itself.",
 
   "worker": {
     "max_main_commits_per_24h": 8,
