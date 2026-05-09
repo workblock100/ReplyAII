@@ -1179,6 +1179,64 @@ final class InboxViewModelAutoApplyRulesTests: XCTestCase {
 @MainActor
 final class InboxViewModelSendTests: XCTestCase {
 
+    /// REP-222 end-to-end: a successful send appends the sent text to the
+    /// user's voice profile in the injected UserDefaults. Pins the wiring
+    /// from confirmSend → captureVoiceExample so a future refactor that
+    /// drops the captureVoiceExample call (e.g. moves it to a different
+    /// state machine) is caught immediately.
+    func testSuccessfulSendAppendsToVoiceProfile() async {
+        let suite = "test.ReplyAI.confirmSend.voiceCapture.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let thread = MessageThread(
+            id: "t-vc", channel: .imessage, name: "Alice",
+            avatar: "A", preview: "hi", time: "now",
+            chatGUID: "iMessage;-;t-vc")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts(), defaults: d)
+        vm.selectThread("t-vc")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = IMessageSender.dryRunHook()
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "Sounds great, see you Tuesday at the cafe!")
+        await vm.confirmSend()
+
+        XCTAssertEqual(d.voiceExampleMessages(),
+                       ["Sounds great, see you Tuesday at the cafe!"],
+                       "successful send must append the sent text to the user's voice profile")
+    }
+
+    /// REP-222 end-to-end negative: a FAILED send must NOT corrupt the
+    /// voice profile. We only learn from messages that actually went out.
+    func testFailedSendDoesNotAppendToVoiceProfile() async {
+        let suite = "test.ReplyAI.confirmSend.voiceCaptureFail.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let thread = MessageThread(
+            id: "t-vc-fail", channel: .imessage, name: "Bob",
+            avatar: "B", preview: "hey", time: "now",
+            chatGUID: "iMessage;-;t-vc-fail")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts(), defaults: d)
+        vm.selectThread("t-vc-fail")
+
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in
+            throw IMessageSender.SendError.scriptFailure("simulated for test")
+        }
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "This should not enter the profile after failure!")
+        await vm.confirmSend()
+
+        XCTAssertEqual(d.voiceExampleMessages(), [],
+                       "failed send must NOT pollute the voice profile")
+    }
+
     /// On a successful send, `sendConfirmation` is nil and `sendToast` contains
     /// the "Sent to…" confirmation — verifying the composer returns to its idle state.
     func testSendSuccessClearsConfirmationAndShowsToast() async {
@@ -1339,6 +1397,88 @@ final class InboxViewModelSendTests: XCTestCase {
 
         XCTAssertEqual(vm.selectedThreadID, "fa-1",
                        "failed send must NOT advance selection — the user is staying put to retry")
+    }
+}
+
+// MARK: - Voice profile capture on send (REP-222)
+// Pins that successful sends append the just-sent text to the user's
+// voice profile in UserDefaults, with FIFO eviction at the cap and
+// length filtering on too-short messages. The PromptBuilder integration
+// path (MLXDraftService reads voiceExampleMessages and passes them to
+// PromptBuilder.build) is tested separately in MLXDraftServiceTests.
+
+@MainActor
+final class InboxViewModelVoiceCaptureTests: XCTestCase {
+
+    private func makeDefaults() -> UserDefaults {
+        let suite = "test.ReplyAI.voiceCapture.\(UUID().uuidString)"
+        return UserDefaults(suiteName: suite)!
+    }
+
+    func testCaptureAppendsLongEnoughMessage() {
+        let d = makeDefaults()
+        InboxViewModel.captureVoiceExample("Sounds great, see you Tuesday!", into: d)
+        XCTAssertEqual(d.voiceExampleMessages(), ["Sounds great, see you Tuesday!"])
+    }
+
+    func testCaptureSkipsShortMessages() {
+        let d = makeDefaults()
+        InboxViewModel.captureVoiceExample("ok", into: d)
+        InboxViewModel.captureVoiceExample("thanks", into: d)
+        InboxViewModel.captureVoiceExample("yeah!", into: d)
+        XCTAssertEqual(d.voiceExampleMessages(), [],
+            "messages below voiceExampleMinChars must NOT enter the profile — they pollute the 20-slot cap with noise")
+    }
+
+    func testCaptureSkipsWhitespaceOnly() {
+        let d = makeDefaults()
+        InboxViewModel.captureVoiceExample("                        ", into: d)
+        XCTAssertEqual(d.voiceExampleMessages(), [])
+    }
+
+    func testCaptureTrimsBeforeLengthCheck() {
+        let d = makeDefaults()
+        // 10 trimmed chars — below the 12-char floor, even though raw is 14
+        InboxViewModel.captureVoiceExample("  hi friend ", into: d)
+        XCTAssertEqual(d.voiceExampleMessages(), [],
+            "trim happens BEFORE the length check; padded short message must still skip")
+    }
+
+    func testCaptureSkipsExactDuplicateOfMostRecent() {
+        let d = makeDefaults()
+        InboxViewModel.captureVoiceExample("Sounds good, talk later!", into: d)
+        InboxViewModel.captureVoiceExample("Sounds good, talk later!", into: d)
+        XCTAssertEqual(d.voiceExampleMessages(),
+                       ["Sounds good, talk later!"],
+                       "re-sending the same boilerplate must NOT push every other example out of the FIFO window")
+    }
+
+    func testCaptureFifoEvictionWhenAtCap() {
+        let d = makeDefaults()
+        let cap = PreferenceRange.maxVoiceExamples
+        // Fill exactly to cap with N entries each ≥ voiceExampleMinChars.
+        for i in 0..<cap {
+            InboxViewModel.captureVoiceExample("voice example number \(i) here", into: d)
+        }
+        XCTAssertEqual(d.voiceExampleMessages().count, cap)
+        // One more push — oldest entry ("voice example number 0 here") evicts.
+        InboxViewModel.captureVoiceExample("voice example number 9999 here", into: d)
+        let stored = d.voiceExampleMessages()
+        XCTAssertEqual(stored.count, cap, "list must stay at cap")
+        XCTAssertEqual(stored.last, "voice example number 9999 here",
+                       "newest message keeps the tail")
+        XCTAssertFalse(stored.contains("voice example number 0 here"),
+                       "oldest message must be evicted (FIFO)")
+    }
+
+    func testCaptureRespectsPerEntryLengthCap() {
+        let d = makeDefaults()
+        let oversize = String(repeating: "x", count: PreferenceRange.maxVoiceExampleLength + 50)
+        InboxViewModel.captureVoiceExample(oversize, into: d)
+        let stored = d.voiceExampleMessages()
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored.first?.count, PreferenceRange.maxVoiceExampleLength,
+                       "oversized message must be truncated by setVoiceExampleMessages — defense-in-depth from setter, not capture")
     }
 }
 

@@ -125,7 +125,20 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
                     ))
 
                     let session = ChatSession(container, instructions: PromptBuilder.systemPrompt(tone: tone))
-                    let prompt  = PromptBuilder.build(thread: thread, tone: tone, history: history)
+                    // REP-222 wiring (2026-05-09): pull the user's voice
+                    // examples from UserDefaults and pass them as few-shot
+                    // exemplars in the prompt. PromptBuilder.build accepts
+                    // these via the `voiceExamples:` parameter — without
+                    // this read, the field defaults to [] and every draft
+                    // is generated against tone alone, ignoring the user's
+                    // voice profile entirely.
+                    let voiceExamples = UserDefaults.standard.voiceExampleMessages()
+                    let prompt = PromptBuilder.build(
+                        thread: thread,
+                        tone: tone,
+                        history: history,
+                        voiceExamples: voiceExamples
+                    )
 
                     for try await chunk in session.streamResponse(to: prompt, role: .user, images: [], videos: []) {
                         if Task.isCancelled { break }

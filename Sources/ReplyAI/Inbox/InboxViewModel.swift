@@ -479,6 +479,40 @@ final class InboxViewModel {
         "Sent to \(recipient)"
     }
 
+    /// REP-222: minimum length (chars) for a sent message to be eligible for
+    /// the user's voice profile. Below this we skip — "ok", "thanks", "lol",
+    /// "yeah" don't help the model match voice, they just burn slots in the
+    /// 20-entry profile cap. Drift up too far and we miss legitimate short
+    /// replies that DO have voice texture; drift down and the profile fills
+    /// with monosyllables.
+    static let voiceExampleMinChars = 12
+
+    /// REP-222: append a just-sent draft to the user's voice profile in
+    /// `UserDefaults`, with FIFO eviction enforced by the setter's
+    /// `prefix(maxVoiceExamples)` cap. Idempotent on whitespace-only or
+    /// too-short strings (no-op). Used by `confirmSend()` after a successful
+    /// dispatch so the voice profile evolves with the user's actual writing
+    /// rather than requiring manual training.
+    static func captureVoiceExample(_ text: String, into defaults: UserDefaults) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= voiceExampleMinChars else { return }
+        var examples = defaults.voiceExampleMessages()
+        // Skip exact duplicate of the most-recent entry — re-sending the
+        // same boilerplate (e.g. "Sounds good, talk soon!") shouldn't push
+        // every other example out of the FIFO window.
+        if examples.last == trimmed { return }
+        examples.append(trimmed)
+        // The setter handles cap enforcement and per-entry truncation; we
+        // just append. To respect the cap as FIFO-newest-wins (rather than
+        // FIFO-oldest-wins, which is what `prefix` gives us), trim from the
+        // FRONT here so the setter's `prefix` keeps the same set we want.
+        let cap = PreferenceRange.maxVoiceExamples
+        if examples.count > cap {
+            examples = Array(examples.suffix(cap))
+        }
+        defaults.setVoiceExampleMessages(examples)
+    }
+
     /// `true` when a successful chat.db sync is active. When false, the
     /// UNNotification capture path is the only real-time source of thread data.
     var chatDBAvailable: Bool {
@@ -1203,6 +1237,18 @@ final class InboxViewModel {
                 throw IMessageSender.SendError.unsupported
             }
             stats.recordDraftSent(tone: pending.tone)
+            // REP-222 capture (2026-05-09): append the just-sent text to
+            // the user's voice profile so future drafts can use it as a
+            // few-shot exemplar. Filter rules:
+            //   - Skip messages shorter than `voiceExampleMinChars` — short
+            //     replies ("ok", "thanks") aren't useful for voice matching
+            //     and pollute the profile cap of `maxVoiceExamples` entries.
+            //   - FIFO eviction: when the profile is full, drop the oldest
+            //     entry. The setter `setVoiceExampleMessages(_:)` enforces
+            //     the cap by `prefix(...)` from the front, so we keep the
+            //     newest entries by appending to the end.
+            // The setter also truncates each entry to maxVoiceExampleLength.
+            InboxViewModel.captureVoiceExample(pending.text, into: defaults)
             sendToast = InboxViewModel.sentToToast(recipient: pending.recipient)
             advanceToNextThread()
         } catch let err as IMessageSender.SendError {
