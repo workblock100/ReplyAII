@@ -40,7 +40,16 @@ SwiftPM builds without Xcode. Xcode is installed at `/Applications/Xcode.app` an
 cd ~/Code/ReplyAI
 ./scripts/build.sh debug open   # compile, bundle, codesign, launch
 ./scripts/build.sh release      # release build, doesn't launch
-swift test                      # run the XCTest suite
+swift test                      # run the XCTest suite — but see the gotcha below;
+                                # in headless / autopilot fires you almost always
+                                # want the three-skip form instead:
+#  swift test \
+#    --skip ContactsResolverTests \
+#    --skip InboxViewModelIsSyncingTests \
+#    --skip InboxViewModelTests
+                                # plain `swift test` hangs intermittently on the
+                                # Contacts XPC handshake; the three-skip form
+                                # completes in ~19s warm with 1901 passes.
 
 # Xcode path:
 xcodegen generate && open ReplyAI.xcodeproj
