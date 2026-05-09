@@ -100,6 +100,12 @@ struct AppleScriptMessageReader: Sendable {
     /// Each thread gets the chat name when available, otherwise the first
     /// participant's handle (phone or email). For 1:1 chats Messages.app
     /// returns `missing value` for `name`, so we fall back to participants.
+    ///
+    /// The `tell application "Messages"` opener uses an inline literal
+    /// rather than `IMessageSender.appleScriptApplicationTarget` because
+    /// AppleScript source must be compile-time-fixed; the cross-module
+    /// equality is enforced at test time by
+    /// `AppleScriptMessageReaderTests.testReaderScriptUsesSameApplicationTargetAsSender`.
     func recentChats() throws -> [MessageThread] {
         // Query name + participant handle + chat id only. Reading message
         // bodies via `text messages of theChat` iterates the entire history
