@@ -6,7 +6,7 @@ Read this before you touch anything. It's the shortest path to productive edits 
 
 **ReplyAI's `chat.db` + Full Disk Access read path is unreliable in practice.** Even with FDA granted by the user, the integration hits intermittent disconnections and silent failures we can't consistently fix. The product direction has pivoted: **stop chasing FDA. Find practical alternatives.**
 
-New priorities for the autonomous agents (planner, worker, reviewer):
+New priorities for the autopilot (and any human-paired sessions):
 
 1. **Alternative message-source architectures** — AppleScript via `tell application "Messages"` (uses Automation permission, not FDA), Accessibility API reading of the Messages.app window, UNNotification passive capture of incoming messages, Shortcuts.app export flows that a user triggers manually, or hybrids of the above. None require FDA.
 2. **Non-iMessage channels as first-class citizens** — Slack (OAuth + Socket Mode is clean and already partially specced), WhatsApp via hosted WebView, Telegram Bot API, Teams via Graph API, SMS relay from iPhone via CloudKit. The app should be valuable to a user with iMessage integration completely disabled.
