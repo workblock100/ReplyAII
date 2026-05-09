@@ -67,13 +67,26 @@ Sources/ReplyAI/
 ├── Components/                    Avatar, Card, Caret, ChannelDot, InboxFrame,
 │                                  KbdChip, KbdKey, MiniButton, PillToggle,
 │                                  PrimaryButton + GhostButton, SectionLabel
-├── Channels/
-│   ├── ChannelService.swift       Protocol + ChannelError
+├── Channels/                      22 files post-pivot — every messaging surface lives here
+│   ├── ChannelService.swift       Protocol + ChannelError + ChannelServiceDefaults
 │   ├── IMessageChannel.swift      chat.db reader (SQLite3 direct), contacts injection
+│   ├── IMessagePreview.swift      Sidebar preview formatter (single-URL collapse, attachment fallback)
+│   ├── IMessageSender.swift       NSAppleScript → Messages.app (`tell application "Messages"`)
 │   ├── ContactsResolver.swift     CNContactStore, NSLock-guarded cache, @unchecked Sendable
 │   ├── AttributedBodyDecoder.swift Best-effort typedstream scanner for rich messages
 │   ├── ChatDBWatcher.swift        DispatchSource.makeFileSystemObjectSource + 600ms debounce
-│   └── IMessageSender.swift       NSAppleScript → Messages.app (`tell application "Messages"`)
+│   ├── AppleScriptMessageReader.swift  Pivot fallback when chat.db / FDA is denied
+│   ├── AccessibilityAPIReader.swift    Pivot alt source: AX tree of Messages.app sidebar
+│   ├── MessagesAppActivationObserver.swift  NSWorkspace activation watcher → re-sync trigger
+│   ├── UNNotificationContentParser.swift     Map UN userInfo to senderHandle / chatGUID
+│   ├── ShortcutsExportHandler.swift  replyai://import-messages URL scheme parser
+│   ├── KeychainHelper.swift       Generic SecItem* wrapper + SlackTokenStore + 5 toast copy constants
+│   ├── LocalhostOAuthListener.swift  NWListener-backed loopback HTTP for OAuth callbacks (port 4242)
+│   ├── SlackChannel.swift         ChannelService impl — conversations.list/history + chat.postMessage
+│   ├── SlackHTTPClient.swift      URLSession wrapper for Slack web-API endpoints
+│   ├── SlackOAuthFlow.swift       OAuth2 orchestrator: authorize URL + token exchange via oauth.v2.access
+│   ├── SlackSocketClient.swift    WebSocket Socket Mode receiver
+│   └── {SMS,WhatsApp,Teams,Telegram}Channel.swift  Stub channels — throw authorizationDenied until backend lands
 ├── Rules/
 │   ├── SmartRule.swift            Predicate + Action DSL, hand-written Codable w/ "kind" discriminator
 │   ├── RuleEvaluator.swift        Pure-func evaluator + defaultTone extraction
@@ -98,8 +111,7 @@ Sources/ReplyAI/
 │   ├── ScreenID.swift             + ScreenInventory + ScreenMeta
 │   ├── ScreenRouter.swift         switch (ScreenID) -> View
 │   ├── AppPrototypeView.swift     Gallery shell (sidebar + top bar + content + footer)
-│   ├── _Placeholders.swift        Empty (all 34 screens now real)
-│   ├── Onboarding/ (9)            Share OnboardingStage
+│   ├── Onboarding/ (9 + WelcomeGate + OnboardingStage)  9 Ob*View + WelcomeGate (first-run gate) + shared stage type
 │   ├── MainApp/ (3)               Inbox variants (empty/loading/offline) over InboxFrame
 │   ├── Threads/ (3)               thr-group, thr-media (typed-stream image/voice), thr-long
 │   ├── Composer/ (3)              cmp-custom, cmp-lowconf, cmp-nothing
