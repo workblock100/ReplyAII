@@ -275,6 +275,12 @@ Commits (newest first; run `git log` for detail):
 
 Pick in order. Each has a concrete starting point.
 
+> **Note (2026-05-09):** items 1–4 below are the original pre-pivot strategic
+> priorities, all now shipped or deprioritized. The current active priority
+> queue lives in `BACKLOG.md` — see the REP-501→REP-505 chain (MLX SPM split),
+> REP-XCUI-001 (XCUITest target), and the open REP-AUDIT entries. This section
+> is preserved as historical context for the original 2026-04 priorities.
+
 ### 1. ~~Global `⌘⇧R`~~ — SHIPPED (REP-009)
 
 Implementation chose Carbon `RegisterEventHotKey` over `NSEvent.addGlobalMonitorForEvents`, sidestepping the Accessibility permission prompt entirely. See `Sources/ReplyAI/Services/GlobalHotkey.swift` and `ReplyAIWindowSummoner` (same file). Remaining polish: tighten the fallback notification path when no inbox window exists at hotkey-fire time (currently posts `replyAIRequestSummonInbox`; consumer is `RootView.task`).
