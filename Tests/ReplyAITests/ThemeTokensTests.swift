@@ -261,6 +261,43 @@ final class ThemeTokensTests: XCTestCase {
                        "foreground stack must have 4 distinct shades; got duplicates: \(stack)")
     }
 
+    /// Companion to `testForegroundStackIsDistinct`: distinctness only catches
+    /// two layers collapsing onto the same render value, it doesn't catch a
+    /// uniform shift — e.g. all four shades darkening 10% would still be
+    /// distinct yet visibly degrade typographic contrast across every
+    /// heading, body, caption, and disabled-text use site. The fg-stack
+    /// hex literals are the design contract: `fg` is the primary text
+    /// color (warm off-white), `fgDim` is the secondary heading/label tint,
+    /// `fgMute` is the tertiary metadata color, `fgFaint` is the disabled
+    /// state. The slight green undertone (each shade has G > R > B) is
+    /// intentional and warmth-tied to the warm-paper accent ecosystem —
+    /// drift to a neutral or cool-ramp would silently restyle the entire
+    /// app's text feel. Mirrors `testAccentBrandLiteralIsPinnedChartreuseLime`
+    /// + the line-stack pin pattern, but covers the typographic ramp that
+    /// reads on every screen.
+    func testForegroundStackHexLiteralsArePinned() {
+        XCTAssertEqual(
+            String(describing: Theme.Color.fg),
+            "#F2F2EEFF",
+            "Theme.Color.fg is the primary warm off-white text color — drift restyles every heading and body text site"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.fgDim),
+            "#C9CBC6FF",
+            "Theme.Color.fgDim is the secondary heading/label tint — drift restyles every secondary-text affordance"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.fgMute),
+            "#8A8D86FF",
+            "Theme.Color.fgMute is the tertiary metadata color — drift restyles every metadata/caption row"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.fgFaint),
+            "#55584FFF",
+            "Theme.Color.fgFaint is the disabled-state text color — drift restyles every disabled-affordance label"
+        )
+    }
+
     // MARK: - Surface stack
 
     func testSurfaceStackIsDistinct() {
