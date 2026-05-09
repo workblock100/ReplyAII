@@ -122,7 +122,7 @@ Tests/ReplyAITests/                ~1931 tests as of 2026-05-08-2210 (1895 pass 
 - **`@Observable` services (DraftEngine)** injected via `.environment(engine)` + `@Environment(DraftEngine.self)`.
 - **`LLMService` protocol** is `Sendable` and returns `AsyncThrowingStream<DraftChunk>` synchronously — no `async` on `draft(...)`. Bridge to async work inside the stream's task. This is the MLX-vs-stub swap point.
 - **Thread-safe resolvers** (`ContactsResolver`): `@unchecked Sendable`, `NSLock`-guarded cache, sync wrappers (`synced { … }`) so async callers don't hold the lock across an await.
-- **Per-weight PostScript-name font lookup** in `Theme.Font` — SwiftUI's `.weight()` modifier on `.custom(...)` is unreliable; we resolve to `InterTight-Medium` / `-SemiBold` / `-Bold` by name.
+- **Mixed font-resolution strategy** in `Theme.Font`. Inter Tight ships as a single variable-weight TTF, so `Theme.Font.sans` calls `.custom("Inter Tight", …).weight(weight)` and lets CoreText resolve against the `wght` axis. JetBrains Mono ships as per-weight static TTFs, so `Theme.Font.mono` switches on `.weight()` and picks the PostScript name (`JetBrainsMono-Medium` vs `JetBrainsMono-Regular`) directly because `.weight()` on a static face is unreliable. Don't unify the two paths — the trick is that one font is variable and the other isn't.
 - **Entitlements applied at codesign time** in `scripts/build.sh`, NOT embedded in the bundle. Changing `Resources/ReplyAI.entitlements` requires a rebuild through the script, not just a recompile.
 
 ## What's done
