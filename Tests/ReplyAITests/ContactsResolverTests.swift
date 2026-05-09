@@ -63,6 +63,44 @@ final class ContactsResolverTests: XCTestCase {
                        "repeat lookup of an unknown handle should not keep hitting the store")
     }
 
+    /// Pins the "Some(\"\") collapses to nil" behavior of the resolver's
+    /// per-handle cache. `name(for:)` writes `store.lookup(...) ?? ""` into
+    /// `cache[key].name`, then on a fresh cache hit returns
+    /// `entry.name.isEmpty ? handle : entry.name`. So a store that returns
+    /// `Some("")` (a contact whose display name is the empty string —
+    /// possible if a CNContact has no givenName/familyName/organizationName
+    /// but does match by phone) ends up indistinguishable from a `nil`
+    /// store result at the resolver's API surface: both fall back to the
+    /// raw handle on every subsequent call within the TTL window, both
+    /// cache as a single empty entry, both consume a single store-lookup
+    /// call. This is a recurring bug class flagged by the `Present-but-
+    /// empty strings` gotcha — pinning the surprising-but-safe behavior
+    /// surfaces a future "consistency fix" refactor (e.g. switching the
+    /// `?? ""` to `if let resolved = ..., !resolved.isEmpty`) as a
+    /// deliberate change rather than silent drift in either direction
+    /// (start re-querying every call, or start surfacing empty strings
+    /// in the UI). Companion to `testCacheRemembersMissesAsEmpty` which
+    /// covers the nil leg.
+    func testCacheTreatsEmptyStringResolutionLikeNil() {
+        let fake = FakeContactStore()
+        fake.prepopulate(initialAccess: .granted)
+        // Set the lookup to return Some("") rather than nil — the
+        // FakeContactStore's `lookup(handle:)` is `names[handle] ??
+        // names[Self.normalize(handle)]`, so seeding either form with ""
+        // produces a Some("") return.
+        fake.names["+15558887777"] = ""
+
+        let resolver = ContactsResolver(store: fake)
+        resolver.overrideAccessForTesting(.granted)
+
+        XCTAssertEqual(resolver.name(for: "+15558887777"), "+15558887777",
+                       "Some(\"\") store result must fall back to the raw handle, identically to nil")
+        XCTAssertEqual(resolver.name(for: "+15558887777"), "+15558887777",
+                       "second call must hit cache, not re-query the store")
+        XCTAssertEqual(fake.lookupCallCount, 1,
+                       "Some(\"\") result must cache as a single empty entry — repeat calls should not retry the store")
+    }
+
     // MARK: - REP-156: fallback contract
 
     func testNameForHandleFallsBackToHandleWhenNotInStore() {
