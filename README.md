@@ -55,19 +55,19 @@ All OFL-licensed. Until installed, Theme.Font falls back to the system font sile
 
 ```
 Sources/ReplyAI/
-├── App/              # @main entry
-├── Theme/            # Theme.Color / .Font / .Radius / .Space / .Motion
+├── App/              # @main entry + ReplyAIApp scene graph
+├── Theme/            # Theme.Color / .Font / .Radius / .Space / .Motion tokens
 ├── Models/           # Channel, MessageThread, Message, Folder, Tone
-├── Fixtures/         # THREADS/DRAFTS seed from reply-app.jsx
-├── Services/         # LLMService protocol + StubLLMService + DraftEngine
-├── Components/       # Avatar, ChannelDot, MiniButton, Caret, SectionLabel, KbdChip
-└── Inbox/
-    ├── InboxScreen.swift
-    ├── InboxViewModel.swift
-    ├── Sidebar/
-    ├── ThreadList/
-    ├── Thread/
-    └── Composer/
+├── Fixtures/         # Seed threads/drafts (gallery + demo-mode)
+├── Services/         # LLMService + StubLLMService + MLXDraftService + DraftEngine + Stats + Preferences + GlobalHotkey + NotificationCoordinator + PromptBuilder + DraftStore
+├── Components/       # Avatar, ChannelDot, MiniButton, Caret, SectionLabel, KbdChip, etc.
+├── Channels/         # ChannelService + IMessage{Channel,Sender,Preview} + AppleScriptMessageReader + AccessibilityAPIReader + Slack{Channel,OAuthFlow,SocketClient,HTTPClient} + KeychainHelper + 4 stub channels
+├── Rules/            # SmartRule + RuleEvaluator + RulesStore (JSON-backed)
+├── Search/           # SearchIndex (FTS5)
+├── MenuBar/          # MenuBarContent (MenuBarExtra popover)
+├── Screens/          # All gallery screens (Onboarding/, Settings/, MainApp/, Threads/, Composer/, Errors/, Surfaces/) + ScreenID + ScreenInventory + AppPrototypeView
+├── Inbox/            # InboxScreen + InboxViewModel + Sidebar/ + ThreadList/ + Thread/ + Composer/ + FDABanner + ModelLoadBanner + SendConfirmSheet
+└── Resources/        # Fonts/, Assets.xcassets
 ```
 
 ### LLM plumbing
