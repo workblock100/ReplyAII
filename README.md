@@ -89,7 +89,8 @@ Sources/ReplyAI/
 
 ## Not yet wired
 
-- Channel integrations (iMessage `chat.db`, Slack OAuth, WhatsApp pair) — locked until UI is done.
-- Real MLX model — `StubLLMService` stays swapped in.
-- FTS5 search — no store yet.
-- `NSStatusItem` popover, `UNNotification` inline reply.
+- WhatsApp / Teams / Telegram / SMS channel integrations — stub `ChannelService` impls in `Sources/ReplyAI/Channels/{WhatsApp,Teams,Telegram,SMS}Channel.swift` throw `authorizationDenied` until a real backend lands. iMessage (`chat.db` + AppleScript fallback) and Slack (OAuth + Socket Mode) are shipped.
+- Voice profile training — `ob-voice` is a UI mock; no LoRA pipeline.
+- MLX runtime opt-in path is structurally fragile — `pref.model.useMLX = true` triggers an exit-on-launch (REP-ALERT-260504-1650) until the SPM split (REP-501→REP-505) lands.
+
+(For an exhaustive ship state see [`AGENTS.md`'s "What's still stubbed"](AGENTS.md) section — this list focuses on what a contributor most likely cares about.)
