@@ -120,4 +120,65 @@ final class InboxViewModelStaticPinTests: XCTestCase {
                 "every InboxViewModel persistence key must share the wipe-namespace prefix (`\(PreferenceKey.wipeNamespacePrefix)`) — `\(key)` doesn't, which means factory reset will leave its data behind")
         }
     }
+
+    /// Mirror pin: `InboxViewModel.ViewState`'s custom `==` operator
+    /// has a `default: return false` arm that fires when lhs and rhs
+    /// are different cases. The canonical cross-case inequality test
+    /// (`testViewStateEqualityCrossCaseAlwaysUnequal` in
+    /// `InboxViewModelTests.swift`) covers .loading vs .populated,
+    /// .populated vs .demo, .demo vs .empty, .empty vs .empty,
+    /// .loading vs .empty, .populated vs .empty — but every pair
+    /// involving `.error` is unrepresented there. Since
+    /// `InboxViewModelTests` is in the autopilot's three-skip
+    /// workaround (gotcha #243), even that existing cross-case test
+    /// doesn't fire under the standard merge gate either.
+    ///
+    /// Pin .error vs every other case here so the `default: false`
+    /// arm has coverage in the non-skipped class. Drift would surface
+    /// as a SwiftUI re-render failure when the inbox transitions
+    /// from .loading/.populated/.empty/.demo INTO .error (or back) —
+    /// the @Observable diffing would treat the two states as equal
+    /// and skip the redraw, leaving the previous UI on screen with
+    /// stale content.
+    func testViewStateErrorIsUnequalToEveryOtherCase() {
+        struct StubError: LocalizedError {
+            let message: String
+            var errorDescription: String? { message }
+        }
+        let err: InboxViewModel.ViewState = .error(StubError(message: "x"))
+        let others: [InboxViewModel.ViewState] = [
+            .loading,
+            .populated,
+            .demo,
+            .empty(.noMessages),
+            .empty(.noPermissions),
+        ]
+        for other in others {
+            XCTAssertNotEqual(err, other,
+                ".error must compare unequal to \(other) — drift would mute a SwiftUI re-render on the transition from non-error → error and leave stale UI on screen")
+            XCTAssertNotEqual(other, err,
+                "\(other) must compare unequal to .error — symmetry: drift would mute the redraw on the recovery transition (error → idle)")
+        }
+    }
+
+    /// Mirror pin: the `.empty(EmptyReason)` case has TWO associated
+    /// values (`.noMessages` and `.noPermissions`). The canonical
+    /// `InboxViewModelTests` cross-case test covers
+    /// `.empty(.noMessages) != .empty(.noPermissions)` already, but
+    /// only inside the skipped suite. Re-pin here so the EmptyReason
+    /// diff is exercised under the autopilot's three-skip merge
+    /// gate. The two reasons drive different inbox banners (FDABanner
+    /// vs the Limited-Mode CTA), so a silent "they're equal" diff
+    /// would route a permission-denied state through the
+    /// no-messages copy.
+    func testViewStateEmptyReasonsAreUnequal() {
+        let noMessages: InboxViewModel.ViewState = .empty(.noMessages)
+        let noPermissions: InboxViewModel.ViewState = .empty(.noPermissions)
+        XCTAssertNotEqual(noMessages, noPermissions,
+            ".empty(.noMessages) and .empty(.noPermissions) must compare unequal — they drive different inbox banners (FDABanner vs Limited-Mode CTA), so drift here would route a permission-denied state through the no-messages copy")
+        XCTAssertEqual(noMessages, .empty(.noMessages),
+            "same EmptyReason must compare equal — otherwise every sync that lands on .empty(.noMessages) re-renders the banner from scratch on each refresh")
+        XCTAssertEqual(noPermissions, .empty(.noPermissions),
+            "same EmptyReason must compare equal — otherwise every sync that lands on .empty(.noPermissions) re-renders the banner from scratch on each refresh")
+    }
 }
