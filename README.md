@@ -72,9 +72,11 @@ Sources/ReplyAI/
 
 ### LLM plumbing
 
-`LLMService` is a `Sendable` protocol that returns an `AsyncThrowingStream<DraftChunk, Error>`. `DraftChunk` is one of `.text(String)`, `.confidence(Double)`, `.done`.
+`LLMService` is a `Sendable` protocol that returns an `AsyncThrowingStream<DraftChunk, Error>`. `DraftChunk` is one of `.text(String)`, `.confidence(Double)`, `.loadProgress(fraction:message:)`, `.done`.
 
-`StubLLMService` emits tokens from the hard-coded `Fixtures.drafts` table with 22–58ms inter-token delay and a 180ms cold-start. The shape matches what an MLX-backed service will emit, so swapping is one file.
+`StubLLMService` emits tokens from the hard-coded `Fixtures.drafts` table with 22–58ms inter-token delay and a 180ms cold-start — used by every demo / fixture / test path.
+
+`MLXDraftService` is the on-device path: `mlx-swift-lm` + `swift-huggingface` load `mlx-community/Llama-3.2-3B-Instruct-4bit` (~2 GB) into a cached `ModelContainer` and stream tokens through `ChatSession.streamResponse(...)`. Gated behind `Preferences.useMLX` (default false until REP-501→REP-505 ships the SPM split — see "Not yet wired" below).
 
 `DraftEngine` is an `@Observable @MainActor` cache keyed on `(threadID, tone)`. Sub-views read state from it via `.environment(engine)` + `@Environment(DraftEngine.self)`. `prime` kicks off generation on first view; `regenerate` busts the cache for one (thread, tone) pair.
 
