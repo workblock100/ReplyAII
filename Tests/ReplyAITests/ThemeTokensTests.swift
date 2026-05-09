@@ -523,4 +523,81 @@ final class ThemeTokensTests: XCTestCase {
             "Theme.Color.accentInk is the text color stacked on accent surfaces — drift silently changes contrast on every primary CTA"
         )
     }
+
+    // MARK: - Font weight routing
+
+    /// `Theme.Font.mono(_:weight:)` ships JetBrainsMono in two static
+    /// faces — Regular and Medium — and routes the SwiftUI `Font.Weight`
+    /// argument across them via a switch. The current contract is:
+    ///   `.medium` / `.semibold` / `.bold` / `.heavy` / `.black` → "JetBrainsMono-Medium"
+    ///   everything else (incl. `.regular`, `.light`, `.thin`, `.ultraLight`) → "JetBrainsMono-Regular"
+    /// SwiftUI's `Font` type is opaque under `String(describing:)` — it
+    /// projects to `Font(provider: SwiftUI.FontBox<...NamedProvider>)`
+    /// without the family name. But `Font` IS Equatable, so we can pin
+    /// the routing by asserting the equality structure between the
+    /// produced fonts: same-bucket weights are equal, cross-bucket
+    /// weights are not. Catches a regression like flipping `.semibold`
+    /// to fall through to Regular (which would silently un-bold every
+    /// keyboard-shortcut chip and timestamp digit in the app), or a
+    /// "consistency fix" that maps `.regular` to Medium (silently
+    /// thickening every monospace surface).
+    func testMonoWeightRoutingMapsBoldToMedium() {
+        let monoRegular  = Theme.Font.mono(11, weight: .regular)
+        let monoMedium   = Theme.Font.mono(11, weight: .medium)
+        let monoSemibold = Theme.Font.mono(11, weight: .semibold)
+        let monoBold     = Theme.Font.mono(11, weight: .bold)
+        let monoHeavy    = Theme.Font.mono(11, weight: .heavy)
+        let monoBlack    = Theme.Font.mono(11, weight: .black)
+        let monoLight    = Theme.Font.mono(11, weight: .light)
+
+        // The five "Medium-bucket" weights all map to the same
+        // JetBrainsMono-Medium PostScript face → pairwise equal.
+        XCTAssertEqual(monoMedium, monoSemibold,
+            "mono(.medium) and mono(.semibold) must route to the same JetBrainsMono-Medium face")
+        XCTAssertEqual(monoMedium, monoBold,
+            "mono(.medium) and mono(.bold) must route to the same JetBrainsMono-Medium face")
+        XCTAssertEqual(monoMedium, monoHeavy,
+            "mono(.medium) and mono(.heavy) must route to the same JetBrainsMono-Medium face")
+        XCTAssertEqual(monoMedium, monoBlack,
+            "mono(.medium) and mono(.black) must route to the same JetBrainsMono-Medium face")
+
+        // Regular bucket: `.regular` and `.light` both route to
+        // JetBrainsMono-Regular (light has no static face shipped).
+        XCTAssertEqual(monoRegular, monoLight,
+            "mono(.regular) and mono(.light) must both route to JetBrainsMono-Regular — JetBrainsMono ships only Regular and Medium static TTFs")
+
+        // Cross-bucket: routing must produce distinct fonts. Drift here
+        // (e.g. dropping the switch and always using Regular) would
+        // silently un-bold every monospaced chip in the app.
+        XCTAssertNotEqual(monoRegular, monoMedium,
+            "mono(.regular) and mono(.medium) MUST be distinct fonts — a switch-arm collapse would silently un-bold every monospaced affordance")
+        XCTAssertNotEqual(monoRegular, monoBold,
+            "mono(.regular) and mono(.bold) MUST be distinct fonts")
+    }
+
+    /// Pin that `Theme.Font.mono`'s weight default-argument routes
+    /// through the Regular face — same as passing `.regular` explicitly.
+    /// A future "default to medium for better readability" edit would
+    /// fail this assertion AND silently thicken every caller that never
+    /// passed an explicit weight (the dominant call shape in the codebase).
+    func testMonoDefaultWeightArgumentIsRegular() {
+        XCTAssertEqual(
+            Theme.Font.mono(11),
+            Theme.Font.mono(11, weight: .regular),
+            "mono(_:) default weight argument must equal mono(_:weight:.regular) — drift silently shifts the no-weight callers' rendering"
+        )
+    }
+
+    /// `Theme.Font.sans(_:weight:)` uses Inter Tight as a single
+    /// variable-weight TTF, so `.regular` vs `.bold` should produce
+    /// distinct Font values (the wght axis differs). Pin the
+    /// distinctness so a future "Inter Tight is variable so we don't
+    /// need the .weight() modifier" refactor surfaces here.
+    func testSansWeightModifierIsAppliedAndProducesDistinctFonts() {
+        XCTAssertNotEqual(
+            Theme.Font.sans(13, weight: .regular),
+            Theme.Font.sans(13, weight: .bold),
+            "sans(.regular) and sans(.bold) must be distinct — Inter Tight is a single variable-weight TTF and the .weight() modifier on the resolved Font is what differentiates them; dropping it would render every weight as the same axis position"
+        )
+    }
 }
