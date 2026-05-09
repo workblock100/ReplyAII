@@ -212,6 +212,39 @@ final class ThemeTokensTests: XCTestCase {
                        "accent stack must have 5 distinct opacity levels; got duplicates: \(all)")
     }
 
+    /// Pin each accent-stack layer's opacity at the byte-exact percentage
+    /// SwiftUI projects in `String(describing:)` (`<n>% #RRGGBBFF`). The
+    /// distinctness test above proves no two layers collide, but a
+    /// designer "lifting" `accentSoft` from 8% to 10% (a 25% intensity
+    /// shift on every accent-tinted card surface) would still pass
+    /// distinctness. The opacity literals are the explicit design
+    /// contract — `accentSoft` is the row-highlight tint, `accentSofter`
+    /// the static card wash, `accentRule` the divider tint, `accentGlow`
+    /// the focused-element halo. Drift on any one silently shifts the
+    /// visual weight of that affordance everywhere it renders.
+    func testAccentStackOpacityLiteralsArePinned() {
+        XCTAssertEqual(
+            String(describing: Theme.Color.accentSoft),
+            "8% #D7FF3AFF",
+            "Theme.Color.accentSoft is the 8% accent wash on row highlights — drift restyles every accent-tinted hover/select state"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.accentSofter),
+            "5% #D7FF3AFF",
+            "Theme.Color.accentSofter is the 5% static accent card wash — drift restyles every accent-tinted card surface"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.accentRule),
+            "18% #D7FF3AFF",
+            "Theme.Color.accentRule is the 18% accent divider tint — drift shifts the visual weight of every accent-rule separator"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.accentGlow),
+            "35% #D7FF3AFF",
+            "Theme.Color.accentGlow is the 35% accent halo on focused elements — drift restyles the focus affordance everywhere"
+        )
+    }
+
     // MARK: - Foreground stack
 
     /// fg / fgDim / fgMute / fgFaint are the typographic hierarchy. They
