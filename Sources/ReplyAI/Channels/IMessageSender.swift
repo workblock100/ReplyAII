@@ -169,7 +169,14 @@ enum IMessageSender {
     /// the send template means a future "let's use the SMS service
     /// instead" or "rename to Messages.app" refactor lands on one
     /// named constant. Pinned by
-    /// `IMessageSenderTests.testAppleScriptApplicationTargetIsFrozen`.
+    /// `IMessageSenderTests.testAppleScriptApplicationTargetIsFrozen`
+    /// AND
+    /// `AppleScriptMessageReaderTests.testReaderScriptUsesSameApplicationTargetAsSender`
+    /// (the latter cross-module pin asserts the inline `tell application
+    /// "Messages"` literals in `AppleScriptMessageReader.recentChats()`
+    /// and `.messagesForChat()` use this same constant — drift between
+    /// the read and send paths would split sends and reads across two
+    /// different AppleScript processes).
     static let appleScriptApplicationTarget = "Messages"
 
     /// AppleScript binding name for the resolved chat reference inside
