@@ -1174,6 +1174,47 @@ final class SlackChannelTests: XCTestCase {
             "non-IM/non-channel fallback (group DM `G…`) must still pin chatGUID to the raw ID")
     }
 
+    /// Pin that an empty `workspaceName` flows verbatim into every
+    /// `MessageThread.preview` field rendered for Slack rows.
+    /// `SlackOAuthFlow` deliberately defaults `workspaceName` to `""`
+    /// when Slack's `oauth.v2.access` response omits or empties the
+    /// `team.name` field (covered by
+    /// `SlackOAuthFlowTests.testSlackOAuthMissingTeamNameDefaultsToEmpty`
+    /// and siblings) — that lets the OAuth handshake succeed instead of
+    /// failing on a malformed-team-blob server response. The downstream
+    /// consequence is that `parseThreads` produces rows whose
+    /// `preview == ""`, and the inbox sidebar renders no preview text
+    /// for those rows. `SetChannelsView` already routes
+    /// `creds.workspaceName.isEmpty` to a fallback string so the
+    /// Settings → Channels detail row stays informative; the inbox
+    /// sidebar is the one surface that surfaces the empty preview.
+    /// This test pins that current shape so a refactor that "improves"
+    /// the empty case (e.g. injecting `"Slack workspace"` as a default
+    /// preview) lands as a deliberate behavior change requiring a
+    /// matching update to the OAuth-empty siblings, rather than as
+    /// silent drift.
+    func testRecentThreadsEmptyWorkspaceNamePropagatesToEmptyPreview() async throws {
+        let store = SlackTokenStore(keychain: KeychainHelper(service: testService))
+        try store.set(token: "xoxb-test", workspaceName: "")
+        let body = """
+        {
+            "ok": true,
+            "channels": [
+                {"id": "C1", "name": "general", "is_channel": true, "unread_count": 1},
+                {"id": "D2", "is_im": true, "user_display_name": "Maya Chen"}
+            ]
+        }
+        """.data(using: .utf8)!
+        let channel = SlackChannel(tokenStore: store, http: StubHTTP(payload: body))
+
+        let threads = try await channel.recentThreads(limit: 10)
+        XCTAssertEqual(threads.count, 2)
+        for t in threads {
+            XCTAssertEqual(t.preview, "",
+                "with workspaceName=\"\" parseThreads passes the empty string through verbatim — drift toward a sentinel like \"Slack workspace\" must update SlackOAuthFlow's empty-team-name siblings together")
+        }
+    }
+
     // MARK: - parseMessages field-default pins
 
     /// Pin the constant `Message` defaults that `parseMessages` emits
