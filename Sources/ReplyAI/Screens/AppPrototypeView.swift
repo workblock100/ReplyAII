@@ -79,6 +79,18 @@ struct AppPrototypeView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
                         .background(Capsule(style: .continuous).fill(Theme.Color.accent))
+                        // REP-AUDIT-260505 issue #1 fix candidate: SwiftUI's
+                        // `.buttonStyle(.plain)` + `.background(Shape().fill())`
+                        // restricts hit-testing to the Text glyphs only, not
+                        // the surrounding capsule fill. The keyboard shortcut
+                        // `⌘⇧O` works because it bypasses hit-testing; the
+                        // mouse click misses the capsule fill region. Routing
+                        // hit-testing through `.contentShape(Capsule())` makes
+                        // the entire visible button surface tappable, matching
+                        // user expectation. Sibling `navButton` uses
+                        // `.overlay(Capsule().stroke())` (not fill) so its
+                        // hit-area never had this gap.
+                        .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut("o", modifiers: [.command, .shift])
