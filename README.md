@@ -82,10 +82,13 @@ Sources/ReplyAI/
 
 | Key    | Action                             |
 | ------ | ---------------------------------- |
-| `⌘↵`  | Advance to next thread (send stub) |
+| `⌘↵`  | Send current draft                 |
 | `⌘J`  | Regenerate current draft           |
 | `⌘/`  | Cycle tone                         |
 | `⌘.`  | Dismiss current draft              |
+| `⌘K`  | Open command palette / search       |
+| `⌘⇧O` | Open inbox window from gallery     |
+| `⌘⇧R` | Global summon (system-wide hotkey) |
 
 ## Not yet wired
 
