@@ -105,8 +105,9 @@ Sources/ReplyAI/
 │   ├── InboxScreen.swift          Root of the real inbox window
 │   ├── InboxViewModel.swift       @Observable @MainActor: threads, sync, edits, send, rules-ish
 │   ├── FDABanner.swift            Full Disk Access deep-link banner
+│   ├── ModelLoadBanner.swift      MLX model-download progress banner above the thread list
 │   ├── SendConfirmSheet.swift     Two-button sheet before AppleScript send
-│   ├── Sidebar/SidebarView.swift  + sync chip footer
+│   ├── Sidebar/SidebarView.swift  + sync chip footer (TimelineView auto-tick)
 │   ├── ThreadList/ThreadListView.swift + ThreadRow.swift
 │   ├── Thread/                    ThreadDetailView, MessageBubble, ContextCard
 │   └── Composer/                  ComposerView (editable TextEditor), TonePills
