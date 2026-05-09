@@ -72,7 +72,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit a1c6d1d
 - claimed_by: worker-2026-04-23-145504
-- blocker: TWO complete implementations available: `wip/2026-04-23-145504-demo-mode` (worker-145504, +193 LOC, 3 tests) and `wip/worker-2026-04-23-161500-demo-mode` (worker-161500, +207 LOC, 3 tests). Human should diff both, pick the cleaner implementation (or cherry-pick best parts), run `swift test`, and merge. Mark done after merge.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Sources/ReplyAI/Fixtures/Fixtures.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Strategic pivot P0: app must be useful with zero permissions.** When `syncFromIMessage()` returns 0 threads AND no other channel provides threads, populate `viewModel.threads` from `Fixtures.demoChatThreads` (a new `static let` on `Fixtures`). Each demo thread carries `isDemoThread: Bool = true`. Demo threads are excluded from `send()` (throws `InboxError.demoModeNotSendable`). Rules do not auto-apply to demo threads. `Preferences.demoModeActive: Bool` (defaults `true`; auto-set to `false` after any real sync returns ≥1 thread; exempt from `wipe()`). Tests: demo threads appear when real sync returns empty; demo mode flag persists to Preferences; demo mode disables after successful real sync; `send()` on demo thread throws `demoModeNotSendable`.
 - success_criteria:
@@ -110,7 +109,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit cf3d379
 - claimed_by: worker-2026-04-23-191507
-- blocker: Implementation complete on wip/2026-04-23-191507-appleScript-fallback (+228 LOC, 4 tests). MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (new), `Sources/ReplyAI/Channels/IMessageChannel.swift`, `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned P0: app must list threads without FDA.** Implement `AppleScriptMessageReader` (from REP-229 spec, consolidated here) with `recentChats() -> [MessageThread]` using an injectable executor that runs `tell application "Messages" to get every chat`. Wire into `IMessageChannel.recentThreads()`: if `openReadOnly()` throws `ChannelError.authorizationDenied`, call `AppleScriptMessageReader.recentChats()` as the fallback. Returns `[MessageThread]` with `displayName`, `chatGUID`, placeholder `previewText`, and `channel: .iMessage`. No FDA required — uses macOS Automation permission. Tests: mock executor returning chat list → threads populated; mock FDA failure → fallback executor called; executor throws → propagates error; successful fallback results sorted by displayName.
 - success_criteria:
@@ -130,7 +128,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 949e7a3
 - claimed_by: worker-2026-04-24-005143
-- blocker: code complete; swift test timed out due to MLX fresh-clone build time (REP-254); wip/2026-04-24-005143-rep255-notification-permission
 - files_to_touch: `Sources/ReplyAI/Services/NotificationCoordinator.swift`, `Tests/ReplyAITests/NotificationCoordinatorTests.swift`
 - scope: **Pivot-aligned P0 (enables notification-based thread capture without FDA).** `NotificationCoordinator` already handles inline reply and passive capture (REP-028, REP-235). Without an explicit `requestAuthorization` call, macOS will never show the permission prompt and the UNNotification capture path (REP-235) silently produces zero events. Add `requestPermissionIfNeeded()` to `NotificationCoordinator`: calls `UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])` if the current status is `.notDetermined`. Injectable `UNUserNotificationCenter` protocol for test isolation (same pattern as REP-028). `InboxViewModel.init()` calls `notificationCoordinator.requestPermissionIfNeeded()` — fires early so macOS permission dialog appears at app launch. Tests: `requestAuthorization` called when status is `.notDetermined`; NOT called when status is `.authorized` (idempotent); NOT called when status is `.denied` (no re-prompt).
 - success_criteria:
@@ -150,7 +147,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit bc267c4
 - claimed_by: worker-2026-04-24-083949
-- blocker: code complete (+115 LOC source, +145 LOC tests, 5 tests); MLX fresh-clone build time exceeded 13-min worker budget (REP-254); human should run `swift test` and merge if green; wip/2026-04-24-083949-rep266-slack-oauth-flow
 - files_to_touch: `Sources/ReplyAI/Channels/SlackOAuthFlow.swift` (new), `Tests/ReplyAITests/SlackOAuthFlowTests.swift` (new)
 - scope: **Pivot-aligned P0: first end-to-end non-iMessage channel path — no FDA required.** `LocalhostOAuthListener` (REP-230, shipped fbba843) handles the callback server. `KeychainHelper` (REP-233, shipped c001d7e) handles token storage. New `SlackOAuthFlow` orchestrates both: `authorize(clientID: String, clientSecret: String, completion: (Result<Void, OAuthError>) -> Void)` — (1) starts `LocalhostOAuthListener` on port 4242; (2) opens `https://slack.com/oauth/v2/authorize?client_id=<id>&scope=channels:read,chat:write&redirect_uri=http://localhost:4242/callback` via injectable `URLOpener` protocol (default: `NSWorkspace.shared.open`); (3) on `code` received, POSTs to `https://slack.com/api/oauth.v2.access` with `code + client_id + client_secret` via injectable `URLSession`; (4) parses `access_token` from JSON response; (5) stores via `KeychainHelper.set(value: token, for: "slack-access-token")`. `LocalhostOAuthListenerFactory: (port: UInt16, timeout: TimeInterval) -> LocalhostOAuthListener` injectable for tests. Tests: mock `URLOpener` captures constructed auth URL (assert clientID, scope, redirectURI params); mock listener factory delivers `code=testcode`; mock URLSession returns `{"ok":true,"access_token":"xoxb-test"}` → token stored in KeychainHelper; `{"ok":false}` response throws `OAuthError.tokenExchangeFailed`; listener timeout propagates as `OAuthError.timeout`.
 - success_criteria:
@@ -173,7 +169,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit cfe50f8
 - claimed_by: worker-2026-04-24-152005
-- blocker: code complete on wip/2026-04-24-152005-thread-cache (est. 531→536 tests, 5 new tests); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green; see REP-279 for human review task
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: app must show something useful when all channels fail at cold launch.** When FDA is denied, Automation is denied, and no Slack token exists, the inbox is blank. If a prior launch had real threads, persisting the thread list means the user sees recognizable conversation rows immediately, not a blank screen. After every successful `syncFromIMessage()` (or any channel sync) that returns ≥1 thread, JSON-serialize the thread list (fields: `id, displayName, chatGUID, previewText, channel, isRead`) to `~/Library/Application Support/ReplyAI/last-threads-cache.json`. On `InboxViewModel.init()`, if `threads.isEmpty`, read this file and populate `threads` from cache. Cache is only used as initial-state fill — any real sync result (even empty) replaces it. Cache entries do NOT carry `isDemoThread: true`; they are presented as-is. `Preferences.lastThreadsCacheURL: URL` is a computed property returning the cache path. Tests: successful sync → cache file written with correct JSON; cold-init with cache present → `threads` populated; second sync → cache updated; failed sync → existing in-memory threads unchanged (cache file unchanged); cache file absent at init → empty threads (no crash).
 - success_criteria:
@@ -475,7 +470,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: 2026-05-03 reconciliation (impl shipped to main; gate task obsolete)
 - claimed_by: null
-- blocker: **Superseded by `replyai-merger` agent (commit `7f9b305`).** The merger runs every 30 min on a schedule, drains `wip/*` branches automatically when `.build/` is warm, and is more reliable than a worker fire for this purpose. Workers should NOT claim REP-280 — the merger handles the drain. If the merger is not yet running on a warm machine, workers may fall back to this task's protocol as a one-shot manual drain.
 - files_to_touch: whichever `wip/*` branch is oldest and still referenced in BACKLOG as `status: blocked`
 - scope: **SUPERSEDED by merger agent — see `.automation/merger.prompt`.** Original scope preserved for reference: Worker MUST check that `.build/` is fresh (<6 hours old via `find .build -maxdepth 0 -mmin -360`) BEFORE claiming this task. If `.build/` IS fresh: (1) checkout oldest blocked wip branch; (2) `swift test 2>&1 | tail -20`; (3) if green, fast-forward merge to main and push; (4) update BACKLOG.md and AGENTS.md. Priority order: `wip/2026-04-23-085959-stats-session-acceptance` (oldest), then chronological order. Skip `wip/quality-*` (human review per REP-016/017/048).
 - success_criteria:
@@ -612,7 +606,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit e26e72a
 - claimed_by: worker-2026-04-23-200831
-- blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackHTTPClient.swift` (new), `Tests/ReplyAITests/SlackHTTPClientTests.swift` (new)
 - scope: **Pivot-aligned (Slack channel prereq).** `SlackHTTPClient` is the HTTP layer needed by `SlackChannel` for `conversations.list` and `conversations.history` API calls. Protocol: `func get(endpoint: String, token: String, params: [String: String]) async throws -> Data`. Default conformance: `URLSessionSlackClient` sends `GET https://slack.com/api/<endpoint>?<params>` with `Authorization: Bearer <token>` header. Injectable for tests via protocol. Tests: mock session returns valid JSON → Data returned; auth header is `Bearer <token>`; correct base URL + endpoint + params in request; HTTP 200 → Data; HTTP 401 → throws `ChannelError.authorizationDenied`; HTTP 429 → throws `ChannelError.networkError`; network error → throws `ChannelError.networkError`.
 - success_criteria:
@@ -633,7 +626,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit e26e72a
 - claimed_by: worker-2026-04-23-200831
-- blocker: Implementation complete on wip/2026-04-23-200831-slack-http-keychain-deleteall. MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` locally and merge if green.
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (depends on REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift` (depends on REP-233)
 - scope: **Pivot-aligned (factory reset / channel de-auth).** `Preferences.wipe()` currently clears UserDefaults but leaves Keychain entries (Slack token, future tokens). Add `KeychainHelper.deleteAll(prefix: String)` that uses `SecItemDelete` with a `kSecAttrAccount` prefix match — deletes every item where the account key starts with `prefix`. Called with `"ReplyAI-"` to wipe all channel tokens on factory reset. Tests: 3 keys with `"ReplyAI-"` prefix → all 3 deleted after `deleteAll("ReplyAI-")`; 1 key without prefix → not deleted; calling on empty keychain does not throw.
 - success_criteria:
@@ -651,7 +643,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
-- blocker: code complete on wip/2026-04-23-230824-telegram-channel-tests (+27 LOC source, 3 tests, bundled with REP-205/206); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/TelegramChannel.swift` (new), `Tests/ReplyAITests/TelegramChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-233/234 for Telegram. `TelegramChannel: ChannelService` in a new file. `channel` property returns `.telegram` (requires REP-243 adds the case, or add the case here). Injectable `KeychainHelper(service: "ReplyAI-Telegram")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no bot token present; `openReadOnly()` no-ops or returns quickly. `send()` throws `ChannelError.unsupported` (Telegram send via Bot API comes in a follow-up). Tests: no token → `authorizationDenied`; token present → empty `[]` (stub, no real fetch); `channel` property returns `.telegram`.
 - success_criteria:
@@ -670,7 +661,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: c975e51 (impl + tests)
 - claimed_by: worker-2026-05-02-113834
-- blocker: cleared — `SlackChannel.messages(forThreadID:limit:)` is on main calling `conversations.history`; `Tests/ReplyAITests/SlackChannelTests.swift` carries `testMessagesParsesConversationsHistory`, `testSlackMessagesForThreadEmptyHistoryReturnsEmpty`, `testSlackMessagesForThreadTimestampParsedCorrectly`, plus the `authorizationDenied` and `networkError` paths.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift` (extends REP-234), `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class, prereq: REP-237 + REP-242).** After `recentThreads()` populates the thread list, the inbox needs to fetch message history for a selected thread. Implement `SlackChannel.messagesForThread(threadID: String, limit: Int) async throws -> [Message]` using `SlackHTTPClient` (REP-237): `GET api/conversations.history?channel=<threadID>&limit=<limit>`. Parse `messages[]` array — each item has `text`, `user`, `ts` (Unix timestamp as string). Build `Message` with `body: text`, `sender: user`, `sentAt: Date(timeIntervalSince1970: Double(ts))`, `channel: .slack`. Tests: mock client returning 3-message history JSON → `[Message]` with correct fields; empty messages array → `[]`; `ts` string parses to correct Date; no token → `authorizationDenied`; HTTP error → `ChannelError.networkError`.
 - success_criteria:
@@ -690,7 +680,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit ac2200b
 - claimed_by: worker-2026-04-24-031929
-- blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-261/264/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/WhatsAppChannel.swift` (new), `Tests/ReplyAITests/WhatsAppChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-233/234 (Slack). `WhatsAppChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-WhatsApp")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no session token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported` (real send comes in a follow-up). `channel` property returns `.whatsapp` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.whatsapp`.
 - success_criteria:
@@ -709,7 +698,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 61ec320
 - claimed_by: worker-2026-04-24-031929
-- blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-260/264/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/TeamsChannel.swift` (new), `Tests/ReplyAITests/TeamsChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) for Microsoft Teams. `TeamsChannel: ChannelService` in a new file. Injectable `KeychainHelper(service: "ReplyAI-Teams")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no Graph API token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.teams` (requires REP-243 adds the case, or add the case here). Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.teams`.
 - success_criteria:
@@ -748,7 +736,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 61ec320
 - claimed_by: worker-2026-04-24-031929
-- blocker: code complete on wip/2026-04-24-031929-channel-stubs (+74 LOC source, 3 tests, bundled with REP-260/261/243); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/SMSChannel.swift` (new), `Tests/ReplyAITests/SMSChannelTests.swift` (new)
 - scope: **Pivot-aligned (non-iMessage channel scaffolding).** Mirror of REP-256 (Telegram) and REP-260/261 (WhatsApp/Teams). `SMSChannel: ChannelService` in a new file. SMS relay via CloudKit from iPhone is a future feature; stub the plumbing now. Injectable `KeychainHelper(service: "ReplyAI-SMS")`. `recentThreads()` throws `ChannelError.authorizationDenied` when no relay token present; returns `[]` stub when token present. `send()` throws `ChannelError.unsupported`. `channel` property returns `.sms` — add this case to `Channel` enum if REP-243 not yet merged. Tests: no token → `authorizationDenied`; token present → `[]` (stub); `channel` property returns `.sms`.
 - success_criteria:
@@ -767,7 +754,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 7c62474
 - claimed_by: worker-2026-04-24-114653
-- blocker: code complete on wip/2026-04-24-114653-slack-socket-client; MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` locally and merge if green
 - files_to_touch: `Sources/ReplyAI/Channels/SlackSocketClient.swift` (new), `Tests/ReplyAITests/SlackSocketClientTests.swift` (new)
 - scope: **Pivot-aligned (real-time Slack updates without polling).** Slack Socket Mode pushes new messages over `wss://` WebSocket from a URL obtained via `apps.connections.open`. `SlackSocketClient(connectionURL: URL, urlSession: URLSession = .shared, reconnectDelay: TimeInterval = 5.0)`: `start()` creates `URLSessionWebSocketTask` and starts receiving. `stop()` cancels task. `onEventReceived: ((Data) -> Void)?` fires for each non-control frame. Envelope filter: silently drop `{"type":"ping"}` and `{"type":"hello"}`; forward only `{"type":"events_callback",...}`. Auto-reconnects up to 3 times on `.abnormalClosure` or `.goingAway` using injectable `reconnectDelay`. Tests: mock WebSocket task delivers `events_callback` message → `onEventReceived` called; `stop()` cancels task; abnormal close → reconnect attempted (count ≤3 with injected 0s delay); `hello` message → callback not fired; fourth disconnect after 3 reconnects → no further reconnect.
 - success_criteria:
@@ -790,7 +776,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: c975e51
 - claimed_by: worker-2026-05-02-113834
-- blocker: cleared — merged to main as commit `c975e51` (autopilot fire 2026-05-03-1451). The `SlackAuthorizing` seam, `SlackOAuthFlowFactory` typealias, and `SlackChannel.authorize(clientID:clientSecret:completion:)` are present on main with the three contract tests; the swift-test lock contention that blocked the original worker no longer applies.
 - files_to_touch: `Sources/ReplyAI/Channels/SlackChannel.swift`, `Tests/ReplyAITests/SlackChannelTests.swift`
 - scope: **Pivot-aligned (Slack first-class — prereq: REP-266 merged).** `SlackChannel` currently throws `authorizationDenied` for all calls when no token present. Add `authorize(clientID: String, clientSecret: String, completion: @escaping (Result<Void, OAuthError>) -> Void)` that delegates to a `SlackOAuthFlow` instance. Injectable `SlackOAuthFlowFactory: (String, String) -> SlackOAuthFlow` for test isolation. On success: token now in Keychain, completion called with `.success(())`; subsequent `recentThreads()` calls return real data. On failure: completion called with `.failure(error)`. Idempotent: a second `authorize` call while one is in-flight invokes the completion via the existing flow (no double-listener bind). Tests: factory called with correct `clientID` + `clientSecret`; success completion called when flow returns success; failure completion called when flow returns failure.
 - success_criteria:
@@ -827,7 +812,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit a819f59
 - claimed_by: worker-2026-04-24-120000
-- blocker: code complete on wip/2026-04-24-120000-viewstate-slacktokenstore (bundled with REP-247, +4 tests); MLX cold-build exceeds 13-min budget; human reviews via REP-275
 - files_to_touch: `Sources/ReplyAI/Channels/KeychainHelper.swift` (extends REP-233), `Tests/ReplyAITests/KeychainHelperTests.swift`
 - scope: **Pivot-aligned (Slack token management, prereq: REP-233).** The Slack OAuth `v2.access` response includes both `access_token` and `team.name` (workspace name for display). Storing only the token (as REP-266/272 currently does via raw `KeychainHelper.set`) loses the workspace name needed for Settings UI (REP-273). Add `struct SlackTokenStore` (in `KeychainHelper.swift` or a adjacent file): `set(token: String, workspaceName: String)` JSON-encodes and stores under `"slack-access-token"` key; `get() -> (token: String, workspaceName: String)?` retrieves and decodes; `delete()` removes the entry. `SlackOAuthFlow` (REP-266) and `SlackChannel.authorize()` (REP-272) should be updated to use `SlackTokenStore.set(...)` instead of raw `KeychainHelper.set`. Tests: round-trip through set/get preserves both fields; delete removes entry; missing entry returns nil; malformed JSON stored returns nil gracefully.
 - success_criteria:
@@ -1008,7 +992,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 8bcfaed
 - claimed_by: worker-2026-04-23-130000
-- blocker: MLX full build on fresh clone exceeded time budget; implementation complete on wip/2026-04-23-130000-thread-name-regex; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Rules/SmartRule.swift`, `Sources/ReplyAI/Rules/RuleEvaluator.swift`, `Sources/ReplyAI/Screens/Surfaces/SfcRulesView.swift`, `Tests/ReplyAITests/RulesTests.swift`
 - scope: The predicate DSL has `textMatchesRegex(pattern:)` for message body, but no way to match against the thread's display name or sender handle. Add `case threadNameMatchesRegex(pattern: String)` to `RulePredicate`. `RuleContext` gains `threadDisplayName: String` (from `MessageThread.displayName` or equivalent). `RuleEvaluator` evaluates using `NSRegularExpression` with the same validation path as `textMatchesRegex`. `SfcRulesView.humanize(predicate:)` switch gets a new case string. Codable discriminator: `"threadNameMatchesRegex"`. Tests: pattern matching display name matches; non-matching display name doesn't; invalid regex throws at creation time; Codable round-trip preserves pattern.
 - success_criteria:
@@ -1028,7 +1011,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit b163ec1
 - claimed_by: worker-2026-04-23-085959
-- blocker: MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: Add `sessionStartedAt: Date` (set in `Stats.init` to `Date()`) and a computed `sessionDuration: TimeInterval` (= `Date().timeIntervalSince(sessionStartedAt)`). Include `sessionDuration` in the weekly log JSON written by `writeWeeklyLog()` alongside existing counters. No disk persistence for this field (it resets per session by design). Injectable `nowProvider: () -> Date` (default `{ Date() }`) for deterministic tests. Tests: `testSessionStartedAtApproximatelyNow` — initialized within 1s of `Date()`; `testSessionDurationIsNonNegative` — computed field ≥ 0; `testSessionDurationIncludesInWeeklyLog` — JSON from `writeWeeklyLog()` contains `"sessionDuration"` key.
 - success_criteria:
@@ -1135,7 +1117,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - done_on: autopilot-2026-05-03-2211 (reconcile)
-- blocker: cleared —  MLX full build on fresh clone exceeded time budget; implementation on wip/2026-04-23-085959-stats-session-acceptance
 - reconcile_note: Tests/ReplyAITests/StatsTests.swift carries the REP-177 MARK section with `overallAcceptanceRate()` aggregate tests.
 - files_to_touch: `Sources/ReplyAI/Services/Stats.swift`, `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.acceptanceRate(for tone:)` gives per-tone rates. A UI surface (e.g. set-privacy screen) may want an aggregate across all tones. Add `Stats.overallAcceptanceRate() -> Double?` that returns `nil` if no drafts generated across any tone, or `Double(totalSent) / Double(totalGenerated)` aggregating across all tone counters. Tests: fresh instance → nil; 3 generated across 2 tones, 1 sent → 0.333...; all generated but none sent → 0.0.
@@ -1163,7 +1144,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - done_on: autopilot-2026-05-03-2211 (reconcile)
-- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - reconcile_note: Tests/ReplyAITests/RulesTests.swift carries the REP-179 MARK section verifying RuleEvaluator equal-priority deterministic ordering.
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RuleEvaluator.matching(rules:context:)` sorts by priority descending. When two rules have the same priority, the output order should be deterministic (insertion order preserved, not arbitrary). Test: two rules at priority 0, inserted A then B; matching returns `[A, B]` (insertion order). Also test with priority 5 and 5: same result. This guards against a future `sort` → `stableSort` rollback. No production code changes expected if insertion order is already preserved.
@@ -1180,7 +1160,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - done_on: autopilot-2026-05-03-2211 (reconcile)
-- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - reconcile_note: Tests/ReplyAITests/PreferencesTests.swift carries the REP-183 MARK section guarding wipeReplyAIDefaults exemptions.
 - files_to_touch: `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: REP-130 and REP-115 added `firstLaunchDate` and `launchCount` as wipe-exempt keys. Verify the exemption is enforced: call `wipe()` after setting both values; assert both survive. This pins the `wipeExemptions` set as a regression guard — if the exemption list is accidentally cleared, this test fails. Also test: non-exempt keys ARE wiped (e.g. `autoPrimeEnabled` returns default after wipe). No production code changes expected.
@@ -1198,7 +1177,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - done_on: autopilot-2026-05-03-2211 (reconcile)
-- blocker: cleared —  MLX full build on fresh clone exceeded time budget; tests on wip/2026-04-23-085959-stats-session-acceptance
 - reconcile_note: Tests/ReplyAITests/StatsTests.swift carries the REP-187 MARK section verifying snapshot() JSON-serializable contract.
 - files_to_touch: `Tests/ReplyAITests/StatsTests.swift`
 - scope: `Stats.snapshot()` returns `[String: Any]`. This dictionary is passed to `JSONSerialization.data(withJSONObject:)` by `writeWeeklyLog()`. If any value type is not JSON-serializable (e.g. a `Date` object, a struct), `writeWeeklyLog` will silently fail or crash at the `try?` call site. Pin the contract: `JSONSerialization.isValidJSONObject(snapshot())` returns `true` for a freshly-initialized Stats instance; also for one with non-zero counters. No production code changes expected if the snapshot already uses only numbers/strings.
@@ -1314,7 +1292,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
-- blocker: tests complete on wip/2026-04-23-230824-telegram-channel-tests (+58 LOC, 3 tests); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/SearchIndexTests.swift`
 - scope: Index threads A ("hello world"), B ("hello swift"), C ("goodbye world"). Call `delete(threadID: B)`. Run 3 queries: "hello" (previously returned A+B → should now return only A); "swift" (previously returned B → should return empty); "goodbye" (should still return C unchanged). Guards against FTS5 soft-delete / rowid-reuse scenarios where a deleted thread resurfaces.
 - success_criteria:
@@ -1331,7 +1308,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 1fa8960
 - claimed_by: worker-2026-04-23-230824
-- blocker: tests complete on wip/2026-04-23-230824-telegram-channel-tests (+36 LOC, 2 tests); MLX fresh-clone build time exceeded 13-min budget; human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/PromptBuilderTests.swift`
 - scope: Build a list of 5 messages where combined length exceeds the 2000-char budget. Verify drop-oldest semantics: `message[0]` (oldest, first in array) must not appear in the built prompt; `message[4]` (newest) must appear. Also test: with exactly 2000 chars of messages (at budget boundary), all 5 messages survive. This pins the truncation direction so a future refactor can't accidentally flip to drop-newest.
 - success_criteria:
@@ -1362,7 +1338,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 7e932cf
 - claimed_by: worker-2026-04-24-143143
-- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: Verify predicate composition correctness: `not(not(senderIs("Alice")))` must match when `senderIs("Alice")` matches, and must not match when it doesn't. Test with two base predicates (a matching and a non-matching context). Also test: `not(not(not(pred)))` inverts correctly (equals `not(pred)`). Guards the `not` composition against a double-negation cancellation bug in the evaluator.
 - success_criteria:
@@ -1487,7 +1462,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: cf3d379
 - claimed_by: null
-- blocker: cleared — `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift` (with injectable executor + nameFor) is on main; `IMessageChannel` calls `appleScriptReader.recentChats()` on `authorizationDenied`; `Tests/ReplyAITests/IMessageChannelTests.swift` carries `testAppleScriptFallbackCalledWhenFDADenied`, `testAppleScriptFallbackExecutorIsInjectable`, and `testAppleScriptFallbackErrorPropagates`.
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageChannel.swift` (or new `Sources/ReplyAI/Channels/AppleScriptMessageReader.swift`), `Tests/ReplyAITests/IMessageChannelTests.swift`
 - scope: **Pivot-aligned (alt message-source).** Add `AppleScriptMessageReader.recentChats() -> [MessageThread]` that executes `tell application "Messages" to get every chat` via `NSAppleScript`. Returns a `[MessageThread]` with display name, chat GUID, and a placeholder `previewText` (AppleScript can retrieve `every text chat` with `name` and `id` but not full message history — that's OK for the thread list). No FDA required — uses Automation permission. `IMessageChannel.recentThreads()` uses this as a fallback when `openReadOnly()` fails with `authorizationDenied`. Tests use injectable AppleScript executor (same seam as `IMessageSender`).
 - success_criteria:
@@ -1522,7 +1496,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 7e932cf
 - claimed_by: worker-2026-04-24-143143
-- blocker: code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Services/Preferences.swift`, `Tests/ReplyAITests/PreferencesTests.swift`
 - scope: **Pivot-aligned (channel architecture).** Add three Preferences keys: `pref.channels.iMessageEnabled: Bool` (default `true`), `pref.channels.slackEnabled: Bool` (default `false`), `pref.channels.demoModeActive: Bool` (alias of `Preferences.demoModeActive` from REP-228, or consolidate here). These are the channel-level on/off switches that `InboxViewModel.syncFromIMessage` and future `SlackChannel.recentThreads` will check before attempting a sync. Tests: default values; round-trip through UserDefaults; wipe behavior (channels.* keys are NOT wipe-exempt — privacy reset clears channel tokens).
 - success_criteria:
@@ -1568,7 +1541,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - ui_sensitive: false
 - status: done
 - done_on: autopilot-2026-05-03-2211 (reconcile)
-- blocker: cleared —  code complete on wip/2026-04-24-143143-prefs-channels-negation-concurrent (+8 tests: 3 REP-231, 3 REP-208, 2 REP-220); MLX fresh-clone build time exceeded 13-min budget (REP-254); human should run `swift test` and merge if green
 - reconcile_note: Tests/ReplyAITests/RulesTests.swift carries the REP-220 MARK section verifying RulesStore concurrent add+remove safety.
 - files_to_touch: `Tests/ReplyAITests/RulesTests.swift`
 - scope: `RulesStore` uses `Locked<T>` for thread-safety. Pin correctness under concurrent writes: `DispatchQueue.concurrentPerform(iterations: 50)` alternately calls `add(_:)` and `remove(ruleID:)` on the same store. After completion, assert: no crash, `rules.count ≥ 0`, no duplicate IDs. Guards against a race where a `Locked<T>` scope is held across an add while a concurrent remove modifies a different index.
@@ -1735,7 +1707,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit ac2200b
 - claimed_by: worker-2026-04-24-031929
-- blocker: code complete on wip/2026-04-24-031929-channel-stubs (Channel.swift +16 LOC: displayName/iconName props, 4 ChannelTests, bundled with REP-260/261/264); MLX build time exceeded budget; human should run `swift test` and merge if green
 - files_to_touch: `Sources/ReplyAI/Models/Channel.swift` (or wherever `Channel` is defined), `Tests/ReplyAITests/ChannelTests.swift` (new or extend)
 - scope: **Pivot-aligned (channel architecture scaffolding).** `Channel` enum currently has only cases used in the codebase (`.iMessage`, `.slack`). Add `.telegram`, `.whatsapp`, `.teams`, `.sms` as future-channel stubs. Each case needs `displayName: String` and `iconName: String` properties. Add `CaseIterable` conformance and `Codable` (raw `String` value). `ChannelDot` and any exhaustive `switch` over `Channel` must be updated (no behavior change — add placeholder colors for new cases). Tests: `Channel.allCases` count matches expected; each case decodes from its `rawValue` string; `displayName` is non-empty for every case.
 - success_criteria:
@@ -1810,7 +1781,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit a1c6d1d
 - claimed_by: worker-2026-04-24-113000
-- blocker: TWO competing implementations exist — `wip/worker-2026-04-24-113000-viewstate` (REP-247 only, 531 tests) and `wip/2026-04-24-120000-viewstate-slacktokenstore` (REP-247+274 bundled). Human should pick one via REP-275.
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Replace implicit thread-count-based state detection with explicit `ViewState` enum: `case loading, populated, empty(EmptyReason), demo, error(Error)` where `EmptyReason: Equatable { case noMessages, noPermissions }`. `InboxViewModel.viewState: ViewState` is `@Published`. Transitions: on init → `.loading`; sync returns threads → `.populated`; sync returns [] with demo mode active → `.demo`; sync returns [] without demo → `.empty(.noMessages)`; sync throws `authorizationDenied` → `.empty(.noPermissions)`; sync throws other → `.error(error)`. Tests: each state transition tested with mock channel; `.loading` → `.populated` on sync; `.loading` → `.demo` when demoMode; `.empty(.noPermissions)` on auth-denied sync.
 - success_criteria:
