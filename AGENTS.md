@@ -92,10 +92,14 @@ Sources/ReplyAI/
 │   ├── RuleEvaluator.swift        Pure-func evaluator + defaultTone extraction
 │   └── RulesStore.swift           @Observable @MainActor, atomic JSON writes
 ├── Services/
-│   ├── LLMService.swift           Protocol returning AsyncThrowingStream<DraftChunk>
-│   ├── StubLLMService.swift       Fake streams from Fixtures.drafts / genericAcknowledgment
+│   ├── LLMService.swift           Protocol returning AsyncThrowingStream<DraftChunk> + StubLLMService impl
 │   ├── MLXDraftService.swift      mlx-swift-lm 3.x via #huggingFaceLoadModelContainer macro
 │   ├── DraftEngine.swift          Per-(threadID, tone) cache + prime/regenerate/dismiss
+│   ├── DraftStore.swift           On-disk persistence for in-progress draft edits
+│   ├── PromptBuilder.swift        LLM prompt formatting; speakerSelf = "me" cross-module label
+│   ├── Stats.swift                Lifetime counters + weekly markdown rollup, debounced writes
+│   ├── NotificationCoordinator.swift  UN delegate, inline-reply category, willPresent capture
+│   ├── GlobalHotkey.swift         Carbon RegisterEventHotKey (no Accessibility) + ReplyAIWindowSummoner
 │   └── Preferences.swift          @AppStorage keys + defaults + wipe
 ├── Inbox/
 │   ├── InboxScreen.swift          Root of the real inbox window
