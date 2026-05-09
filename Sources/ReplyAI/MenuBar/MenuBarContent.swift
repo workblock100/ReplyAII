@@ -20,6 +20,21 @@ struct MenuBarContent: View {
         /// Reassures the user the app is working; matches the design's
         /// tone of voice elsewhere ("Nothing needs you right now.").
         static let inboxZeroSubhead = "Nothing needs you right now."
+
+        /// Footer primary CTA. Same verb-form as `MenuBarContent.swift`'s
+        /// keyboard-shortcut summon (`⌘⇧O`); preserved on hoist so the
+        /// rendered button label still says "Open inbox", not a renamed
+        /// variant. Sibling site that uses the same string: the gallery
+        /// toolbar's "Open inbox →" (with the trailing arrow glyph) lives
+        /// inline in `AppPrototypeView` and is intentionally distinct
+        /// from this footer label per the design — DO NOT consolidate.
+        static let footerOpenInboxLabel = "Open inbox"
+
+        /// Footer secondary action. Quits the whole app, not just the
+        /// menu-bar popover. Single word per the design's tight-popover
+        /// tone of voice (parallel to the top-level menu-bar item that
+        /// macOS provides for free; ours is a softer styling).
+        static let footerQuitLabel = "Quit"
     }
 
     @State private var model = InboxViewModel()
@@ -126,7 +141,7 @@ struct MenuBarContent: View {
             Button {
                 openWindow(id: ReplyAIWindowSummoner.inboxWindowID)
             } label: {
-                Text("Open inbox")
+                Text(Strings.footerOpenInboxLabel)
                     .font(Theme.Font.sans(12, weight: .semibold))
                     .foregroundStyle(Theme.Color.accentInk)
                     .frame(maxWidth: .infinity)
@@ -139,7 +154,7 @@ struct MenuBarContent: View {
             Button {
                 NSApp.terminate(nil)
             } label: {
-                Text("Quit")
+                Text(Strings.footerQuitLabel)
                     .font(Theme.Font.sans(12))
                     .foregroundStyle(Theme.Color.fgDim)
                     .padding(.horizontal, 12)
