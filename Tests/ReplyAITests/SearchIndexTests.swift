@@ -1887,6 +1887,26 @@ final class SearchIndexSnippetConfigTests: XCTestCase {
             "search-index outgoing-sender label must match PromptBuilder.Template.speakerSelf — drift desyncs `from:me` search from prompt formatting")
     }
 
+    /// And the label must equal `ShortcutsExportHandler.outgoingMessageMarker`
+    /// — the third leg of the three-module `me` triangle (search index ↔
+    /// prompt builder ↔ shortcuts wire format). The Shortcut JSON tags
+    /// outgoing rows with `"from": "me"`; SearchIndex tags FTS5 rows the
+    /// same way; PromptBuilder formats LLM context the same way. Drift
+    /// between SearchIndex and ShortcutsExportHandler would silently
+    /// misclassify imported-thread rows when full-text search runs over
+    /// them. The transitive equality is already covered via
+    /// `PromptBuilder.Template.speakerSelf` (pinned above and via
+    /// `ShortcutsExportHandlerTests.testOutgoingMarkerEqualsSpeakerSelf`),
+    /// but pinning the direct pair here means a refactor that touches
+    /// only SearchIndex + ShortcutsExportHandler (without PromptBuilder)
+    /// still trips a SearchIndex test instead of relying on a sibling
+    /// file's transitive coverage.
+    func testOutgoingSenderLabelEqualsShortcutsExportHandlerMarker() {
+        XCTAssertEqual(SearchIndex.outgoingSenderLabel,
+                       ShortcutsExportHandler.outgoingMessageMarker,
+            "search-index outgoing-sender label must match ShortcutsExportHandler.outgoingMessageMarker — drift desyncs imported-thread authorship between Shortcut import and full-text search")
+    }
+
     /// Pin the SQLite in-memory-database sentinel filename. Drift to
     /// e.g. `":memory"` (no trailing colon) silently makes SQLite open
     /// a real disk file named `:memory` in the current working
