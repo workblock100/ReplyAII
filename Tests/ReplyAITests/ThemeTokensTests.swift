@@ -276,4 +276,23 @@ final class ThemeTokensTests: XCTestCase {
             "Theme.Color.bg1 is the inbox primary surface — drift silently lifts/darkens every screen the user sees most"
         )
     }
+
+    // `Theme.Color.accentInk` is the inverse text color rendered on top
+    // of the brand accent (chartreuse-lime) — every primary CTA's label
+    // ("Get started", "Send", "Open inbox"), the menu-bar `R` glyph, and
+    // unread-count badges all use this color. Drift here either washes
+    // out the contrast against the accent background (lighter ink → low
+    // contrast → fails accessibility AA) or makes the ink pop too hard
+    // (jet-black on chartreuse looks alarmist rather than confident).
+    // The bg1 pin above happens to match accentInk's current RGB exactly,
+    // but a designer who intentionally split them would still want
+    // accentInk byte-pinned independently — this test catches drift on
+    // either token without entangling the two.
+    func testAccentInkLiteralIsPinnedDeepInk() {
+        XCTAssertEqual(
+            String(describing: Theme.Color.accentInk),
+            "#0A0B0DFF",
+            "Theme.Color.accentInk is the text color stacked on accent surfaces — drift silently changes contrast on every primary CTA"
+        )
+    }
 }
