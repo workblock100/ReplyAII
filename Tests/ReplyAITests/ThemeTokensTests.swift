@@ -286,6 +286,44 @@ final class ThemeTokensTests: XCTestCase {
                        "line stack must have 3 distinct opacities; got duplicates: \(stack)")
     }
 
+    /// Companion to `testLineStackIsDistinct`: the distinctness test only
+    /// catches collapses (two layers becoming visually identical), it
+    /// doesn't catch a uniform shift — e.g. all three opacities scaling up
+    /// 50% would still be distinct yet visibly heavier across every divider
+    /// in the app. The opacity literals are the explicit design contract:
+    /// `line` (6%) is the standard divider, `lineStrong` (12%) is the
+    /// emphasized boundary used on focused/selected affordances, `lineFaint`
+    /// (4%) is the inset hairline used on nested cards. Drift on any one
+    /// silently shifts how heavy or hairline-light the affordance reads
+    /// everywhere it renders. Mirrors `testAccentStackOpacityLiteralsArePinned`
+    /// for the accent variants — same pattern, applied to the neutral-line
+    /// stack that's used in nearly every screen's chrome.
+    func testLineStackOpacityLiteralsArePinned() {
+        // Note: `SwiftUI.Color.white` is a system color, not an RGB color, so
+        // its `String(describing:)` description uses the literal `"white"`
+        // token rather than the `#FFFFFFFF` hex form that RGB-constructed
+        // colors produce. Pin against the actual description shape so the
+        // assertion reflects the source's `Color.white.opacity(...)`
+        // construction — a future "consistency fix" that re-routes the line
+        // stack through `Color(red: 1, green: 1, blue: 1).opacity(...)` would
+        // surface here as a deliberate format change.
+        XCTAssertEqual(
+            String(describing: Theme.Color.line),
+            "6% white",
+            "Theme.Color.line is the 6% white standard divider — drift shifts the weight of every panel boundary"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.lineStrong),
+            "12% white",
+            "Theme.Color.lineStrong is the 12% white emphasized boundary — drift shifts the weight of every focused-affordance edge"
+        )
+        XCTAssertEqual(
+            String(describing: Theme.Color.lineFaint),
+            "4% white",
+            "Theme.Color.lineFaint is the 4% white inset hairline — drift shifts the weight of every nested-card boundary"
+        )
+    }
+
     // MARK: - Motion durations
     //
     // SwiftUI's `Animation` type does not conform to `Equatable` in a
