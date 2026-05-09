@@ -266,10 +266,11 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: blocked
+- blocker: `wip/REP-500-mlx-extraction` is NOT on origin (verified 2026-05-09-1011 by autopilot — only `origin/main` and `origin/archive/2026-05-08-willpresent-superseded-by-8da2e2e` remain). Identical pattern to REP-501's recorded blocker (the original `wip/2026-04-24-205912-mlx-spm-target` was lost 2026-05-04). Until REP-501→REP-504 are re-attempted on a fresh wip branch, there is nothing for this human-review gate to verify. Reset to `open` once REP-504 lands a successor wip branch.
 - claimed_by: human
 - depends_on: [REP-504]
-- files_to_touch: wip/REP-500-mlx-extraction (review only; merge to main if green)
+- files_to_touch: wip/REP-500-mlx-extraction (review only; merge to main if green) — branch currently absent
 - scope: Human verification gate for the full REP-500 MLX extraction chain (REP-501 through REP-504). Workers pushed code to wip/REP-500-mlx-extraction but could not run swift test due to the MLX cold-build budget constraint. Human should: (1) checkout the branch; (2) run `swift test` and confirm all 527+ tests pass with zero regressions; (3) run `./scripts/build.sh debug` and confirm the .app bundles and launches; (4) enable the MLX toggle in Settings and verify draft generation still produces tokens (MLX path intact); (5) confirm `swift package show-dependencies` excludes mlx-swift-lm from the ReplyAITests graph; (6) merge to main if all green and mark REP-500 through REP-505 done.
 - success_criteria:
   - `swift test` exits 0 with ≥527 tests passing (no regressions in test count or correctness)
