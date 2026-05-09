@@ -35,6 +35,33 @@ struct MenuBarContent: View {
         /// tone of voice (parallel to the top-level menu-bar item that
         /// macOS provides for free; ours is a softer styling).
         static let footerQuitLabel = "Quit"
+
+        /// Brand letter rendered inside the 22pt accent square in the
+        /// header. Shared identity glyph across MenuBarContent,
+        /// AppPrototypeView, SidebarView, OnboardingStage, WelcomeGate,
+        /// and InboxFrame — eight call sites in current main, all
+        /// inline `Text("R")`. THIS hoist intentionally only changes
+        /// the local-to-MenuBarContent rendering; the other seven sites
+        /// keep their inline literal until a future fire migrates them
+        /// (would touch every shipping screen and warrant a
+        /// `Sources/ReplyAI/BrandStrings.swift` consolidation rather
+        /// than a per-file enum).
+        static let brandLetter = "R"
+
+        /// Brand name rendered next to the brand letter in the header.
+        /// Capital R + lowercase eply + capital A + capital I — keep the
+        /// Pascal-case `ReplyAI` form, not `Reply AI` (with space) or
+        /// `replyai` (lowercase). Drift here orphans tests and screen
+        /// references in BACKLOG.
+        static let brandName = "ReplyAI"
+
+        /// Header right-aligned waiting-count chip. Format string takes
+        /// `Int` and produces `"<N> waiting"` — singular and zero are
+        /// also formatted as `"0 waiting"` / `"1 waiting"`. Pinning
+        /// the suffix (`" waiting"` exactly, single word, leading space)
+        /// catches a copy edit that pluralizes (`" waiting threads"`)
+        /// and overflows the 380pt header on macOS at default font size.
+        static let waitingChipSuffix = " waiting"
     }
 
     @State private var model = InboxViewModel()
@@ -60,15 +87,15 @@ struct MenuBarContent: View {
                 .fill(Theme.Color.accent)
                 .frame(width: 22, height: 22)
                 .overlay(
-                    Text("R")
+                    Text(Strings.brandLetter)
                         .font(Theme.Font.sans(13, weight: .bold))
                         .foregroundStyle(Theme.Color.accentInk)
                 )
-            Text("ReplyAI")
+            Text(Strings.brandName)
                 .font(Theme.Font.sans(13, weight: .semibold))
                 .foregroundStyle(Theme.Color.fg)
             Spacer()
-            Text("\(waitingThreads.count) waiting")
+            Text("\(waitingThreads.count)\(Strings.waitingChipSuffix)")
                 .font(Theme.Font.mono(10))
                 .foregroundStyle(Theme.Color.fgMute)
         }

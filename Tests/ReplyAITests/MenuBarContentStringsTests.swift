@@ -76,4 +76,28 @@ final class MenuBarContentStringsTests: XCTestCase {
         XCTAssertLessThan(subhead.count, 60,
             "subhead must fit in the popover; > 60 chars forces a second visual line in 12pt")
     }
+
+    func testBrandLetterIsCapitalR() {
+        XCTAssertEqual(MenuBarContent.Strings.brandLetter, "R",
+            "menu-bar header brand letter must remain `R` — same identity glyph used in 7 other shipping views and BACKLOG references; rebrand here without coordinating the others would render mismatched logos across screens")
+        XCTAssertEqual(MenuBarContent.Strings.brandLetter.count, 1,
+            "brand letter must remain exactly one Unicode scalar — drift to e.g. `R.` or `Re` overflows the 22pt accent square at 13pt font weight")
+    }
+
+    func testBrandNameIsPascalCaseReplyAI() {
+        XCTAssertEqual(MenuBarContent.Strings.brandName, "ReplyAI",
+            "brand name must remain Pascal-cased `ReplyAI` (no space, no lowercase) — drift to `Reply AI` or `replyai` orphans dozens of references in BACKLOG and AGENTS.md")
+        XCTAssertFalse(MenuBarContent.Strings.brandName.contains(" "),
+            "brand name must not contain a space — `Reply AI` is a separate marketing form not used in v1")
+    }
+
+    func testWaitingChipSuffixHasLeadingSpaceAndSingularNoun() {
+        XCTAssertEqual(MenuBarContent.Strings.waitingChipSuffix, " waiting",
+            "waiting-chip suffix must remain ` waiting` (with leading space, single word) so the rendered chip reads e.g. `3 waiting` not `3waiting` or `3 waiting threads`")
+        XCTAssertTrue(MenuBarContent.Strings.waitingChipSuffix.hasPrefix(" "),
+            "leading space is what visually separates the count from the noun")
+        XCTAssertFalse(MenuBarContent.Strings.waitingChipSuffix.contains("threads") ||
+                       MenuBarContent.Strings.waitingChipSuffix.contains("messages"),
+            "suffix must remain single-word `waiting` — pluralizing or expanding overflows the 380pt header on macOS at default font size")
+    }
 }
