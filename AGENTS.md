@@ -295,7 +295,7 @@ Pinned in `Package.swift`:
 
 - Present tense, lowercase first letter, terse noun-phrase title.
 - Body explains the *why*, not the *what* — readers can `git diff` for the what.
-- **Automation commits** (planner, worker, merger, reviewer) use the fixed trailer `Co-Authored-By: ReplyAI Automation <automation@replyai.co>` regardless of underlying model. Do not substitute model-specific names — that just creates drift flags every time Anthropic rotates the provisioned model.
+- **Automation commits** (currently the `replyai-autopilot` scheduled task; historically also the legacy planner / worker / merger / reviewer / architect / polisher / operator agents) use the fixed trailer `Co-Authored-By: ReplyAI Autopilot <automation@replyai.co>` for autopilot fires (and `Co-Authored-By: ReplyAI Automation <automation@replyai.co>` for any of the legacy prompts that get re-activated) regardless of underlying model. Do not substitute model-specific names — that just creates drift flags every time Anthropic rotates the provisioned model.
 - **Human-driven commits** include `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`; if you're Codex, sub in your own trailer.
 - Never force-push. Never `git amend` after pushing. Separate commits per logical change.
 
