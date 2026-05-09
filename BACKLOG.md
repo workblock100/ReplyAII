@@ -1379,7 +1379,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
-- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: REP-076 wired mark-as-read on thread select. Pin the unread-clear contract: start with a thread at `unread: 3`; call `viewModel.selectThread(thread)`; assert `thread.unread == 0`. Also assert: the thread's position in `viewModel.threads` is unchanged after the unread update (no re-sort triggered by the unread change alone). Uses `StaticMockChannel` with a seeded thread.
 - success_criteria:
@@ -1634,7 +1633,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 87f5001
 - claimed_by: worker-2026-04-24-143143
-- blocker: implementation complete on `wip/2026-04-24-143143-prefs-channels-negation-concurrent` (commit `8cf5a15`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-286; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkMarkAllRead()` to `InboxViewModel` that iterates `threads` and sets `unread = 0` for each. Useful for a "Mark all read" menu action (UI wiring is separate, human-reviewed). Tests: start with 3 threads each with `unread > 0`; call `bulkMarkAllRead()`; assert all three have `unread == 0`; thread count unchanged.
 - success_criteria:
@@ -1757,7 +1755,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 818ca22
 - claimed_by: worker-2026-04-24-170301
-- blocker: **Pivot P0 implementation complete** on `wip/2026-04-24-170301-sync-all-channels` (commit `984bb13`, +4 tests); pending human review/merge tracked in REP-284; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: **Pivot P0: the multi-channel aggregation layer that makes alternative sources (AppleScript, Slack, notification-captured) appear alongside iMessage without FDA.** Without this, each channel must be queried independently and there is no unified thread list. Add `registeredChannels: [any ChannelService]` array on `InboxViewModel` (injectable for tests, defaults to `[IMessageChannel()]`). Add `syncAllChannels() async -> [MessageThread]` that concurrently calls `recentThreads(limit: Preferences.threadLimit)` on each channel, merges results deduped by `threadID`, sorts by `lastMessageDate` descending. One channel throwing does not block others — log error and continue. Tests: two channels each returning 2 threads → merged 4 sorted threads; duplicate threadID from two channels → deduplicated (first channel wins); one channel throws → others still sync; empty `registeredChannels` → empty result.
 - success_criteria:
@@ -1796,7 +1793,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 135cfcf
 - claimed_by: worker-2026-04-24-152614
-- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `totalUnreadCount: Int` to `InboxViewModel` that sums `thread.unread` across all threads. Useful for the MenuBar badge (REP-044) and the sidebar header. Clamped to ≥0 (guard against hypothetical negative unread). Tests: no threads → 0; 3 threads with unread 2, 0, 5 → 7; all unread=0 → 0; single thread unread=1 → 1.
 - success_criteria:
@@ -1834,7 +1830,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
-- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`) and also bundled in `wip/2026-04-24-133823-inbox-bulk-filter` (commit `a0b46ed`); pending human review/merge tracked in REP-282/REP-287; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Inbox/InboxViewModel.swift`, `Tests/ReplyAITests/InboxViewModelTests.swift`
 - scope: Add `bulkArchiveRead()` to `InboxViewModel` that calls `archive(_:)` on every thread where `thread.unread == 0`. Useful for a "Clear read" menu action (UI wiring is separate). Complements `bulkMarkAllRead()` (REP-224). Tests: 3 threads with unread 0 and 1 with unread 3 → 3 archived, 1 remains; all threads unread=0 → all archived, `threads` empty; no threads with unread=0 → no archives triggered, `threads` unchanged.
 - success_criteria:
@@ -1852,7 +1847,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit c04b672
 - claimed_by: worker-2026-04-24-152614
-- blocker: implementation complete on `wip/2026-04-24-152614-unread-bulk-concurrent` (commit `30d76e0`); pending human review/merge tracked in REP-287; do NOT re-claim
 - files_to_touch: `Tests/ReplyAITests/ContactsResolverTests.swift`
 - scope: Pin cache-and-lock correctness under real concurrency: call `name(for: "alice@example.com")` 10 times concurrently via `DispatchQueue.concurrentPerform(iterations: 10)`; assert result is consistent (all 10 results equal the resolved name); assert mock store queried exactly once (not 10 times). Complements REP-219 (single cache-hit test) with concurrent-load correctness. Guards `NSLock`-guarded cache against TOCTOU under actual parallel reads.
 - success_criteria:
@@ -1930,7 +1924,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 5e761c9
 - claimed_by: worker-2026-04-24-161734
-- blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 6 tests); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/AccessibilityAPIReader.swift` (new), `Tests/ReplyAITests/AccessibilityAPIReaderTests.swift` (new)
 - scope: **Pivot-aligned (alt message-source, no FDA required — uses Accessibility permission).** `AccessibilityAPIReader.conversationNames() -> [String]` walks the `AXUIElement` hierarchy of the `com.apple.MobileSMS` process to find conversation names listed in the sidebar. Injectable `AXUIElementFactory` protocol for test isolation (default uses real `AXUIElementCreateApplication`). Returns `[]` gracefully when Accessibility permission not granted (check `AXIsProcessTrusted()` before walking). Tests: mock element tree returns 3 conversation names → `[String]` with correct values; Accessibility not trusted → returns `[]` without crash; empty sidebar → `[]`; injectable factory captures the target PID for assertion.
 - success_criteria:
@@ -1984,7 +1977,6 @@ Prioritized, scoped task list maintained by the planner agent. The hourly worker
 - status: done
 - done_on: main commit 5e761c9
 - claimed_by: worker-2026-04-24-161734
-- blocker: implementation complete on `wip/2026-04-24-161734-accessibility-retrydelay` (commit `e5074e2`, 1 new test + 3 updated); pending human review/merge tracked in REP-288; do NOT re-claim
 - files_to_touch: `Sources/ReplyAI/Channels/IMessageSender.swift`, `Tests/ReplyAITests/IMessageSenderTests.swift`
 - scope: REP-064 added -1708 error retry with a hardcoded sleep between attempts. This makes tests slow — each retry cycle pays real wall-clock time. Add `retryDelay: TimeInterval` to `IMessageSender.init(retryDelay: TimeInterval = 0.5)` and use `Thread.sleep(forTimeInterval: retryDelay)` in the retry path. Tests pass `retryDelay: 0.0` to run without sleep. No behavior change in production. Existing retry tests that construct `IMessageSender()` without an explicit `retryDelay` continue to use the 0.5s default; update the tests that exercise the retry path to use `retryDelay: 0` for speed.
 - success_criteria:
