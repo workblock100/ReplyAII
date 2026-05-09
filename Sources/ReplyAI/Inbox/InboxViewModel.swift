@@ -979,7 +979,7 @@ final class InboxViewModel {
     /// also drops the prefix would leak past factory reset. Hoisted
     /// from `private static let` to package access so the contract is
     /// pinnable. Pinned by
-    /// `InboxViewModelArchivedTests.testArchivedKeyIsFrozen`.
+    /// `InboxViewModelStaticPinTests.testInboxPersistenceKeysAreFrozen`.
     static let archivedKey = "pref.inbox.archivedThreadIDs"
 
     private static func loadArchivedIDs(from defaults: UserDefaults) -> Set<String> {
@@ -1000,7 +1000,7 @@ final class InboxViewModel {
     /// UserDefaults key for the per-install silently-ignored thread
     /// set (rule action `silentlyIgnore`). Same orphan-on-rename risk
     /// as `archivedKey`. Pinned by
-    /// `InboxViewModelArchivedTests.testSilentlyIgnoredKeyIsFrozen`.
+    /// `InboxViewModelStaticPinTests.testInboxPersistenceKeysAreFrozen`.
     static let silentlyIgnoredKey = "pref.inbox.silentlyIgnoredThreadIDs"
 
     private static func loadSilentlyIgnoredIDs(from defaults: UserDefaults) -> Set<String> {
@@ -1022,7 +1022,7 @@ final class InboxViewModel {
     /// silently un-pins every thread on next launch (data is still on
     /// disk under the old key but the load path looks at the new
     /// one). Pinned by
-    /// `InboxViewModelArchivedTests.testPinnedKeyIsFrozen`.
+    /// `InboxViewModelStaticPinTests.testInboxPersistenceKeysAreFrozen`.
     static let pinnedKey = "pref.inbox.pinnedThreadIDs"
 
     private static func loadPinnedIDs(from defaults: UserDefaults) -> Set<String> {
@@ -1043,7 +1043,7 @@ final class InboxViewModel {
     /// UserDefaults key for the per-install snoozed-until map
     /// (`[threadID: Date]`). Drift here silently un-snoozes every
     /// thread on next launch. Pinned by
-    /// `InboxViewModelArchivedTests.testSnoozedUntilKeyIsFrozen`.
+    /// `InboxViewModelStaticPinTests.testInboxPersistenceKeysAreFrozen`.
     static let snoozedUntilKey = "pref.inbox.snoozedUntil"
 
     private static func loadSnoozedUntil(from defaults: UserDefaults) -> [String: Date] {
@@ -1067,7 +1067,7 @@ final class InboxViewModel {
     /// (the watcher loop reads the watermark from the new key, finds
     /// nothing, and treats the entire chat history as unseen).
     /// Pinned by
-    /// `InboxViewModelArchivedTests.testLastSeenRowIDKeyIsFrozen`.
+    /// `InboxViewModelStaticPinTests.testInboxPersistenceKeysAreFrozen`.
     static let lastSeenRowIDKey = "pref.inbox.lastSeenRowID"
 
     private static func loadLastSeenRowID(from defaults: UserDefaults) -> [String: Int64] {

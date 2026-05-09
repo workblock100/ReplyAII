@@ -46,7 +46,7 @@ struct StubLLMService: LLMService {
     /// feel. The lower-bound (`tokenDelayLowerBoundNanoseconds`) and
     /// upper-bound (`tokenDelayUpperBoundNanoseconds`) constants are
     /// what the production default range is built from. Pinned by
-    /// `LLMServiceTests.testDefaultTokenDelayRangeIsTwentyTwoToFiftyEightMilliseconds`.
+    /// `LLMServiceTests.testDefaultTokenDelayConstantIs22To58Ms`.
     static let tokenDelayLowerBoundNanoseconds: UInt64 = 22_000_000
     static let tokenDelayUpperBoundNanoseconds: UInt64 = 58_000_000
     static let defaultTokenDelay: ClosedRange<UInt64> =
@@ -59,7 +59,7 @@ struct StubLLMService: LLMService {
     /// and the user can't tell whether the model started. Drift to 0
     /// produces a jarring instant-first-token; drift up makes every
     /// stub draft feel slow. Pinned by
-    /// `LLMServiceTests.testDefaultInitialDelayIsOneEightyMilliseconds`.
+    /// `LLMServiceTests.testDefaultInitialDelayConstantIs180Ms`.
     static let defaultInitialDelay: UInt64 = 180_000_000
 
     var tokenDelay: ClosedRange<UInt64> = StubLLMService.defaultTokenDelay

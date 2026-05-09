@@ -23,7 +23,8 @@ protocol ChannelService: Sendable {
 /// the no-arg convenience overloads on the protocol. Swift protocols can't
 /// host static-let storage themselves, so the defaults live in this enum and
 /// the convenience overloads + tests both reference them. Pinned by
-/// `ChannelServiceTests.testDefault*Limit`.
+/// `ChannelServiceTests.testRecentThreadsLimitDefaultLiteralIsFifty` and
+/// `ChannelServiceTests.testMessagesLimitDefaultLiteralIsTwenty`.
 enum ChannelServiceDefaults {
     /// Sidebar fetch size for the no-arg `recentThreads()` convenience.
     /// Drift up wastes per-channel API budget on threads the user can't see

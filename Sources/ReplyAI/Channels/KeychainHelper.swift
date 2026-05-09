@@ -27,7 +27,7 @@ struct KeychainHelper: Sendable {
     /// `KeychainHelper` default and the `SlackTokenStore` default route
     /// through the same constant; previously each was an inline literal,
     /// so a rename touching one wouldn't fail the other's test. Pinned by
-    /// `KeychainHelperTests.testDefaultServiceLiteralIsCoReplyAIApp`.
+    /// `KeychainHelperTests.testDefaultServiceLiteralIsPinned`.
     static let defaultService = "co.replyai.app"
 
     let service: String
@@ -128,7 +128,7 @@ enum KeychainError: LocalizedError, Sendable {
     /// from the inline literals inside `errorDescription` so a copy
     /// edit lands on a clearly-named constant rather than buried
     /// inside a nested switch in a non-UI file. Existing tests in
-    /// `KeychainErrorTests` use substring matching (e.g.
+    /// `KeychainHelperTests` use substring matching (e.g.
     /// `.contains("sign in")`) which doesn't catch a re-wording that
     /// drops the actionable hint — these constants plus the
     /// `*ToastCopyIsFrozen` pin tests are the byte-for-byte contract.
@@ -149,7 +149,7 @@ enum KeychainError: LocalizedError, Sendable {
     /// the only signal a triage-engineer has) or rewords the recovery
     /// hint ("Open Keychain Access…") which is the user's only
     /// actionable next step. Pinned by
-    /// `KeychainErrorTests.testUnhandledErrorFallbackToastFormatRoundTrips`.
+    /// `KeychainHelperTests.testUnhandledErrorFallbackToastFormatRoundTrips`.
     static func unhandledErrorFallbackToast(status: OSStatus) -> String {
         "Keychain error \(status). Open Keychain Access to inspect, or reconnect the account in Settings → Channels."
     }

@@ -52,7 +52,7 @@ final class SlackSocketClient: @unchecked Sendable {
     /// outage. 5 s is the value Slack's own RTM/Socket Mode samples document
     /// — drift here changes both the perceived recovery latency and the
     /// production reconnect-storm shape. Pinned by
-    /// `SlackSocketClientTests.testDefaultReconnectDelayIsFiveSeconds`.
+    /// `SlackSocketClientTests.testDefaultReconnectDelayLiteralIsFiveSeconds`.
     static let defaultReconnectDelay: TimeInterval = 5.0
 
     private let connectionURL: URL

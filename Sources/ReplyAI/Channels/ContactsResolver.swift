@@ -41,7 +41,7 @@ final class ContactsResolver: @unchecked Sendable {
     /// a contact stored as `+14155551234` would no longer match an
     /// iMessage handle of `4155551234` and contact-name resolution
     /// would silently fall back to the raw handle. Pinned by
-    /// `ContactsResolverTests.testUSCountryCodeNormalizationConstantsAreFrozen`.
+    /// `ContactsResolverPhoneDigitsTests.testUSCountryCodeNormalizationConstantsAreFrozen`.
     enum USPhoneNormalization {
         /// Length of an E.164-style US number that includes the
         /// country-code prefix (1 + 10-digit NPA-NXX-XXXX).
