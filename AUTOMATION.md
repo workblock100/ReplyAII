@@ -1,6 +1,6 @@
 # AUTOMATION.md
 
-Autonomous work loop for ReplyAI. Three Claude agents run on cron in Anthropic sandboxes, clone this repo, do scoped work, and push back to `origin/main`. You don't touch it unless something goes wrong.
+Autonomous work loop for ReplyAI. Today: a single `replyai-autopilot` fire runs every 2 hours in an Anthropic sandbox, clones this repo, does scoped work, and pushes back to `origin/main`. You don't touch it unless something goes wrong. (The legacy multi-agent pipeline — 7 roles, documented in the table below — was retired in the 2026-05 single-agent pivot; the intro previously said "three" because of an even older pre-pivot phase. Kept as reference until the autopilot's stable.)
 
 > **Operating mode (2026-05): single-agent autopilot.** The 7-agent table below
 > documents the legacy pipeline design. As of the autopilot pivot, a single
