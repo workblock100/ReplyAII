@@ -1,6 +1,6 @@
 # BACKLOG.md
 
-Prioritized, scoped task list maintained by the planner agent. The hourly worker picks the highest-priority open, non-ui-sensitive task and ships it.
+Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilot.** The `replyai-autopilot` scheduled task fires every 2 hours, picks the highest-priority open non-ui-sensitive task whose dependencies are met, and either ships it to main or pushes it to `wip/`. The legacy planner / worker / reviewer / merger / architect / polisher / operator prompts under `.automation/*.prompt` describe the previous 7-agent pipeline and are reference-only; the autopilot consolidates all of their responsibilities. See `~/.claude/scheduled-tasks/replyai-autopilot/SKILL.md` for the active behavior contract.
 
 **Format per task:**
 
