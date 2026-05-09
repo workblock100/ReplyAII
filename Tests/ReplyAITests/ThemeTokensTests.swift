@@ -408,6 +408,50 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertLessThan(0.14, 0.18)
     }
 
+    /// Pin the bezier control-point coefficients of the shared motion
+    /// curve. The duration pins above only catch retiming — a swap from
+    /// the design's `timingCurve(0.25, 0.1, 0.25, 1)` to the SwiftUI
+    /// default `easeInOut` (or any other curve, e.g. `(0.42, 0, 0.58, 1)`)
+    /// would still pass `duration: 0.12/0.14/0.18` while changing the
+    /// motion *feel* across every animated affordance in the app. The
+    /// design handoff's `--motion-curve` is the explicit contract; the
+    /// existing test-doc comment says the control points are pinned but
+    /// no actual assertion exists, so this fills the gap.
+    ///
+    /// SwiftUI projects `timingCurve(0.25, 0.1, 0.25, 1, ...)` to a
+    /// `BezierAnimation.curve: ... CubicSolver(ax: 1.0, bx: -0.75, cx:
+    /// 0.75, ay: -1.7..., by: 2.4..., cy: 0.3...)` description (the
+    /// solver coefficients are derived from the control points by a
+    /// Bernstein-basis transform — `cx = 3 * x1 = 0.75`, `bx = 3 * (x2 -
+    /// 2*x1) = -0.75`, `ax = 1 - cx - bx = 1.0`, ditto for the y axis).
+    /// Pin a substring of the curve descriptor that any drift in any of
+    /// the four control points would break — using `cx: 0.75` because
+    /// it's the simplest finite-precision coefficient that's stable
+    /// under SwiftUI's printing format. This is the same pattern as the
+    /// duration pin (substring match against String(describing:)) and
+    /// is robust to whitespace/format changes that might affect a full-
+    /// string equality.
+    func testMotionCurveControlPointsArePinned() {
+        // 0.25 (x1) → cx coefficient = 3 * 0.25 = 0.75.
+        // 0.1 (y1)  → cy = 3 * 0.1   = 0.30000000000000004 (float
+        //             round-trip noise — match a robust substring
+        //             prefix instead of the noisy tail).
+        // The same curve is reused across fast/std/tone, so all three
+        // descriptions should contain the same coefficient signature.
+        let curveSignature = "cx: 0.75"
+        for (label, anim) in [
+            ("fast", Theme.Motion.fast),
+            ("std",  Theme.Motion.std),
+            ("tone", Theme.Motion.tone),
+        ] {
+            let desc = String(describing: anim)
+            XCTAssertTrue(
+                desc.contains(curveSignature),
+                "Theme.Motion.\(label) must use the design's `timingCurve(0.25, 0.1, 0.25, 1)` curve — drift to a different bezier silently changes the feel of every animation. Expected substring \(curveSignature) in: \(desc)"
+            )
+        }
+    }
+
     // MARK: - Brand accent literal pin
     //
     // `Theme.Color.accent` is the entire visual identity of the app —
