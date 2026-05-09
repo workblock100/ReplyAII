@@ -129,11 +129,11 @@ Tests/ReplyAITests/                ~1931 tests as of 2026-05-08-2210 (1895 pass 
 
 Commits (newest first; run `git log` for detail):
 
-- `e5074e2` AccessibilityAPIReader (AX-based alt message source, injectable seams, 6 tests) + IMessageSender.retryDelay injectable (removes hardcoded 0.5s sleep, 1 new test + 3 updated) — REP-258+269 (now landed on main; the original wip branch was reabsorbed when REP-501-style consolidation merged through)
-- `8cf5a15` per-channel Preferences keys + not(not(pred)) guard + concurrent add+remove tests — REP-231+208+220 (landed on main)
-- `ce76f2a` SlackSocketClient: WebSocket wrapper for Socket Mode, injectable seams, 5 tests — REP-267 (landed on main; see Sources/ReplyAI/Channels/SlackSocketClient.swift + SlackSocketClientTests)
-- `6ae9022` Thread-list cache for cold-launch resilience — REP-278 (landed on main)
-- `ea6fc52` ViewState enum + 4 transition tests — REP-247 (landed on main; see also `a819f59` ViewState + SlackTokenStore consolidation)
+- `5e761c9` AccessibilityAPIReader (AX-based alt message source, injectable seams, 6 tests) + IMessageSender.retryDelay injectable (removes hardcoded 0.5s sleep, 1 new test + 3 updated) — REP-258+269 (landed on main; the original wip branch was reabsorbed when REP-501-style consolidation merged through)
+- `7e932cf` per-channel Preferences keys + not(not(pred)) guard + concurrent add+remove tests — REP-231+208+220 (landed on main)
+- `7c62474` SlackSocketClient: WebSocket wrapper for Socket Mode, injectable seams, 5 tests — REP-267 (landed on main; see Sources/ReplyAI/Channels/SlackSocketClient.swift + SlackSocketClientTests)
+- `cfe50f8` Thread-list cache for cold-launch resilience — REP-278 (landed on main)
+- `a819f59` ViewState enum + 4 transition tests — REP-247 (landed on main; SlackTokenStore consolidation in same commit)
 - `08f2e4b` AGENTS.md + worker.prompt: MLX cold-build warning and wip-branch protocol documented (REP-271, worker-2026-04-24-110000, 527 tests unchanged)
 - `9a6c3d1` MessagesAppActivationObserver (NSWorkspace activation watcher, 600ms debounce, injectable seams) + InboxViewModel activation re-sync wiring (5s debounce, weak capture, handleMessagesActivation) (REP-239, REP-265, worker-2026-04-24-102657, 521→527 tests)
 - `31534e1` NotificationCoordinator/InboxViewModel: chatGUID extraction from `CKChatIdentifier`/`CKChatGUID` userInfo keys, thread deduplication in applyIncomingNotification (REP-263, worker-2026-04-24-060000, 516→521 tests)
