@@ -700,6 +700,34 @@ final class AppleScriptMessageReaderTests: XCTestCase {
             "messagesForChat script must embed the GUID inside double quotes — got: \(src)")
     }
 
+    /// Cross-module pin: both `AppleScriptMessageReader` scripts and
+    /// `IMessageSender.appleScriptApplicationTarget` address the same
+    /// `"Messages"` host process. Drift between the two would silently
+    /// split the read and send paths onto different AppleScript targets
+    /// — sends would land at IMessageSender's target while reads would
+    /// poll a different one. The reader currently uses inline `"Messages"`
+    /// literals (lines 110 and 166 of AppleScriptMessageReader.swift)
+    /// and IMessageSender hoists the target to a named constant; this
+    /// test surfaces a hypothetical "let's rename Messages.app addressing
+    /// to MessagesApp" refactor that updates the constant but misses the
+    /// reader's inline literal.
+    func testReaderScriptUsesSameApplicationTargetAsSender() throws {
+        final class Captured: @unchecked Sendable { var sources: [String] = [] }
+        let captured = Captured()
+        let reader = AppleScriptMessageReader(
+            executor: { script in captured.sources.append(script); return "" },
+            nameFor: { _ in nil }
+        )
+        _ = try reader.recentChats()
+        _ = try reader.messagesForChat(chatGUID: "iMessage;-;+15551234567", limit: 5)
+
+        let expectedOpener = "tell application \"\(IMessageSender.appleScriptApplicationTarget)\""
+        for src in captured.sources {
+            XCTAssertTrue(src.contains(expectedOpener),
+                "reader script must address the same AppleScript target as IMessageSender (`\(IMessageSender.appleScriptApplicationTarget)`) — got: \(src)")
+        }
+    }
+
     /// `AppleScriptMessageReader.minimumMessageLimit` is the floor used by
     /// `messagesForChat(chatGUID:limit:)` to clamp a caller-supplied non-positive
     /// `limit`. Drift below 1 produces `startIdx = msgCount - 0 + 1 = msgCount + 1`,
