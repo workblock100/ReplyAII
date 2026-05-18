@@ -1,6 +1,6 @@
 import XCTest
 import Security
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class KeychainHelperTests: XCTestCase {
     private var keychain: KeychainHelper!

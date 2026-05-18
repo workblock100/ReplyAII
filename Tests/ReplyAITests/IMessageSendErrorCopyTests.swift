@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the user-visible `errorDescription` strings on `IMessageSender.SendError`.
 /// These strings surface in the inbox composer's send-failure banner and the

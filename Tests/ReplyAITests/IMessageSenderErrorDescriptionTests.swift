@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// `IMessageSender.SendError.errorDescription` strings are surfaced in
 /// the inbox error banner when an iMessage send fails. Pin per-case copy

@@ -1,6 +1,6 @@
 import XCTest
 import Network
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class LocalhostOAuthListenerTests: XCTestCase {
 

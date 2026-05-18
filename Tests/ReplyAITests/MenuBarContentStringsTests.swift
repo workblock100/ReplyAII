@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pin the user-visible empty-state copy on the menu-bar popover.
 /// Both literals were hoisted from `MenuBarContent`'s SwiftUI body

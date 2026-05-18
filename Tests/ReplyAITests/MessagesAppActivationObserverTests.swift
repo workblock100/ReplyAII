@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 // Bundle ID extractor that reads a "bundleID" key from userInfo, so tests
 // can post fake activation notifications without needing real NSRunningApplication.

@@ -1,7 +1,7 @@
 import XCTest
 import SwiftUI
 import AppKit
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pin the math on `Color.mix(with:amount:)`. The avatar gradient uses this
 /// to compute a darker endpoint from each channel's dot color, so the

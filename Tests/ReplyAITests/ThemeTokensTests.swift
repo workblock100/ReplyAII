@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pin Theme tokens. These constants ride into Components/, Inbox/, Screens/,
 /// and design_handoff_replyai/ pixel comparisons; any drift silently shifts

@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the production keychain service + token-key strings used by the four
 /// non-iMessage channel stubs (SMS, Teams, Telegram, WhatsApp). These strings

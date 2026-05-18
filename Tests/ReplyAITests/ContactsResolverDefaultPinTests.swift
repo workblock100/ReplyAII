@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pure-static pin tests for ContactsResolver constants. The full
 /// `ContactsResolverTests` suite is environmentally skipped in headless

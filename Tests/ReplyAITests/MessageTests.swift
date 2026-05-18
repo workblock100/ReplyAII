@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the public surface of `Message`. Author raw values feed both
 /// fixture JSON and any future on-disk projection, so renaming a case

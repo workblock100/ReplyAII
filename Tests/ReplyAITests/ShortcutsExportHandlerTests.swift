@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// REP-262 — pivot-aligned alternative iMessage source via Shortcuts.app
 /// URL callbacks. Tests cover the parser-only happy path, the structural

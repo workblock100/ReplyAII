@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the public surface of `Folder.Kind` and `Tone`. Both are persisted
 /// (Folder.Kind via `Preferences.lastSelectedFolder`, Tone via rules.json

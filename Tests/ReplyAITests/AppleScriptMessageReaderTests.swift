@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Covers the pure-parsing surface of AppleScriptMessageReader so we can change
 /// the AppleScript source without re-running it against a live Messages.app.

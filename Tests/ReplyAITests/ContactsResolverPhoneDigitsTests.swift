@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Tests for the pure static `CNContactStoreBackedStoring.phoneDigits(_:)` normalizer.
 /// Lives in a separate XCTestCase class (not `ContactsResolverTests`) so it

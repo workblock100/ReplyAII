@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pure-logic pins for `SetVoiceView`'s static copy + math helpers.
 /// SwiftUI view rendering itself is not unit-testable in XCTest, but the

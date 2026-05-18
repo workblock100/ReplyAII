@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the empty-string-token bypass behavior across the four non-iMessage
 /// channel stubs (SMS, WhatsApp, Teams, Telegram). The auth gate in each

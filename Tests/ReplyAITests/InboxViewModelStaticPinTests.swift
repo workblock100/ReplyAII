@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Static-only pins for InboxViewModel constants that ship to user UX.
 /// The full `InboxViewModelTests` suite is environmentally skipped under

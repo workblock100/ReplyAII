@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the raw values on `InboxSidebarBadge`. Both raw values render verbatim
 /// in `SimpleSidebar` via `Text(badge.rawValue)`, so a refactor that quietly

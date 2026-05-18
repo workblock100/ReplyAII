@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Static-only pin for `InboxViewModel.perThreadMessageLoadLimit`. The
 /// full `InboxViewModelTests` suites are environmentally skipped under

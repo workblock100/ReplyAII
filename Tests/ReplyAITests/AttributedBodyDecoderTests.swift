@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Tests for AttributedBodyDecoder against hand-crafted typedstream blobs.
 ///

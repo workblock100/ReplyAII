@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Test-local alias — `SettingsShell` is generic over `Content: View`, so the
 /// nested `Tab` enum can't be referenced as `SettingsShell.Tab` without

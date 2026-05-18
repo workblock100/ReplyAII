@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class IMessagePreviewTests: XCTestCase {
 

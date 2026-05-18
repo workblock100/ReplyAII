@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the contract for `InboxViewModel.menuBarWaitingThreads` — the
 /// computed property the MenuBarExtra popover reads to render its

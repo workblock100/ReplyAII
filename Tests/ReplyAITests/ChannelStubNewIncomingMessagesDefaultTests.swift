@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the asymmetry of the four non-iMessage channel stubs (SMS, Teams,
 /// Telegram, WhatsApp): `recentThreads` and `messages` throw

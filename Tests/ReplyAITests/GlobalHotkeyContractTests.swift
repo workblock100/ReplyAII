@@ -1,6 +1,6 @@
 import XCTest
 import AppKit
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// GlobalHotkey itself can't be unit-tested without a running NSApp +
 /// Carbon event pump, but its public *contract* — the notification name

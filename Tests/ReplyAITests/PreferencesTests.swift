@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class PreferencesTests: XCTestCase {
     private var suiteName: String!

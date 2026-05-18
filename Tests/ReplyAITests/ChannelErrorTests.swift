@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// `ChannelError.errorDescription` strings are surfaced verbatim in the
 /// inbox error banner and Settings → Channels list. Pin the contract so a

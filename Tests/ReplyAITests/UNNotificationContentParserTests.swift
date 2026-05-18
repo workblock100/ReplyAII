@@ -1,6 +1,6 @@
 import XCTest
 import UserNotifications
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class UNNotificationContentParserTests: XCTestCase {
 

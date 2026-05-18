@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class ChatDBWatcherTests: XCTestCase {
     /// How long to wait after the debounce window before asserting the

@@ -1,6 +1,6 @@
 import XCTest
 import SQLite3
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Tests for `IMessageChannel.recentThreads` against a hand-crafted
 /// chat.db-shaped SQLite file. No real Messages data ever touches the

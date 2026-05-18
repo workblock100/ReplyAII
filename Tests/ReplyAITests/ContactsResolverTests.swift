@@ -1,6 +1,6 @@
 import XCTest
 import Contacts
-@testable import ReplyAI
+@testable import ReplyAICore
 
 final class ContactsResolverTests: XCTestCase {
 

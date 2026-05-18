@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins for `A11yStrings`. Icon-only tappable elements rely on these
 /// strings being announced verbatim by VoiceOver — drift here silently

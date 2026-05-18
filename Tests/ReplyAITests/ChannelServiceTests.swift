@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pins the public surface of `ChannelService` (the per-channel adapter
 /// contract) and `ChannelError` (the channel-agnostic error vocabulary

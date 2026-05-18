@@ -1,5 +1,5 @@
 import XCTest
-@testable import ReplyAI
+@testable import ReplyAICore
 
 /// Pin tests for `MLXDraftService` constants. We don't load the model in
 /// CI — that's a 2 GB download — so this file only covers the surface
