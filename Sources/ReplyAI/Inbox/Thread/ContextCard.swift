@@ -17,6 +17,7 @@ struct ContextCard: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.Color.accentInk)
+                    .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Context")

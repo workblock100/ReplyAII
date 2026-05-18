@@ -146,6 +146,7 @@ struct ComposerView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.Color.warn)
                 .padding(.top, 2)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Not sure how to reply.")
                     .font(Theme.Font.sans(13, weight: .medium))
