@@ -49,7 +49,7 @@ swift test                      # run the XCTest suite — but see the gotcha be
 #    --skip InboxViewModelTests
                                 # plain `swift test` hangs intermittently on the
                                 # Contacts XPC handshake; the three-skip form
-                                # completes in ~18s warm with 1909 passes.
+                                # completes in ~15s warm with 1927 passes.
 
 # Xcode path:
 xcodegen generate && open ReplyAI.xcodeproj
@@ -139,7 +139,7 @@ Sources/ReplyAI/
     ├── Assets.xcassets/
     └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
 
-Tests/ReplyAITests/                ~1946 tests as of 2026-05-09-1011 (1909 pass under the autopilot's three-skip workaround — `--skip ContactsResolverTests --skip InboxViewModelIsSyncingTests --skip InboxViewModelTests` — in ~18.0s warm; the other ~37 live in those three skipped suites, see the "`swift test` full-suite hangs intermittently on Contacts XPC" gotcha below). Plus 2 always-skipped in headless: `GlobalHotkeyContractTests` AppKit-touching cases gated behind `RUN_APPKIT_TOUCHING_TESTS=1`; opt-in to exercise locally.
+Tests/ReplyAITests/                ~1964 tests as of 2026-05-18-1628 (1927 pass under the autopilot's three-skip workaround — `--skip ContactsResolverTests --skip InboxViewModelIsSyncingTests --skip InboxViewModelTests` — in ~15.2s warm; the other ~37 live in those three skipped suites, see the "`swift test` full-suite hangs intermittently on Contacts XPC" gotcha below). Plus 2 always-skipped in headless: `GlobalHotkeyContractTests` AppKit-touching cases gated behind `RUN_APPKIT_TOUCHING_TESTS=1`; opt-in to exercise locally.
 ```
 
 ## Architecture patterns
