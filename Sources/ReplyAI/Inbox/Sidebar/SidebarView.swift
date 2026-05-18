@@ -110,6 +110,7 @@ struct SidebarView: View {
                         .foregroundStyle(Theme.Color.fgFaint)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(A11yStrings.clearSearch)
             }
         }
         .padding(.horizontal, 10)

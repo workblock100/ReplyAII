@@ -99,7 +99,8 @@ struct ThreadListView: View {
             .buttonStyle(.plain)
             .foregroundStyle(model.totalUnreadCount == 0 ? Theme.Color.fgFaint : Theme.Color.fgMute)
             .disabled(model.totalUnreadCount == 0)
-            .help("Mark all read")
+            .help(A11yStrings.markAllRead)
+            .accessibilityLabel(A11yStrings.markAllRead)
 
             Button {
                 model.bulkArchiveRead()
@@ -110,7 +111,8 @@ struct ThreadListView: View {
             .buttonStyle(.plain)
             .foregroundStyle(hasReadThreads ? Theme.Color.fgMute : Theme.Color.fgFaint)
             .disabled(!hasReadThreads)
-            .help("Archive read")
+            .help(A11yStrings.archiveRead)
+            .accessibilityLabel(A11yStrings.archiveRead)
         }
     }
 
