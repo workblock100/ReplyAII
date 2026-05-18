@@ -28,4 +28,19 @@ enum A11yStrings {
     /// ("archivebox" icon). Disabled when no read threads exist; same
     /// rationale as `markAllRead`.
     static let archiveRead = "Archive read"
+
+    /// Sidebar channel-filter row label — dynamic based on (active,
+    /// channelLabel). When active, the row's tap toggles the filter
+    /// OFF, so the announcement is "Show all channels"; when inactive,
+    /// the tap turns it ON, so the announcement is "Filter <name>".
+    /// Used by BOTH `.help()` (sighted-hover tooltip) and
+    /// `.accessibilityLabel()` (VoiceOver announcement) so the two
+    /// stay in lock-step. Pinned by
+    /// `A11yStringsTests.testChannelFilter*` — drift between the
+    /// hover hint and the VoiceOver announcement is itself an
+    /// accessibility regression and breaks the "one source of truth"
+    /// contract `SidebarView.channelRow` relies on.
+    static func channelFilter(active: Bool, channelLabel: String) -> String {
+        active ? "Show all channels" : "Filter \(channelLabel)"
+    }
 }

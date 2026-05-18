@@ -193,7 +193,8 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(active ? "Show all channels" : "Filter \(channel.label)")
+        .help(A11yStrings.channelFilter(active: active, channelLabel: channel.label))
+        .accessibilityLabel(A11yStrings.channelFilter(active: active, channelLabel: channel.label))
     }
 
     /// REP-047 — wrap the sync chip in a 10s `TimelineView` so the

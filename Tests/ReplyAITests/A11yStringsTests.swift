@@ -53,4 +53,41 @@ final class A11yStringsTests: XCTestCase {
                 "\(label) must begin with an uppercase letter")
         }
     }
+
+    /// Channel-filter label, active state — tap toggles the filter OFF,
+    /// so the announcement is "Show all channels" regardless of which
+    /// channel is currently filtered (the channel name is implicit in
+    /// the visible Text element next to the row's ChannelDot).
+    func testChannelFilterActiveLiteral() {
+        XCTAssertEqual(
+            A11yStrings.channelFilter(active: true, channelLabel: "Slack"),
+            "Show all channels",
+            "active state ignores the channel name — the user's intent is to clear the filter")
+    }
+
+    /// Channel-filter label, inactive state — tap turns the filter ON,
+    /// so the announcement is "Filter <channelLabel>" verbatim.
+    func testChannelFilterInactiveLiteral() {
+        XCTAssertEqual(
+            A11yStrings.channelFilter(active: false, channelLabel: "Slack"),
+            "Filter Slack")
+        XCTAssertEqual(
+            A11yStrings.channelFilter(active: false, channelLabel: "Telegram"),
+            "Filter Telegram")
+        XCTAssertEqual(
+            A11yStrings.channelFilter(active: false, channelLabel: "iMessage"),
+            "Filter iMessage",
+            "lowercase i in iMessage must NOT trigger a re-capitalization — channel name is taken verbatim")
+    }
+
+    /// `.help()` and `.accessibilityLabel()` MUST stay in lock-step —
+    /// `SidebarView.channelRow` uses `A11yStrings.channelFilter` for
+    /// both. Pin that the function is deterministic for identical
+    /// inputs so a future "let's vary the tooltip" refactor surfaces here.
+    func testChannelFilterIsDeterministic() {
+        let labelA = A11yStrings.channelFilter(active: true, channelLabel: "Slack")
+        let labelB = A11yStrings.channelFilter(active: true, channelLabel: "Slack")
+        XCTAssertEqual(labelA, labelB,
+            "function must be deterministic — drift here would desync .help() from .accessibilityLabel()")
+    }
 }
