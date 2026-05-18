@@ -1,4 +1,7 @@
 import SwiftUI
+import ReplyAICore       // everything except MLXDraftService
+import ReplyAIMLX        // MLXDraftService only — needed because the executable
+                         // instantiates it when pref.model.useMLX = true.
 
 /// Branches between WelcomeGate (first-run) and AppPrototypeView (returning
 /// user). Reads `PreferenceKey.onboardingCompleted` via @AppStorage so the

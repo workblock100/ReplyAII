@@ -1,4 +1,5 @@
 import Foundation
+import ReplyAICore       // LLMService protocol, DraftChunk, PromptBuilder, Tone, etc.
 import MLXLLM
 import MLXLMCommon
 import MLXHuggingFace    // provides #huggingFaceLoadModelContainer macro
