@@ -7,8 +7,11 @@ import Foundation
 /// indicator, surfaces `loadProgress` while MLX weights download/load,
 /// and treats `done` as the cue to enable the Send button. Stream-first
 /// so the UI doesn't block waiting for the full draft.
-struct DraftChunk: Sendable {
-    enum Kind: Sendable {
+///
+/// `public` so `ReplyAIMLX.MLXDraftService` can yield instances across
+/// the module boundary (REP-500 SPM split).
+public struct DraftChunk: Sendable {
+    public enum Kind: Sendable {
         case text(String)
         case confidence(Double)
         /// Long-running model load — the service is downloading or loading
@@ -18,11 +21,13 @@ struct DraftChunk: Sendable {
         case loadProgress(fraction: Double, message: String)
         case done
     }
-    let kind: Kind
+    public let kind: Kind
+    public init(kind: Kind) { self.kind = kind }
 }
 
 /// Drop-in swap target for MLX later. Stream-first so the UI renders as tokens arrive.
-protocol LLMService: Sendable {
+/// `public` so `ReplyAIMLX.MLXDraftService` can conform to it (REP-500).
+public protocol LLMService: Sendable {
     func draft(
         thread: MessageThread,
         tone: Tone,
@@ -46,11 +51,11 @@ protocol LLMService: Sendable {
 /// `MLXDraftService()` when `useMLX` is true. If the override is never
 /// installed (e.g. a test that constructs `InboxScreen` without running
 /// the @main entry point), the user gets stub drafts — safe and fast.
-enum LLMServiceProvider {
+public enum LLMServiceProvider {
     /// Closure that constructs the right concrete LLMService for a
     /// `useMLX` preference value. Default returns `StubLLMService()`;
     /// `ReplyAIApp.init` swaps in the MLX-aware closure at launch.
-    nonisolated(unsafe) static var make: @Sendable (Bool) -> LLMService = { _ in
+    nonisolated(unsafe) public static var make: @Sendable (Bool) -> LLMService = { _ in
         StubLLMService()
     }
 }
