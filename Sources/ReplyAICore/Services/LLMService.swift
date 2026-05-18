@@ -30,6 +30,31 @@ protocol LLMService: Sendable {
     ) -> AsyncThrowingStream<DraftChunk, Error>
 }
 
+/// Factory boundary between `ReplyAICore` (which knows the protocol) and
+/// `ReplyAIMLX` (which provides the heavy concrete impl). `InboxScreen`
+/// calls `LLMServiceProvider.make(useMLX:)` instead of constructing
+/// `MLXDraftService()` directly — that direct construction would force
+/// `ReplyAICore` to import `ReplyAIMLX`, which would force every
+/// dependent (including the test target) to pull in MLX's 45–90 min
+/// cold C++ compile. With this indirection, `ReplyAICore` and
+/// `ReplyAITests` build in seconds; only the `ReplyAI` executable
+/// target pays the cold-MLX-build cost, and at @main launch it
+/// installs the MLX-aware factory by overriding `.make`.
+///
+/// Default behavior: returns `StubLLMService()` regardless of `useMLX`.
+/// `ReplyAIApp.init` overrides this to a closure that returns
+/// `MLXDraftService()` when `useMLX` is true. If the override is never
+/// installed (e.g. a test that constructs `InboxScreen` without running
+/// the @main entry point), the user gets stub drafts — safe and fast.
+enum LLMServiceProvider {
+    /// Closure that constructs the right concrete LLMService for a
+    /// `useMLX` preference value. Default returns `StubLLMService()`;
+    /// `ReplyAIApp.init` swaps in the MLX-aware closure at launch.
+    nonisolated(unsafe) static var make: @Sendable (Bool) -> LLMService = { _ in
+        StubLLMService()
+    }
+}
+
 // MARK: - Stub implementation
 
 /// Hard-coded drafts from Fixtures, emitted as a token stream with realistic pacing.

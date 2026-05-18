@@ -40,10 +40,10 @@ cp "$EXE" "$APP/Contents/MacOS/ReplyAI"
   -e 's/\$(EXECUTABLE_NAME)/ReplyAI/g' \
   -e 's/\$(PRODUCT_BUNDLE_IDENTIFIER)/co.replyai.mac/g' \
   -e 's/\$(PRODUCT_NAME)/ReplyAI/g' \
-  "$REPO/Sources/ReplyAI/Resources/Info.plist" > "$APP/Contents/Info.plist"
+  "$REPO/Sources/ReplyAICore/Resources/Info.plist" > "$APP/Contents/Info.plist"
 
 # Fonts — auto-registered by macOS via ATSApplicationFontsPath.
-for ttf in "$REPO/Sources/ReplyAI/Resources/Fonts"/*.ttf; do
+for ttf in "$REPO/Sources/ReplyAICore/Resources/Fonts"/*.ttf; do
     [ -e "$ttf" ] || continue
     cp "$ttf" "$APP/Contents/Resources/Fonts/"
 done
@@ -52,13 +52,15 @@ done
 # resolves as Contents/Resources/AppIcon.icns. SwiftPM compiles
 # Assets.xcassets to Assets.car but Finder also reads the .icns directly,
 # which is friendlier for ad-hoc-signed dev bundles.
-ICNS_SRC="$REPO/Sources/ReplyAI/Resources/AppIcon.icns"
+ICNS_SRC="$REPO/Sources/ReplyAICore/Resources/AppIcon.icns"
 if [ -e "$ICNS_SRC" ]; then
     cp "$ICNS_SRC" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 # SPM resource bundle (carries anything .process() picked up, e.g. Assets.xcassets).
-BUNDLE_SRC="$REPO/.build/$CONFIG/ReplyAI_ReplyAI.bundle"
+# After REP-500 the resource-owning target is ReplyAICore (not ReplyAI), so
+# SwiftPM writes the bundle as ReplyAI_ReplyAICore.bundle.
+BUNDLE_SRC="$REPO/.build/$CONFIG/ReplyAI_ReplyAICore.bundle"
 if [ -d "$BUNDLE_SRC" ]; then
     cp -R "$BUNDLE_SRC" "$APP/Contents/Resources/"
 fi
@@ -68,7 +70,7 @@ fi
 # The entitlements file must be applied at signing time, otherwise the
 # sandbox-disabled bit isn't honored and FDA can't attach to this bundle.
 echo "==> codesign (ad-hoc, entitlements)"
-ENT="$REPO/Sources/ReplyAI/Resources/ReplyAI.entitlements"
+ENT="$REPO/Sources/ReplyAICore/Resources/ReplyAI.entitlements"
 codesign --force --sign "ReplyAI Dev" --timestamp=none --entitlements "$ENT" "$APP/Contents/MacOS/ReplyAI" >/dev/null
 codesign --force --sign "ReplyAI Dev" --timestamp=none --entitlements "$ENT" "$APP" >/dev/null
 

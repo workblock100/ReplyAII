@@ -50,6 +50,22 @@ struct ReplyAIApp: App {
     private let globalHotkey = GlobalHotkey()
 
     init() {
+        // REP-500: install the MLX-aware LLMService factory FIRST, before any
+        // window scene constructs an InboxScreen. Without this, InboxScreen
+        // would call the default LLMServiceProvider.make (which returns
+        // StubLLMService) and the user's `useMLX=true` preference would be
+        // silently ignored.
+        //
+        // Important: we still consult `pref.model.useMLX` at construction
+        // time inside the closure (not here). That defers the actual
+        // MLXDraftService() call — and the eager dylib loading it triggers —
+        // until the first InboxScreen actually mounts. If MLX dylib loading
+        // races with NSApp startup again (REP-ALERT-260504-1650), the structural
+        // protection is that no MLXDraftService construction happens until
+        // the first window scene needs one.
+        LLMServiceProvider.make = { useMLX in
+            useMLX ? MLXDraftService() : StubLLMService()
+        }
         UserDefaults.registerReplyAIDefaults()
         let count = UserDefaults.standard.integer(forKey: PreferenceKey.launchCount)
         UserDefaults.standard.set(count + 1, forKey: PreferenceKey.launchCount)

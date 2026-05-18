@@ -17,7 +17,11 @@ struct InboxScreen: View {
     @State private var model = InboxViewModel()
     @State private var engine: DraftEngine = {
         let useMLXNow = UserDefaults.standard.bool(forKey: PreferenceKey.useMLX)
-        let service: LLMService = useMLXNow ? MLXDraftService() : StubLLMService()
+        // REP-500: indirection via LLMServiceProvider so ReplyAICore doesn't
+        // import ReplyAIMLX. ReplyAIApp.init installs the MLX-aware factory
+        // before any window scene constructs an InboxScreen; absent that
+        // override (e.g. unit-test construction), the user gets stub drafts.
+        let service = LLMServiceProvider.make(useMLXNow)
         return DraftEngine(service: service)
     }()
     @State private var paletteOpen = false
