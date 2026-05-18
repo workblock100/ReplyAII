@@ -97,6 +97,7 @@ struct SidebarView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Color.fgMute)
+                .accessibilityHidden(true)
             TextField("Search anyone, anything", text: $model.searchQuery)
                 .textFieldStyle(.plain)
                 .font(Theme.Font.sans(12))

@@ -18,6 +18,7 @@ struct FDABanner: View {
                     RoundedRectangle(cornerRadius: Theme.Radius.r8, style: .continuous)
                         .fill(Theme.Color.warn.opacity(0.12))
                 )
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("ReplyAI needs Full Disk Access to read iMessage")
