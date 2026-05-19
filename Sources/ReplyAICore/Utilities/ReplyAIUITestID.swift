@@ -11,6 +11,7 @@ public enum ReplyAIUITestID {
 
     public enum Onboarding {
         public static let getStartedButton = "replyai.onboarding.get-started"
+        public static let welcomeGateGetStartedButton = "replyai.onboarding.welcome-gate.get-started"
         public static let continueButton = "replyai.onboarding.permissions.continue"
         public static let skipButton = "replyai.onboarding.permissions.skip"
 

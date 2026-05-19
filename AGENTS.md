@@ -40,10 +40,11 @@ SwiftPM builds without Xcode. Xcode is installed at `/Applications/Xcode.app` an
 cd ~/Code/ReplyAI
 ./scripts/build.sh debug open   # compile, bundle, codesign, launch
 ./scripts/build.sh release      # release build, doesn't launch
-./scripts/smoke-ui.swift        # AX smoke-click: launch built app, press
-                                # replyai.app.prototype.open-inbox, assert
-                                # the Inbox window appears (requires
-                                # Accessibility permission for this shell)
+./scripts/smoke-ui.swift        # AX smoke-click: force first-run onboarding,
+                                # verify permission controls, press Get
+                                # started, press replyai.app.prototype.open-
+                                # inbox, then assert Inbox + composer render
+                                # (requires Accessibility for this shell)
 swift test                      # run the XCTest suite — but see the gotcha below;
                                 # in headless / autopilot fires you almost always
                                 # want the three-skip form instead:
@@ -69,10 +70,12 @@ The bundler script (`scripts/build.sh`) substitutes `$(VAR)` placeholders in `In
 - Menu-bar `R` icon (`MenuBarExtra`) with waiting-threads popover.
 - Crash logs: `~/Library/Logs/DiagnosticReports/ReplyAI-*.ips`.
 - UI smoke-click check: after `./scripts/build.sh debug`, run
-  `./scripts/smoke-ui.swift`. It sets `pref.app.onboardingCompleted=true`
-  and `pref.model.useMLX=false`, launches `build/ReplyAI.app`, finds
-  `replyai.app.prototype.open-inbox` via Accessibility, presses it, and
-  fails unless the "Inbox" window appears.
+  `./scripts/smoke-ui.swift`. It sets `pref.app.onboardingCompleted=false`
+  and `pref.model.useMLX=false`, launches `build/ReplyAI.app`, verifies
+  the onboarding permission controls, presses the WelcomeGate get-started
+  button, finds `replyai.app.prototype.open-inbox` via Accessibility,
+  presses it, selects a thread row, and fails unless the "Inbox" window,
+  composer editor, and warm tone pill appear.
 
 ## Repo layout
 

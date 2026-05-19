@@ -11,6 +11,9 @@ final class ReplyAIUITestIDTests: XCTestCase {
 
     func testOnboardingIdentifiersAreStable() {
         XCTAssertEqual(ReplyAIUITestID.Onboarding.getStartedButton, "replyai.onboarding.get-started")
+        XCTAssertEqual(
+            ReplyAIUITestID.Onboarding.welcomeGateGetStartedButton,
+            "replyai.onboarding.welcome-gate.get-started")
         XCTAssertEqual(ReplyAIUITestID.Onboarding.continueButton, "replyai.onboarding.permissions.continue")
         XCTAssertEqual(ReplyAIUITestID.Onboarding.skipButton, "replyai.onboarding.permissions.skip")
         XCTAssertEqual(
@@ -35,6 +38,7 @@ final class ReplyAIUITestIDTests: XCTestCase {
         let identifiers = [
             ReplyAIUITestID.App.openInboxButton,
             ReplyAIUITestID.Onboarding.getStartedButton,
+            ReplyAIUITestID.Onboarding.welcomeGateGetStartedButton,
             ReplyAIUITestID.Onboarding.continueButton,
             ReplyAIUITestID.Onboarding.skipButton,
             ReplyAIUITestID.Onboarding.permissionButton("accessibility"),

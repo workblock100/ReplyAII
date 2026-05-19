@@ -83,6 +83,7 @@ public struct WelcomeGate: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.return, modifiers: [])
+            .accessibilityIdentifier(ReplyAIUITestID.Onboarding.welcomeGateGetStartedButton)
         }
     }
 }

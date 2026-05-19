@@ -8,6 +8,13 @@ import Foundation
 private let bundleID = "co.replyai.mac"
 private let onboardingCompletedKey = "pref.app.onboardingCompleted"
 private let useMLXKey = "pref.model.useMLX"
+private let welcomeGateGetStartedID = "replyai.onboarding.welcome-gate.get-started"
+private let permissionButtonIDs = [
+    "replyai.onboarding.permissions.button.full-disk-access",
+    "replyai.onboarding.permissions.button.contacts",
+    "replyai.onboarding.permissions.button.notifications",
+    "replyai.onboarding.permissions.button.accessibility",
+]
 private let openInboxID = "replyai.app.prototype.open-inbox"
 private let threadRowPrefix = "replyai.inbox.thread-row."
 private let composerEditorID = "replyai.inbox.composer.editor"
@@ -36,12 +43,9 @@ private func fail(_ message: String) -> Never {
     exit(1)
 }
 
-private func setLaunchDefaults() {
-    guard run(["/usr/bin/defaults", "write", bundleID, onboardingCompletedKey, "-bool", "true"]) == 0 else {
-        fail("could not set onboarding completed default")
-    }
-    guard run(["/usr/bin/defaults", "write", bundleID, useMLXKey, "-bool", "false"]) == 0 else {
-        fail("could not disable MLX default")
+private func setBoolDefault(_ key: String, _ value: Bool) {
+    guard run(["/usr/bin/defaults", "write", bundleID, key, "-bool", value ? "true" : "false"]) == 0 else {
+        fail("could not set \(key)=\(value)")
     }
 }
 
@@ -244,6 +248,13 @@ private func clickElementCenter(_ element: AXUIElement) -> Bool {
     return true
 }
 
+private func pressReturnKey() {
+    let returnKeyCode = CGKeyCode(36)
+    CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: true)?.post(tap: .cghidEventTap)
+    CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: false)?.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.25)
+}
+
 private func collectReplyAIIdentifiers(in element: AXUIElement, depth: Int = 0, visited: inout Int, into output: inout [String]) {
     visited += 1
     guard visited <= 5_000, depth <= 24 else { return }
@@ -278,10 +289,31 @@ guard AXIsProcessTrusted() else {
     fail("Accessibility permission is not granted to this shell")
 }
 
-setLaunchDefaults()
+setBoolDefault(onboardingCompletedKey, false)
+setBoolDefault(useMLXKey, false)
 terminateExistingApp()
 let app = launchApp()
 let appElement = AXUIElementCreateApplication(app.processIdentifier)
+
+for permissionButtonID in permissionButtonIDs {
+    guard waitForElement(identifier: permissionButtonID, appElement: appElement, timeout: 10) != nil else {
+        printExposedIdentifiers(root: appElement)
+        fail("permission button identifier did not appear: \(permissionButtonID)")
+    }
+}
+
+guard let getStarted = waitForElement(identifier: welcomeGateGetStartedID, appElement: appElement, timeout: 10) else {
+    printExposedIdentifiers(root: appElement)
+    fail("welcome-gate get-started identifier did not appear")
+}
+
+let startPressError = pressElementOrButtonAncestor(getStarted)
+if startPressError != .success {
+    // SwiftUI exposes this control's identifier but not always an AXPress
+    // action. The button has Return as its keyboard shortcut, so use that
+    // as the fallback and let the next wait prove the transition happened.
+    pressReturnKey()
+}
 
 guard let openInbox = waitForElement(identifier: openInboxID, appElement: appElement, timeout: 10) else {
     printExposedIdentifiers(root: appElement)
@@ -321,4 +353,4 @@ guard waitForElement(identifier: warmToneID, appElement: inboxWindow, timeout: 8
 }
 
 let titles = windowTitles(appElement: appElement).joined(separator: ", ")
-print("smoke-ui: PASS - open-inbox click, thread selection, composer, and warm tone verified [\(titles)]")
+print("smoke-ui: PASS - onboarding, open-inbox click, thread selection, composer, and warm tone verified [\(titles)]")
