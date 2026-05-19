@@ -89,79 +89,100 @@ The bundler script (`scripts/build.sh`) substitutes `$(VAR)` placeholders in `In
 
 ## Repo layout
 
-```
-Sources/ReplyAI/
-├── App/ReplyAIApp.swift           @main + Scene graph (WindowGroup × 2 + MenuBarExtra)
-├── Theme/Theme.swift              Color / Font / Radius / Space / Motion tokens
-├── Models/                        Channel, MessageThread, Message, Folder, Tone
-├── Fixtures/Fixtures.swift        Seed threads/drafts from reply-app.jsx
-├── Components/                    Avatar, Card, Caret, ChannelDot, InboxFrame,
-│                                  KbdChip, KbdKey, MiniButton, PillToggle,
-│                                  PrimaryButton + GhostButton, SectionLabel
-├── Channels/                      22 files post-pivot — every messaging surface lives here
-│   ├── ChannelService.swift       Protocol + ChannelError + ChannelServiceDefaults
-│   ├── IMessageChannel.swift      chat.db reader (SQLite3 direct), contacts injection
-│   ├── IMessagePreview.swift      Sidebar preview formatter (single-URL collapse, attachment fallback)
-│   ├── IMessageSender.swift       NSAppleScript → Messages.app (`tell application "Messages"`)
-│   ├── ContactsResolver.swift     CNContactStore, NSLock-guarded cache, @unchecked Sendable
-│   ├── AttributedBodyDecoder.swift Best-effort typedstream scanner for rich messages
-│   ├── ChatDBWatcher.swift        DispatchSource.makeFileSystemObjectSource + 600ms debounce
-│   ├── AppleScriptMessageReader.swift  Pivot fallback when chat.db / FDA is denied
-│   ├── AccessibilityAPIReader.swift    Pivot alt source: AX tree of Messages.app sidebar
-│   ├── MessagesAppActivationObserver.swift  NSWorkspace activation watcher → re-sync trigger
-│   ├── UNNotificationContentParser.swift     Map UN userInfo to senderHandle / chatGUID
-│   ├── ShortcutsExportHandler.swift  replyai://import-messages URL scheme parser
-│   ├── KeychainHelper.swift       Generic SecItem* wrapper + SlackTokenStore + 5 toast copy constants
-│   ├── LocalhostOAuthListener.swift  NWListener-backed loopback HTTP for OAuth callbacks (port 4242)
-│   ├── SlackChannel.swift         ChannelService impl — conversations.list/history + chat.postMessage
-│   ├── SlackHTTPClient.swift      URLSession wrapper for Slack web-API endpoints
-│   ├── SlackOAuthFlow.swift       OAuth2 orchestrator: authorize URL + token exchange via oauth.v2.access
-│   ├── SlackSocketClient.swift    WebSocket Socket Mode receiver
-│   └── {SMS,WhatsApp,Teams,Telegram}Channel.swift  Stub channels — throw authorizationDenied until backend lands
-├── Rules/
-│   ├── SmartRule.swift            Predicate + Action DSL, hand-written Codable w/ "kind" discriminator
-│   ├── RuleEvaluator.swift        Pure-func evaluator + defaultTone extraction
-│   └── RulesStore.swift           @Observable @MainActor, atomic JSON writes
-├── Services/
-│   ├── LLMService.swift           Protocol returning AsyncThrowingStream<DraftChunk> + StubLLMService impl
-│   ├── MLXDraftService.swift      mlx-swift-lm 3.x via #huggingFaceLoadModelContainer macro
-│   ├── DraftEngine.swift          Per-(threadID, tone) cache + prime/regenerate/dismiss
-│   ├── DraftStore.swift           On-disk persistence for in-progress draft edits
-│   ├── PromptBuilder.swift        LLM prompt formatting; speakerSelf = "me" cross-module label
-│   ├── Stats.swift                Lifetime counters + weekly markdown rollup, debounced writes
-│   ├── NotificationCoordinator.swift  UN delegate, inline-reply category, willPresent capture
-│   ├── GlobalHotkey.swift         Carbon RegisterEventHotKey (no Accessibility) + ReplyAIWindowSummoner
-│   └── Preferences.swift          @AppStorage keys + defaults + wipe
-├── Inbox/
-│   ├── InboxScreen.swift          Root of the real inbox window
-│   ├── InboxViewModel.swift       @Observable @MainActor: threads, sync, edits, send, rules-ish
-│   ├── FDABanner.swift            Full Disk Access deep-link banner
-│   ├── ModelLoadBanner.swift      MLX model-download progress banner above the thread list
-│   ├── SendConfirmSheet.swift     Two-button sheet before AppleScript send
-│   ├── Sidebar/SidebarView.swift  + sync chip footer (TimelineView auto-tick)
-│   ├── ThreadList/ThreadListView.swift + ThreadRow.swift
-│   ├── Thread/                    ThreadDetailView, MessageBubble, ContextCard
-│   └── Composer/                  ComposerView (editable TextEditor), TonePills
-├── MenuBar/MenuBarContent.swift   Real popover (counterpart to sfc-menubar mock)
-├── Screens/                       All 34 gallery screens + router
-│   ├── ScreenID.swift             + ScreenInventory + ScreenMeta
-│   ├── ScreenRouter.swift         switch (ScreenID) -> View
-│   ├── AppPrototypeView.swift     Gallery shell (sidebar + top bar + content + footer)
-│   ├── Onboarding/ (9 + WelcomeGate + OnboardingStage)  9 Ob*View + WelcomeGate (first-run gate) + shared stage type
-│   ├── MainApp/ (3)               Inbox variants (empty/loading/offline) over InboxFrame
-│   ├── Threads/ (3)               thr-group, thr-media (typed-stream image/voice), thr-long
-│   ├── Composer/ (3)              cmp-custom, cmp-lowconf, cmp-nothing
-│   ├── Surfaces/ (5)              Palette (extracted into reusable PalettePopover), Snooze,
-│   │                              Rules (wired to RulesStore), Menubar, Notification
-│   ├── Settings/ (6 + shell)      SetModelView has the MLX toggle + progress reporter
-│   └── Errors/ (3)
-└── Resources/
-    ├── Info.plist                 with $(VAR) placeholders substituted by scripts/build.sh
-    ├── ReplyAI.entitlements       SANDBOX IS OFF (FDA requires this)
-    ├── Assets.xcassets/
-    └── Fonts/                     Inter Tight, Instrument Serif, JetBrains Mono
+Post-REP-500 the SPM package splits into 3 source targets + 2 test targets:
 
-Tests/ReplyAITests/                ~1964 tests as of 2026-05-18-1628 (1927 pass under the autopilot's three-skip workaround — `--skip ContactsResolverTests --skip InboxViewModelIsSyncingTests --skip InboxViewModelTests` — in ~15.2s warm; the other ~37 live in those three skipped suites, see the "`swift test` full-suite hangs intermittently on Contacts XPC" gotcha below). Plus 2 always-skipped in headless: `GlobalHotkeyContractTests` AppKit-touching cases gated behind `RUN_APPKIT_TOUCHING_TESTS=1`; opt-in to exercise locally.
+- **ReplyAICore** (`Sources/ReplyAICore/`) — library, the bulk of the app, no MLX
+- **ReplyAIMLX** (`Sources/ReplyAIMLX/`) — library, just `MLXDraftService.swift` + MLX deps
+- **ReplyAI** (`Sources/ReplyAIApp/`) — executable, just `ReplyAIApp.swift` @main entry
+- **ReplyAITests** (`Tests/ReplyAITests/`) — depends on ReplyAICore ONLY (never ReplyAIMLX)
+- **ReplyAIMLXTests** (`Tests/ReplyAIMLXTests/`) — depends on ReplyAIMLX + ReplyAICore, for MLX-touching contract tests
+
+The load-bearing invariant: `swift test` from the warm cache never compiles MLX C++ deps (which take 45–90 min cold). MLXDraftService-touching tests must live in `ReplyAIMLXTests`, not `ReplyAITests`.
+
+```
+Sources/
+├── ReplyAIApp/
+│   └── ReplyAIApp.swift           @main + Scene graph (WindowGroup × 2 + MenuBarExtra)
+├── ReplyAIMLX/
+│   └── MLXDraftService.swift      mlx-swift-lm 3.x via #huggingFaceLoadModelContainer macro
+└── ReplyAICore/
+    ├── BrandStrings.swift         Brand glyph "R" + wordmark "ReplyAI" — single edit propagates everywhere
+    ├── Theme/Theme.swift          Color / Font / Radius / Space / Motion tokens
+    ├── Models/                    Channel, MessageThread, Message, Folder, Tone
+    ├── Fixtures/Fixtures.swift    Seed threads/drafts (gallery + demo-mode)
+    ├── Components/                Avatar, Card, Caret, ChannelDot, InboxFrame, KbdChip,
+    │                              KbdKey, MiniButton, PillToggle, PrimaryButton + GhostButton,
+    │                              SectionLabel
+    ├── Channels/                  22+ files — every messaging surface lives here
+    │   ├── ChannelService.swift   Protocol + ChannelError + ChannelServiceDefaults
+    │   ├── IMessageChannel.swift  chat.db reader (SQLite3 direct), contacts injection
+    │   ├── IMessagePreview.swift  Sidebar preview formatter
+    │   ├── IMessageSender.swift   NSAppleScript → Messages.app
+    │   ├── ContactsResolver.swift CNContactStore, NSLock-guarded cache, @unchecked Sendable
+    │   ├── AttributedBodyDecoder.swift  Typedstream scanner for rich messages
+    │   ├── ChatDBWatcher.swift    DispatchSource.makeFileSystemObjectSource + 600ms debounce
+    │   ├── AppleScriptMessageReader.swift  Pivot fallback when chat.db/FDA denied
+    │   ├── AccessibilityAPIReader.swift    Pivot alt source: AX tree of Messages sidebar
+    │   ├── MessagesAppActivationObserver.swift  NSWorkspace activation → re-sync
+    │   ├── UNNotificationContentParser.swift  UN userInfo → senderHandle / chatGUID
+    │   ├── ShortcutsExportHandler.swift  `replyai://import-messages` URL scheme parser
+    │   ├── KeychainHelper.swift   Generic SecItem* wrapper + SlackTokenStore + toast copy
+    │   ├── LocalhostOAuthListener.swift  NWListener loopback HTTP for OAuth (port 4242)
+    │   ├── SlackChannel.swift     conversations.list/history + chat.postMessage
+    │   ├── SlackHTTPClient.swift  URLSession wrapper for Slack web-API endpoints
+    │   ├── SlackOAuthFlow.swift   OAuth2 orchestrator: authorize URL + oauth.v2.access exchange
+    │   ├── SlackSocketClient.swift  WebSocket Socket Mode receiver
+    │   └── {SMS,WhatsApp,Teams,Telegram}Channel.swift  Stub channels — throw until backend lands
+    ├── Rules/                     SmartRule + RuleEvaluator + RulesStore (@Observable, atomic JSON)
+    ├── Search/SearchIndex.swift   FTS5-backed search
+    ├── Services/
+    │   ├── LLMService.swift       Protocol → AsyncThrowingStream<DraftChunk> + StubLLMService
+    │   ├── DraftEngine.swift      Per-(threadID, tone) cache + prime/regenerate/dismiss
+    │   ├── DraftStore.swift       On-disk persistence for in-progress draft edits
+    │   ├── PromptBuilder.swift    LLM prompt formatting; speakerSelf = "me"
+    │   ├── Stats.swift            Lifetime counters + weekly markdown rollup
+    │   ├── NotificationCoordinator.swift  UN delegate, inline-reply category
+    │   ├── GlobalHotkey.swift     Carbon RegisterEventHotKey + ReplyAIWindowSummoner
+    │   └── Preferences.swift      @AppStorage keys + defaults + wipe
+    ├── Inbox/
+    │   ├── InboxScreen.swift      Root of the real inbox window
+    │   ├── InboxViewModel.swift   @Observable @MainActor: threads, sync, edits, send, rules
+    │   ├── FDABanner.swift        Full Disk Access deep-link banner (with pinned copy)
+    │   ├── ModelLoadBanner.swift  MLX model-download progress banner
+    │   ├── SendConfirmSheet.swift Two-button sheet before AppleScript send
+    │   ├── Sidebar/SidebarView.swift  + sync chip + relative-time tokens (hoisted)
+    │   ├── ThreadList/            ThreadListView + ThreadRow
+    │   ├── Thread/                ThreadDetailView + MessageBubble + ContextCard
+    │   └── Composer/              ComposerView + TonePills
+    ├── MenuBar/MenuBarContent.swift  Real popover (with pinned copy)
+    ├── Utilities/ReplyAIUITestID.swift  Accessibility identifiers for the AX smoke harness
+    ├── Screens/                   All 34 gallery screens + router
+    │   ├── ScreenID.swift         + ScreenInventory + ScreenMeta
+    │   ├── ScreenRouter.swift     switch (ScreenID) -> View
+    │   ├── AppPrototypeView.swift Gallery shell
+    │   ├── Onboarding/ (9 + WelcomeGate + OnboardingStage + ObDoneView with pinned copy)
+    │   ├── MainApp/ (3)           Inbox variants over InboxFrame
+    │   ├── Threads/ (3)           thr-group, thr-media, thr-long
+    │   ├── Composer/ (3)          cmp-custom, cmp-lowconf, cmp-nothing
+    │   ├── Surfaces/ (5)          Palette, Snooze, Rules, Menubar, Notification
+    │   ├── Settings/ (6 + shell)  SetModelView has the MLX toggle
+    │   └── Errors/ (3)
+    └── Resources/
+        ├── Info.plist             with $(VAR) placeholders substituted by scripts/build.sh
+        ├── ReplyAI.entitlements   SANDBOX IS OFF (FDA requires this)
+        ├── Assets.xcassets/       AppIcon (10 PNGs) + AccentColor
+        ├── AppIcon.icns           Multi-resolution; regenerable via scripts/rebuild-icon.sh
+        └── Fonts/                 Inter Tight, Instrument Serif, JetBrains Mono
+
+Tests/ReplyAITests/                2027 tests as of 2026-05-19 (2 skipped in headless — the
+                                   `GlobalHotkeyContractTests` AppKit-touching cases gated
+                                   behind `RUN_APPKIT_TOUCHING_TESTS=1`). Three test classes
+                                   (`ContactsResolverTests`, `InboxViewModelIsSyncingTests`,
+                                   `InboxViewModelTests`) skip via the 3-flag form documented
+                                   in CONTRIBUTING.md and the autopilot SKILL.md; `verify.sh`
+                                   wraps the exact invocation.
+Tests/ReplyAIMLXTests/             MLXDraftService contract tests; only run when you intend
+                                   to compile MLX (40+ min cold).
 ```
 
 ## Architecture patterns
