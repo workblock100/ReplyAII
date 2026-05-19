@@ -3,6 +3,43 @@ import Network
 @testable import ReplyAICore
 
 final class LocalhostOAuthListenerTests: XCTestCase {
+    private func sendRequest(
+        _ request: String,
+        to port: UInt16,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async -> NWConnection {
+        let conn = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        let readyExp = expectation(description: "client connection ready")
+        let sentExp = expectation(description: "client request sent")
+        readyExp.assertForOverFulfill = false
+        sentExp.assertForOverFulfill = false
+
+        conn.stateUpdateHandler = { state in
+            if case .ready = state {
+                readyExp.fulfill()
+            }
+            if case .failed(let error) = state {
+                XCTFail("NWConnection failed before request send: \(error)", file: file, line: line)
+                readyExp.fulfill()
+            }
+        }
+        conn.start(queue: .global())
+        await fulfillment(of: [readyExp], timeout: 3)
+
+        conn.send(content: Data(request.utf8), completion: .contentProcessed { error in
+            if let error {
+                XCTFail("NWConnection failed to send request: \(error)", file: file, line: line)
+            }
+            sentExp.fulfill()
+        })
+        await fulfillment(of: [sentExp], timeout: 3)
+        return conn
+    }
 
     // MARK: - testValidCallbackURLExtractsCode
 
@@ -27,15 +64,8 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             return
         }
 
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
-
         let request = "GET /?code=abc123 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [exp], timeout: 5)
         conn.cancel()
@@ -89,14 +119,8 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             return
         }
 
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
         let request = "GET /?code=trigger HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [firstExp], timeout: 5)
         conn.cancel()
@@ -137,14 +161,8 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         }
 
         // Send a GET with no `code` query parameter — should be silently dropped.
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
         let request = "GET /?state=xyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [exp], timeout: 5)
         conn.cancel()
@@ -187,14 +205,8 @@ final class LocalhostOAuthListenerTests: XCTestCase {
         }
 
         // GET /?code= (the parameter is present but the value is empty).
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
         let request = "GET /?code= HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [exp], timeout: 5)
         conn.cancel()
@@ -349,15 +361,9 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             XCTFail("actualPort not set after ready"); return
         }
 
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
         // First line is "GET\r\n…" — only one whitespace-delimited token.
         let request = "GET\r\nHost: localhost\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [exp], timeout: 5)
         conn.cancel()
@@ -394,14 +400,8 @@ final class LocalhostOAuthListenerTests: XCTestCase {
             XCTFail("actualPort not set after ready"); return
         }
 
-        let conn = NWConnection(
-            host: "127.0.0.1",
-            port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp
-        )
-        conn.start(queue: .global())
         let request = "GET /?code=first&code=second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(request.utf8), completion: .idempotent)
+        let conn = await sendRequest(request, to: port)
 
         await fulfillment(of: [exp], timeout: 5)
         conn.cancel()
