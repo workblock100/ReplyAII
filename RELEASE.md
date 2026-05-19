@@ -14,13 +14,17 @@ Next.js companion workspace at `~/Documents/replyai-app/DISTRIBUTION.md`.
 
 ## What ships TODAY without any account changes
 
-`./scripts/build.sh release` produces a fully-functional `build/ReplyAI.app` that runs locally and against an Apple Silicon Mac the user can hand-carry the bundle to. The bundle is ad-hoc signed (`codesign --sign -`), so:
+```bash
+./scripts/release.sh beta     # single-command: release build + DMG
+```
+
+Produces a fully-functional `build/ReplyAI.dmg` (13 MB UDZO) containing the ad-hoc-signed `ReplyAI.app` and a drag-install `/Applications` symlink. The bundle is signed with `"ReplyAI Dev"` (`codesign --sign`, no Developer ID), so:
 
 - Will run for the developer who built it: ✓
 - Will run for anyone else after they right-click → Open → confirm Gatekeeper: ✓ (one-time warning)
 - Will run via double-click on a stock machine: ✗ (Gatekeeper blocks; needs the right-click bypass)
 
-Distribution mechanism: tarball or DMG of the .app, shared via Dropbox/iCloud/GitHub Releases. Acceptable for closed beta. Not acceptable for the open public listing.
+Distribution mechanism: share the `.dmg` via Dropbox / iCloud / GitHub Releases. Acceptable for closed beta. Not acceptable for the open public listing.
 
 ## What unlocks the next tier (Apple Developer ID + notarization)
 
@@ -31,11 +35,18 @@ Distribution mechanism: tarball or DMG of the .app, shared via Dropbox/iCloud/Gi
 Once that's in place, the work is mechanical (no further user decisions):
 
 1. Generate Developer ID Application certificate in Keychain Access; export `.p12` for backup.
-2. Edit `scripts/build.sh` codesign identity from `"ReplyAI Dev"` to `"Developer ID Application: Elijah Osik (TEAMID)"`, then re-run `./scripts/build.sh release`.
-3. Run `./scripts/notarize.sh` — already shipped; validates the bundle is Developer-ID-signed, submits via `notarytool`, waits, staples the ticket, and runs a final `spctl` assessment.
-4. Run `./scripts/create-dmg.sh` — already shipped; wraps the notarized `build/ReplyAI.app` into `build/ReplyAI.dmg` (UDZO-compressed, with the conventional `/Applications` drag-install symlink).
+2. Edit `scripts/build.sh` codesign identity from `"ReplyAI Dev"` to `"Developer ID Application: Elijah Osik (TEAMID)"`.
+3. Run the single-command public-tier release:
 
-After steps 1–4, double-click-on-stock-machine works without any Gatekeeper friction.
+   ```bash
+   ./scripts/release.sh public   # build (Developer-ID) + notarize + DMG
+   ```
+
+   The orchestrator chains `build.sh release` → `notarize.sh` → `create-dmg.sh`. Each step is also available individually:
+   - `./scripts/notarize.sh` validates Developer-ID signing, submits via `notarytool`, waits, staples, and runs a final `spctl --assess`.
+   - `./scripts/create-dmg.sh` wraps the (now-notarized) `build/ReplyAI.app` into `build/ReplyAI.dmg`.
+
+After step 3, double-click-on-stock-machine works without any Gatekeeper friction.
 
 Credential setup for step 3 — one-time, per machine:
 
