@@ -31,7 +31,6 @@ public struct AppPrototypeView: View {
         .frame(minWidth: 1180, minHeight: 820)
         .background(Theme.Color.bg0)
         .preferredColorScheme(.dark)
-        .accessibilityIdentifier(ReplyAIUITestID.App.prototypeRoot)
         .background(keyboardCommands)
         .onReceive(NotificationCenter.default.publisher(for: .replyAIRequestSummonInbox)) { _ in
             // Global ⌘⇧R hotkey fired. ReplyAIWindowSummoner tries first to
@@ -148,7 +147,6 @@ public struct AppPrototypeView: View {
                     .shadow(color: .black.opacity(0.6), radius: 60, y: 40)
                     .scaleEffect(scale, anchor: .center)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-                    .accessibilityIdentifier(ReplyAIUITestID.App.screenContent)
             }
             .padding(40)
         }

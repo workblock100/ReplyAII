@@ -40,6 +40,10 @@ SwiftPM builds without Xcode. Xcode is installed at `/Applications/Xcode.app` an
 cd ~/Code/ReplyAI
 ./scripts/build.sh debug open   # compile, bundle, codesign, launch
 ./scripts/build.sh release      # release build, doesn't launch
+./scripts/smoke-ui.swift        # AX smoke-click: launch built app, press
+                                # replyai.app.prototype.open-inbox, assert
+                                # the Inbox window appears (requires
+                                # Accessibility permission for this shell)
 swift test                      # run the XCTest suite — but see the gotcha below;
                                 # in headless / autopilot fires you almost always
                                 # want the three-skip form instead:
@@ -64,6 +68,11 @@ The bundler script (`scripts/build.sh`) substitutes `$(VAR)` placeholders in `In
 - Two windows: the prototype gallery (default) and "inbox" (secondary, opened via menu-bar "Open inbox" or `⌘⇧O` from gallery).
 - Menu-bar `R` icon (`MenuBarExtra`) with waiting-threads popover.
 - Crash logs: `~/Library/Logs/DiagnosticReports/ReplyAI-*.ips`.
+- UI smoke-click check: after `./scripts/build.sh debug`, run
+  `./scripts/smoke-ui.swift`. It sets `pref.app.onboardingCompleted=true`
+  and `pref.model.useMLX=false`, launches `build/ReplyAI.app`, finds
+  `replyai.app.prototype.open-inbox` via Accessibility, presses it, and
+  fails unless the "Inbox" window appears.
 
 ## Repo layout
 
