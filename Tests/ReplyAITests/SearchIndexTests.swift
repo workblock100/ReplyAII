@@ -969,20 +969,13 @@ final class SearchIndexTests: XCTestCase {
             "limit: 1 must return exactly one row even when 10 are indexed")
     }
 
-    /// `limit: -1` is a SQLite-quirk semantic — `LIMIT -1` means "no
-    /// limit" (returns all rows), not "zero rows" or "error". The
-    /// `Int32(limit)` bind in SearchIndex.search passes `-1` straight
-    /// through, so the call returns all matches instead of capping.
-    /// Pin this surprising-but-deterministic behavior so a refactor
-    /// that introduces caller-side validation (e.g. `max(0, limit)`)
-    /// surfaces here rather than silently changing a "no limit"
-    /// callsite into a "zero rows" callsite. Real-world relevance: a
-    /// `Sentinel(-1)` style "unbounded" callsite is a classic API
-    /// pattern users borrow from other databases that don't share
-    /// SQLite's negative-limit convention.
-    func testSearchLimitNegativeOneReturnsAllRows() async {
+    /// `limit: -1` must NOT bind through to SQLite. SQLite treats
+    /// `LIMIT -1` as "no limit", which can flood the palette if a caller
+    /// accidentally passes a sentinel value. SearchIndex normalizes
+    /// negative values back to the shipped default cap.
+    func testSearchLimitNegativeOneFallsBackToDefaultCap() async {
         let index = SearchIndex(databaseURL: nil)
-        for i in 1...12 {
+        for i in 1...60 {
             let t = MessageThread(id: "neg-\(i)", channel: .imessage, name: "Neg\(i)",
                                   avatar: "N", preview: "", time: "", unread: 0)
             await index.upsert(thread: t, messages: [
@@ -990,8 +983,30 @@ final class SearchIndexTests: XCTestCase {
             ])
         }
         let results = await index.search("neglimittokenpin", limit: -1)
-        XCTAssertEqual(results.count, 12,
-            "limit: -1 binds as SQLite `LIMIT -1` → no limit; all 12 matching rows must come back. Future caller-side clamping should surface as a deliberate test edit.")
+        XCTAssertEqual(results.count, SearchIndex.defaultSearchLimit,
+            "negative limits must fall back to the default cap, not SQLite's unbounded LIMIT -1 behavior")
+    }
+
+    func testExplicitSearchLimitAboveDefaultIsCapped() async {
+        let index = SearchIndex(databaseURL: nil)
+        for i in 1...75 {
+            let t = MessageThread(id: "high-\(i)", channel: .imessage, name: "High\(i)",
+                                  avatar: "H", preview: "", time: "", unread: 0)
+            await index.upsert(thread: t, messages: [
+                Message(from: .them, text: "highlimittokenpin", time: "t")
+            ])
+        }
+        let results = await index.search("highlimittokenpin", limit: 10_000)
+        XCTAssertEqual(results.count, SearchIndex.defaultSearchLimit,
+            "explicitly huge limits must still respect the shipped palette cap")
+    }
+
+    func testBoundedSearchLimitNormalization() {
+        XCTAssertEqual(SearchIndex.boundedSearchLimit(from: -1), SearchIndex.defaultSearchLimit)
+        XCTAssertEqual(SearchIndex.boundedSearchLimit(from: 0), 0)
+        XCTAssertEqual(SearchIndex.boundedSearchLimit(from: 1), 1)
+        XCTAssertEqual(SearchIndex.boundedSearchLimit(from: SearchIndex.defaultSearchLimit + 1),
+                       SearchIndex.defaultSearchLimit)
     }
 
     // MARK: - REP-125: upsert replaces preview text (no ghost terms)

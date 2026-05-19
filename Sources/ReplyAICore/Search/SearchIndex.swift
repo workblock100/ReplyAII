@@ -303,6 +303,7 @@ actor SearchIndex {
 
         let fts = Self.ftsQuery(from: trimmed)
         guard !fts.isEmpty else { return [] }
+        let boundedLimit = Self.boundedSearchLimit(from: limit)
 
         let sql: String
         if channel != nil {
@@ -333,9 +334,9 @@ actor SearchIndex {
         sqlite3_bind_text(stmt, 1, fts, -1, Self.SQLITE_TRANSIENT)
         if let ch = channel {
             sqlite3_bind_text(stmt, 2, ch.rawValue, -1, Self.SQLITE_TRANSIENT)
-            sqlite3_bind_int(stmt, 3, Int32(limit))
+            sqlite3_bind_int(stmt, 3, Int32(boundedLimit))
         } else {
-            sqlite3_bind_int(stmt, 2, Int32(limit))
+            sqlite3_bind_int(stmt, 2, Int32(boundedLimit))
         }
 
         var results: [Result] = []
@@ -350,6 +351,17 @@ actor SearchIndex {
             ))
         }
         return results
+    }
+
+    /// Normalizes caller-supplied limits before binding into SQLite.
+    /// SQLite treats `LIMIT -1` as "no limit", which is too easy to hit
+    /// accidentally with sentinel values. Keep `0` as "return nothing",
+    /// preserve caller-requested smaller positive limits, and cap every
+    /// other value at the shipped palette maximum.
+    static func boundedSearchLimit(from limit: Int) -> Int {
+        if limit == 0 { return 0 }
+        if limit < 0 { return Self.defaultSearchLimit }
+        return min(limit, Self.defaultSearchLimit)
     }
 
     /// SQLite-defined sentinel filename that opens an in-memory

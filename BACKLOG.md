@@ -2682,6 +2682,7 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - ui_sensitive: false
 - status: done
 - claimed_by: worker-2026-04-22-195000
+- fix_2026-05-19-1602 (Codex): closed a missed edge in the original cap: caller-supplied `limit: -1` was still passed through to SQLite, where `LIMIT -1` means unbounded. `SearchIndex.boundedSearchLimit(from:)` now preserves `0`, preserves smaller positive limits, maps negative limits back to the 50-row default cap, and caps oversized explicit limits at 50. Focused gate: `swift test --filter SearchIndexTests` => 68 selected tests / 0 failures.
 
 ### REP-118 — DraftEngine: evict draft cache entry on thread archive
 - priority: P2
