@@ -908,7 +908,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P2
 - effort: M
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: 2afb5c0 (autopilot self-merged 2026-05-19 per feedback-replyai-autopilot-self-review; SetPrivacyView gains an Activity section above the toggles showing drafts generated/sent + acceptance %, messages indexed, and rules fired total; reads via a new narrow public Stats.countersForUI() snapshot. 6 new XCTest cases pinning the public-API contract; full test gate 1945/1945; build green; 3-layer smoke green PID 16238.)
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Screens/Settings/SetPrivacyView.swift` (or equivalent), `Sources/ReplyAI/Services/Stats.swift`
 - scope: The set-privacy screen (sfc-privacy gallery screen) is currently a stub. Wire `Stats.shared` counters into a real view: rules fired (total + by action), drafts generated vs sent, messages indexed. Rows styled to match the existing Settings screen design (plain list, `SectionLabel` headers, `KbdChip` for counts). UI-sensitive → worker pushes to `wip/`. Human reviews copy and layout before merge.
