@@ -31,13 +31,23 @@ Distribution mechanism: tarball or DMG of the .app, shared via Dropbox/iCloud/Gi
 Once that's in place, the work is mechanical (no further user decisions):
 
 1. Generate Developer ID Application certificate in Keychain Access; export `.p12` for backup.
-2. Rewrite `scripts/build.sh` codesign block to `--sign "Developer ID Application: Elijah Osik (TEAMID)"` instead of `--sign -`.
-3. Add a `scripts/notarize.sh` that:
-   - `xcrun notarytool submit build/ReplyAI.app.zip --apple-id <email> --team-id <id> --password <app-specific-pw> --wait`
-   - `xcrun stapler staple build/ReplyAI.app` after successful submission.
-4. Wrap into a DMG via `create-dmg` (Homebrew) or `hdiutil create`.
+2. Edit `scripts/build.sh` codesign identity from `"ReplyAI Dev"` to `"Developer ID Application: Elijah Osik (TEAMID)"`, then re-run `./scripts/build.sh release`.
+3. Run `./scripts/notarize.sh` — already shipped; validates the bundle is Developer-ID-signed, submits via `notarytool`, waits, staples the ticket, and runs a final `spctl` assessment.
+4. Run `./scripts/create-dmg.sh` — already shipped; wraps the notarized `build/ReplyAI.app` into `build/ReplyAI.dmg` (UDZO-compressed, with the conventional `/Applications` drag-install symlink).
 
 After steps 1–4, double-click-on-stock-machine works without any Gatekeeper friction.
+
+Credential setup for step 3 — one-time, per machine:
+
+```bash
+xcrun notarytool store-credentials "replyai" \
+    --apple-id "<your-apple-id-email>" \
+    --team-id "<10-char-Team-ID>" \
+    --password "<app-specific-password-from-appleid.apple.com>"
+# then call: ./scripts/notarize.sh --keychain-profile replyai
+```
+
+Alternatively, pass credentials per-run via `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD` env vars.
 
 ## What unlocks the App Store tier
 
