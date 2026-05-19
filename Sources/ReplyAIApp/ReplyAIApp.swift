@@ -69,18 +69,25 @@ struct ReplyAIApp: App {
         // protection is that no MLXDraftService construction happens until
         // the first window scene needs one.
         LLMServiceProvider.make = { useMLX in
-            // Explicit if/return form (instead of ternary) so each branch
-            // coerces through the closure's `any LLMService` contextual type
-            // independently — the ternary form makes the compiler search for
-            // a common concrete type of MLXDraftService and StubLLMService,
-            // which doesn't exist (they share only protocol conformance).
+            // Provider priority (first match wins):
+            //   1. Groq API key in Keychain → real Llama-3.3-70B drafts via
+            //      `GroqLLMService` (network-backed, ~0.5s/draft, free for
+            //      Elijah's volume). This is the default user path post-
+            //      2026-05-19 once Groq is wired and the key is installed —
+            //      sidesteps both REP-ALERT-260504-1650 (MLX foreground
+            //      launch exit) and the canned-fixture problem in one move.
+            //   2. `useMLX = true` → `LazyMLXDraftService` (deferred
+            //      construction; still affected by the rediscovered MLX
+            //      launch bug but works for background-launched smoke).
+            //   3. Fallback `StubLLMService` (canned Fixtures.drafts text;
+            //      kept for offline / unconfigured / test paths).
             //
-            // We hand out LazyMLXDraftService (not MLXDraftService directly)
-            // so the actual MLXDraftService() construction is deferred from
-            // InboxScreen's @State engine init (runs at view-tree mount
-            // during foreground launch) to first-draft-requested. This
-            // bypasses REP-ALERT-260504-1650's foreground-LaunchServices
-            // exit-on-launch — see LazyMLXDraftService for the diagnosis.
+            // Explicit if/return form (not ternary) per the original REP-500
+            // note: ternary makes the compiler search for a common concrete
+            // type across the three branches, which doesn't exist.
+            if let key = GroqTokenStore.load() {
+                return GroqLLMService(apiKey: key)
+            }
             if useMLX { return LazyMLXDraftService() }
             return StubLLMService()
         }
