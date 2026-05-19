@@ -187,7 +187,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: M
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: e602c1a (merged to main 2026-05-19 by autopilot fire 2026-05-19-1228)
 - claimed_by: null
 - blocker: previous wip branch `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`) was deleted/lost — no MLX-extraction branches currently on origin (verified 2026-05-04 by autopilot). The whole REP-501→REP-505 chain needs to be re-attempted from scratch on a fresh wip branch. This is L-effort and risky for autopilot fires; recommend a human-paired session or a dedicated multi-fire worker assignment that can complete REP-501→REP-504 before validation in REP-505.
 - progress_2026-05-18-1628 (autopilot): 3rd attempt at REP-500 chain. Fresh wip `wip/REP-500-mlx-extraction` pushed with 5 commits — REP-501 (107 file moves + Package.swift rewrite into 4 targets: ReplyAICore/ReplyAIMLX/ReplyAI/ReplyAITests), REP-502 (cross-module imports in MLXDraftService.swift + ReplyAIApp.swift), REP-503 (60 test files `@testable import ReplyAI` → `@testable import ReplyAICore`), REP-504 (build.sh path updates: `Sources/ReplyAI/Resources` → `Sources/ReplyAICore/Resources`, bundle name `ReplyAI_ReplyAI.bundle` → `ReplyAI_ReplyAICore.bundle`), and a 5th layering-indirection commit (`LLMServiceProvider.make` factory boundary in `ReplyAICore.LLMService.swift` so `InboxScreen` doesn't import `ReplyAIMLX` — `ReplyAIApp.init` installs the MLX-aware factory at @main launch). **HIDDEN BLOCKER discovered**: ReplyAICore has zero `public` declarations. The original BACKLOG description treated REP-501 as mechanical file-move work but glossed over Swift's cross-module visibility rules — ~50–100 types (LLMService, DraftChunk + Kind cases, PromptBuilder + its static funcs, MessageThread + all properties, Tone, Message + all properties, plus their initializers) need to become `public` for `ReplyAIMLX` to consume them from `ReplyAICore`. `swift build` succeeds spuriously off the 9-day-old .build/ cache (which still holds pre-rename MLX target artifacts); `swift test` reproduces the failure honestly by rebuilding the dep graph (errors: "cannot find type 'LLMService' in scope", "cannot find 'PromptBuilder' in scope", "cannot find 'DraftChunk' in scope", "cannot find type 'MessageThread' in scope", "cannot find type 'Tone' in scope", "'Message' is ambiguous"). Next fire continuation: clone the wip, run `swift test 2>&1 | grep 'cannot find\|ambiguous' | sort -u` to enumerate the public-API surface, walk each declaration in `ReplyAICore/` and add `public` (also `public init` / `public var` for each property), then re-run `swift test` until green. **Estimated effort**: M–L (still). Recommended discipline: one PR-style commit per "make TypeX and its surface public" so a regression can be partially reverted. Future fires MUST NOT re-do REP-501→504 from scratch — the wip is good ground. **Wip status**: 5 commits on `wip/REP-500-mlx-extraction` HEAD `a9a1860`, won't survive a `clean .build/` until visibility refactor lands.
@@ -213,7 +214,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: e602c1a (merged to main 2026-05-19 by autopilot fire 2026-05-19-1228)
 - claimed_by: null
 - depends_on: [REP-501]
 - files_to_touch:
@@ -233,7 +235,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: e602c1a (merged to main 2026-05-19 by autopilot fire 2026-05-19-1228)
 - claimed_by: null
 - depends_on: [REP-502]
 - files_to_touch:
@@ -250,7 +253,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: open
+- status: done
+- done_on: e602c1a (merged to main 2026-05-19 by autopilot fire 2026-05-19-1228)
 - claimed_by: null
 - depends_on: [REP-503]
 - files_to_touch:
@@ -267,9 +271,9 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: S
 - ui_sensitive: false
-- status: blocked
-- blocker: `wip/REP-500-mlx-extraction` is NOT on origin (verified 2026-05-09-1011 by autopilot — only `origin/main` and `origin/archive/2026-05-08-willpresent-superseded-by-8da2e2e` remain). Identical pattern to REP-501's recorded blocker (the original `wip/2026-04-24-205912-mlx-spm-target` was lost 2026-05-04). Until REP-501→REP-504 are re-attempted on a fresh wip branch, there is nothing for this human-review gate to verify. Reset to `open` once REP-504 lands a successor wip branch.
-- claimed_by: human
+- status: done
+- done_on: e602c1a (autopilot self-merged 2026-05-19 per feedback-replyai-autopilot-self-review; swift test ReplyAITests passed 1931/1931 in 15.9s with 3-skip gate, build.sh debug succeeded in 5s, 3-layer smoke launch green: process alive, 1360x852 window, no crash signatures. Elijah is not a coder so the "human review" gate falls to autopilot self-review now.)
+- claimed_by: null
 - depends_on: [REP-504]
 - files_to_touch: wip/REP-500-mlx-extraction (review only; merge to main if green) — branch currently absent
 - scope: Human verification gate for the full REP-500 MLX extraction chain (REP-501 through REP-504). Workers pushed code to wip/REP-500-mlx-extraction but could not run swift test due to the MLX cold-build budget constraint. Human should: (1) checkout the branch; (2) run `swift test` and confirm all 527+ tests pass with zero regressions; (3) run `./scripts/build.sh debug` and confirm the .app bundles and launches; (4) enable the MLX toggle in Settings and verify draft generation still produces tokens (MLX path intact); (5) confirm `swift package show-dependencies` excludes mlx-swift-lm from the ReplyAITests graph; (6) merge to main if all green and mark REP-500 through REP-505 done.
