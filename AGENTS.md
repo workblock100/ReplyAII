@@ -299,11 +299,14 @@ Commits (newest first; run `git log` for detail):
 
 Pick in order. Each has a concrete starting point.
 
-> **Note (2026-05-09):** items 1–4 below are the original pre-pivot strategic
-> priorities, all now shipped or deprioritized. The current active priority
-> queue lives in `BACKLOG.md` — see the REP-501→REP-505 chain (MLX SPM split),
-> REP-XCUI-001 (XCUITest target), and the open REP-AUDIT entries. This section
-> is preserved as historical context for the original 2026-04 priorities.
+> **Note (last refreshed 2026-05-19):** items 1–4 below are the original
+> pre-pivot strategic priorities, all now shipped or deprioritized. The
+> REP-501→REP-505 MLX SPM split (referenced in older versions of this
+> note) shipped on `540d760`; REP-XCUI-001 (XCUITest target) closed
+> `done_by_alternative` on the AX harness. The active priority queue
+> lives in `BACKLOG.md` — currently 2 open REPs, both
+> Elijah-decision-blocked. This section is preserved as historical
+> context for the original 2026-04 priorities.
 
 ### 1. ~~Global `⌘⇧R`~~ — SHIPPED (REP-009)
 
