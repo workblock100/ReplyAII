@@ -168,6 +168,35 @@ public final class Stats: @unchecked Sendable {
         state.withLock { $0 }
     }
 
+    /// Read-only counter bundle for UI surfaces (REP-045 wired this into
+    /// `SetPrivacyView`). Keeping a narrow public shape — rather than
+    /// exposing the full internal `Snapshot` type — lets the on-disk JSON
+    /// schema evolve without forcing the privacy view to know about new
+    /// fields, and avoids leaking the per-action `rulesFiredByAction`
+    /// dictionary keys as public ABI surface.
+    public struct CountersForUI: Sendable, Equatable {
+        public let draftsGenerated: Int
+        public let draftsSent: Int
+        public let messagesIndexed: Int
+        public let rulesMatchedCount: Int
+        public let rulesFiredTotal: Int
+        public let rulesFiredByAction: [String: Int]
+    }
+
+    /// Snapshot of the counters that the privacy screen renders. Calls
+    /// `snapshot()` under the hood; safe from any thread.
+    public func countersForUI() -> CountersForUI {
+        let snap = snapshot()
+        return CountersForUI(
+            draftsGenerated:    snap.draftsGenerated,
+            draftsSent:         snap.draftsSent,
+            messagesIndexed:    snap.messagesIndexed,
+            rulesMatchedCount:  snap.rulesMatchedCount,
+            rulesFiredTotal:    snap.rulesFiredByAction.values.reduce(0, +),
+            rulesFiredByAction: snap.rulesFiredByAction
+        )
+    }
+
     // MARK: - Writes
 
     /// Stable action-discriminator vocabulary used as keys into
