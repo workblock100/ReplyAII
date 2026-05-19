@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Main inbox surface — wires `InboxViewModel` and `DraftEngine` together,
 /// mounts the sidebar / thread-list / detail layout, and overlays the
@@ -7,6 +8,12 @@ import SwiftUI
 /// `pref.useMLX`; toggling that pref takes effect on the next launch.
 public struct InboxScreen: View {
     @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
+    /// Drives the LimitedModeBanner — true until any channel sync returns
+    /// ≥1 real thread (REP-228 flips this on `Preferences.demoModeActive`).
+    @AppStorage(PreferenceKey.demoModeActive) private var demoModeActive = PreferenceDefaults.demoModeActive
+    /// Session-only dismissal for the Limited Mode banner. Re-shows on
+    /// next launch until `demoModeActive` itself flips to false.
+    @State private var limitedModeBannerDismissed = false
     @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?
     /// Honor System Settings → Accessibility → Display → Reduce Motion.
     /// Every `withAnimation(...)` call in this file gates on this flag —
@@ -40,6 +47,18 @@ public struct InboxScreen: View {
 
     public init() {}
 
+    /// REP-259: deep-link to the top-level Privacy & Security pane in
+    /// System Settings, which is where the user grants Full Disk Access,
+    /// Contacts, Notifications, and Accessibility. The same destination
+    /// is reachable from the per-permission cards in `ObPermissionsView`;
+    /// when those cards each open a more specific pane, the Limited Mode
+    /// banner intentionally surfaces the top-level Privacy pane because
+    /// the user typically needs to grant multiple permissions in sequence.
+    private func openSystemPrivacyPane() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             // FDA banner suppressed per 2026-04-23 pivot. The chat.db / FDA
@@ -56,6 +75,21 @@ public struct InboxScreen: View {
             }
             if let loadStatus = engine.modelLoadStatus {
                 ModelLoadBanner(status: loadStatus)
+            }
+            // REP-259: Limited Mode affordance. Pivot-aligned — the app must
+            // be valuable to a user with zero permissions granted. When demo
+            // mode is active (no channel returned real threads yet), surface
+            // a banner that explains the state and points to Settings.
+            if demoModeActive && !limitedModeBannerDismissed {
+                LimitedModeBanner(
+                    onOpenSettings: openSystemPrivacyPane,
+                    onDismiss: {
+                        withAnimation(reduceMotion ? nil : Theme.Motion.std) {
+                            limitedModeBannerDismissed = true
+                        }
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
             HStack(spacing: 0) {
                 SidebarView(model: model)
