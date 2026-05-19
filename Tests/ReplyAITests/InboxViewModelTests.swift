@@ -1398,6 +1398,86 @@ final class InboxViewModelSendTests: XCTestCase {
         XCTAssertEqual(vm.selectedThreadID, "fa-1",
                        "failed send must NOT advance selection — the user is staying put to retry")
     }
+
+    /// 2026-05-19 regression. Before this fix, `SendConfirmSheet`'s "Send ↵"
+    /// button action was:
+    ///
+    ///     Task { await model.confirmSend() }
+    ///     dismiss()
+    ///
+    /// The `dismiss()` ran synchronously, fired the sheet's
+    /// `isPresented` binding setter, which called `cancelSend()` and
+    /// nilled `sendConfirmation` — BEFORE the queued `Task` ran. The
+    /// `Task` then hit `guard let pending = sendConfirmation else
+    /// { return }`, saw nil, and silently returned without ever calling
+    /// `IMessageSender.send`. User pressed Send and nothing happened.
+    /// This test pins the boundary: a cancel between requestSend and
+    /// confirmSend produces no send, which is the correct behavior, and
+    /// (in the partner test below) the no-cancel path DOES send.
+    func testCancelSendBeforeConfirmSendSuppressesDispatch() async {
+        let thread = MessageThread(
+            id: "t-race", channel: .imessage, name: "Carol",
+            avatar: "C", preview: "yo", time: "now",
+            chatGUID: "iMessage;-;t-race")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-race")
+
+        // Record whether the AppleScript hook ever fired.
+        let hookFired = SendHookFiredBox()
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in hookFired.value = true }
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "should-not-send")
+        vm.cancelSend()                   // simulates dismiss-first race
+        await vm.confirmSend()            // simulates the queued Task
+
+        XCTAssertFalse(hookFired.value,
+            "cancelSend before confirmSend must suppress the send — the dismiss-first race that swallowed every send before the SendConfirmSheet fix")
+        XCTAssertNil(vm.sendConfirmation,
+            "sendConfirmation must remain nil after cancel-then-confirm")
+    }
+
+    /// Partner test to the regression above: with no `cancelSend()` in
+    /// the middle, `requestSend` → `confirmSend` MUST dispatch through
+    /// `IMessageSender.executeHook`. This is the happy-path the
+    /// SendConfirmSheet's button action now produces (`dismiss()`
+    /// removed, sheet auto-dismisses when `sendConfirmation` nils
+    /// inside `confirmSend`).
+    func testRequestThenConfirmDispatchesWithoutInterposedCancel() async {
+        let thread = MessageThread(
+            id: "t-happy", channel: .imessage, name: "Dave",
+            avatar: "D", preview: "yo", time: "now",
+            chatGUID: "iMessage;-;t-happy")
+        let channel = BlockingMockChannel()
+        channel.blocking = false
+        let vm = InboxViewModel(threads: [thread], imessage: channel,
+                                contacts: fastContacts())
+        vm.selectThread("t-happy")
+
+        let hookFired = SendHookFiredBox()
+        let prevHook = IMessageSender.executeHook
+        IMessageSender.executeHook = { _ in hookFired.value = true }
+        defer { IMessageSender.executeHook = prevHook }
+
+        vm.requestSend(text: "should-actually-send")
+        await vm.confirmSend()
+
+        XCTAssertTrue(hookFired.value,
+            "requestSend → confirmSend (no cancel) must dispatch through IMessageSender")
+        XCTAssertNil(vm.sendConfirmation,
+            "sendConfirmation must be nilled inside confirmSend so the sheet auto-dismisses on the next render pass")
+    }
+}
+
+/// Tiny reference-typed wrapper so async closures can mutate a bool
+/// captured by reference. Used by the dismiss-race regression tests
+/// above; `Bool` itself is a value type and would be captured by copy.
+private final class SendHookFiredBox: @unchecked Sendable {
+    var value: Bool = false
 }
 
 // MARK: - Voice profile capture on send (REP-222)

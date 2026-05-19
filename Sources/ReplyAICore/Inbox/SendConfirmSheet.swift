@@ -46,8 +46,27 @@ struct SendConfirmSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 PrimaryButton(title: "Send ↵", icon: "paperplane.fill") {
+                    // **Do not call `dismiss()` here.** SwiftUI's
+                    // `dismiss()` synchronously walks the sheet's
+                    // `isPresented` binding back to `false`, which fires
+                    // the setter in `InboxScreen.sendConfirmPresented()`
+                    // that calls `model.cancelSend()` — nilling
+                    // `sendConfirmation` BEFORE the `Task` below ever
+                    // runs. The Task's first line is then
+                    // `guard let pending = sendConfirmation else { return }`,
+                    // and the guard fails: send never fires, no error
+                    // toast, no AppleScript trip — user clicks Send and
+                    // nothing happens. Fixed 2026-05-19 after Elijah hit
+                    // it on the very first real send attempt.
+                    //
+                    // The sheet still auto-dismisses: `confirmSend()`
+                    // sets `sendConfirmation = nil` on its second line,
+                    // which makes the binding's `get` return false, and
+                    // SwiftUI closes the sheet naturally on the next
+                    // render pass. `cancelSend()` then fires from the
+                    // setter, but it's a no-op (sendConfirmation already
+                    // nil — `cancelSend()` is idempotent).
                     Task { await model.confirmSend() }
-                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
             }
