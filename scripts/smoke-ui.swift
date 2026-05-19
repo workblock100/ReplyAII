@@ -18,7 +18,10 @@ private let permissionButtonIDs = [
 private let openInboxID = "replyai.app.prototype.open-inbox"
 private let threadRowPrefix = "replyai.inbox.thread-row."
 private let composerEditorID = "replyai.inbox.composer.editor"
-private let warmToneID = "replyai.inbox.tone-pill.warm"
+// Keep aligned with `Tone.allCases` (Sources/ReplyAICore/Models/Folder.swift).
+// The ordered list drives the ⌘/ cycle, so a renamed case would silently
+// break the smoke gate here as well — which is the desired coupling.
+private let toneIDs: [String] = ["warm", "direct", "playful"].map { "replyai.inbox.tone-pill.\($0)" }
 
 private let repo = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 private let defaultAppPath = repo.appendingPathComponent("build/ReplyAI.app").path
@@ -348,9 +351,12 @@ guard waitForElement(identifier: composerEditorID, appElement: inboxWindow, time
     fail("composer editor identifier did not appear after selecting \(firstThreadID)")
 }
 
-guard waitForElement(identifier: warmToneID, appElement: inboxWindow, timeout: 8) != nil else {
-    fail("warm tone-pill identifier did not appear after selecting \(firstThreadID)")
+for toneID in toneIDs {
+    guard waitForElement(identifier: toneID, appElement: inboxWindow, timeout: 8) != nil else {
+        printExposedIdentifiers(root: inboxWindow)
+        fail("tone-pill identifier did not appear after selecting \(firstThreadID): \(toneID)")
+    }
 }
 
 let titles = windowTitles(appElement: appElement).joined(separator: ", ")
-print("smoke-ui: PASS - onboarding, open-inbox click, thread selection, composer, and warm tone verified [\(titles)]")
+print("smoke-ui: PASS - onboarding, open-inbox click, thread selection, composer, and all tone pills (\(toneIDs.count)) verified [\(titles)]")
