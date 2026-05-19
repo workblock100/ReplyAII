@@ -9,7 +9,7 @@ import Foundation
 /// from the SQLite worker thread, the DraftEngine's cooperative-queue stream
 /// task, and the main actor without bridging. The JSON write is debounced
 /// (2 s window) so rapid-fire increments coalesce into one I/O call.
-final class Stats: @unchecked Sendable {
+public final class Stats: @unchecked Sendable {
     /// Process-wide shared instance used by production code paths that
     /// don't have an injected Stats (e.g. RulesStore on load). Tests
     /// construct their own instances to avoid cross-test interference.

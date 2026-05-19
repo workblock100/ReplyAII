@@ -13,12 +13,12 @@ import Tokenizers        // provides AutoTokenizer (macro expansion target)
 /// Model: `mlx-community/Llama-3.2-3B-Instruct-4bit` by default — small
 /// enough to load on any Apple Silicon, fast enough to feel streaming,
 /// 4-bit quantized for ~2 GB weights.
-final class MLXDraftService: @unchecked Sendable, LLMService {
+public final class MLXDraftService: @unchecked Sendable, LLMService {
     /// Default Hugging Face model ID. Drift here re-downloads ~2 GB of
     /// weights on next launch for every shipped user — pinned so a casual
     /// "let's try a different default" lands in code review instead of as
     /// a silent storage hit during the next OTA update.
-    static let defaultModelID = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+    public static let defaultModelID = "mlx-community/Llama-3.2-3B-Instruct-4bit"
 
     /// Confidence value yielded as the first `DraftChunk` for every MLX
     /// draft. The composer routes drafts with confidence < `lowConfidenceThreshold`
@@ -86,14 +86,14 @@ final class MLXDraftService: @unchecked Sendable, LLMService {
     private var cachedContainer: ModelContainer?
     private var loadTask: Task<ModelContainer, Error>?
 
-    init(modelID: String = MLXDraftService.defaultModelID) {
+    public init(modelID: String = MLXDraftService.defaultModelID) {
         self.modelID = modelID
     }
 
-    func draft(
+    public func draft(
         thread: MessageThread,
         tone: Tone,
-        history: [Message]
+        history: [ReplyAICore.Message]
     ) -> AsyncThrowingStream<DraftChunk, Error> {
         AsyncThrowingStream { continuation in
             let task = Task { [self] in

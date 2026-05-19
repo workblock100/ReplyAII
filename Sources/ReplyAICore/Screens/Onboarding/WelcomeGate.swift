@@ -7,10 +7,12 @@ import SwiftUI
 ///
 /// Reusable as a Settings-side "Reset onboarding" path — flipping the
 /// preference back to false will surface this view again at next launch.
-struct WelcomeGate: View {
+public struct WelcomeGate: View {
+    public init() {}
+
     @AppStorage(PreferenceKey.onboardingCompleted) private var completed = false
 
-    var body: some View {
+    public var body: some View {
         ZStack {
             Theme.Color.bg1.ignoresSafeArea()
             VStack(spacing: 0) {

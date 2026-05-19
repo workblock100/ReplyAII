@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Exists so prompt tuning and truncation logic can be tested in isolation,
 /// without wiring up async streaming machinery.
-struct PromptBuilder {
+public struct PromptBuilder {
     /// Rough token budget for message history. 1 char ≈ 0.25 tokens; we
     /// cap at 2 000 chars to stay well inside a 4 096-token context window
     /// while leaving room for the system prompt and completion.
@@ -74,7 +74,7 @@ struct PromptBuilder {
     /// Embedded newlines within individual message texts are collapsed to a
     /// single space so each `speaker: text` pair stays on one line and the
     /// instruction at the bottom is never accidentally continued mid-line.
-    static func build(
+    public static func build(
         thread: MessageThread,
         tone: Tone,
         history: [Message],
@@ -116,7 +116,7 @@ struct PromptBuilder {
     /// System-turn prompt describing the assistant's role and tone.
     /// If the raw instruction exceeds the history budget, it is truncated so at
     /// least `minHistoryReserve` chars remain for message context.
-    static func systemPrompt(tone: Tone) -> String {
+    public static func systemPrompt(tone: Tone) -> String {
         let raw = rawSystemPrompt(tone: tone)
         let cap = historyCharBudget - minHistoryReserve
         guard raw.count > cap else { return raw }

@@ -12,7 +12,7 @@ import Carbon.HIToolbox
 /// for the lifetime of the app, call `unregister()` (or just release the
 /// instance) when shutting down. Calling `register` twice on the same instance
 /// is a no-op.
-final class GlobalHotkey: @unchecked Sendable {
+public final class GlobalHotkey: @unchecked Sendable {
     /// 4-byte signature used by Carbon's hotkey ID. Must be a unique-per-app
     /// FourCharCode; we pick `RPLY` so a debugger trace makes the source clear.
     private static let signature: OSType = 0x52504C59 // 'RPLY'
@@ -145,7 +145,7 @@ final class GlobalHotkey: @unchecked Sendable {
 /// Helper invoked by the registered hotkey to bring ReplyAI to the front and
 /// focus the inbox window, simulating "open the composer from anywhere."
 @MainActor
-enum ReplyAIWindowSummoner {
+public enum ReplyAIWindowSummoner {
     /// Title used by `WindowGroup("Inbox", id: "inbox")` in `ReplyAIApp`.
     /// SwiftUI titles each scene window after the localized name passed to
     /// `WindowGroup`, so the AppKit fast-path match below uses this exact

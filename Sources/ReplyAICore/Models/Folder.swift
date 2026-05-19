@@ -24,16 +24,16 @@ struct Folder: Identifiable, Hashable, Sendable {
 /// rules.json (`setDefaultTone` action) and the per-thread draft cache,
 /// so renaming a case is a migration. The order in `allCases` drives
 /// the ⌘/ cycle order — keep it stable.
-enum Tone: String, CaseIterable, Hashable, Sendable, Codable, Identifiable {
+public enum Tone: String, CaseIterable, Hashable, Sendable, Codable, Identifiable {
     case warm = "Warm"
     case direct = "Direct"
     case playful = "Playful"
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
     /// Next item in the cycle for ⌘/. Wraps around at the end of
     /// `allCases` so the composer always lands on a valid tone.
-    func cycled() -> Tone {
+    public func cycled() -> Tone {
         let all = Tone.allCases
         let i = all.firstIndex(of: self) ?? 0
         return all[(i + 1) % all.count]

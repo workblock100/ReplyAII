@@ -5,7 +5,7 @@ import SwiftUI
 /// command palette and model-load banner. The DraftEngine's underlying
 /// LLM service (MLX vs stub) is selected at construction time off
 /// `pref.useMLX`; toggling that pref takes effect on the next launch.
-struct InboxScreen: View {
+public struct InboxScreen: View {
     @AppStorage(PreferenceKey.useMLX) private var useMLX = PreferenceDefaults.useMLX
     @Environment(NotificationCoordinator.self) private var coordinator: NotificationCoordinator?
     /// Honor System Settings → Accessibility → Display → Reduce Motion.
@@ -38,7 +38,9 @@ struct InboxScreen: View {
         )
     }
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         VStack(spacing: 0) {
             // FDA banner suppressed per 2026-04-23 pivot. The chat.db / FDA
             // path is no longer the primary route; alternative architectures

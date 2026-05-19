@@ -3,7 +3,7 @@ import SwiftUI
 /// Real `MenuBarExtra` popover — the shipping counterpart to the
 /// `sfc-menubar` design mock. Renders the same list of waiting threads,
 /// but driven by the live `InboxViewModel` instead of fixture snapshots.
-struct MenuBarContent: View {
+public struct MenuBarContent: View {
     /// User-visible string vocabulary for the menu-bar popover. Hoisted
     /// from inline `Text("…")` literals in the view body so a copy review
     /// can edit one place and so each string can be pinned by a unit test.
@@ -67,7 +67,9 @@ struct MenuBarContent: View {
     @State private var model = InboxViewModel()
     @Environment(\.openWindow) private var openWindow
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         VStack(spacing: 0) {
             header
                 .overlay(alignment: .bottom) { Rectangle().fill(Theme.Color.line).frame(height: 1) }

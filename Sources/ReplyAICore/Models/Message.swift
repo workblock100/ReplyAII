@@ -4,31 +4,34 @@ import Foundation
 /// messages by `rowID` (chat.db's `message.ROWID`) rather than `id`, so
 /// the in-memory `UUID` is safe to regenerate across launches —
 /// stable identity lives on the chat.db side, not on this struct.
-struct Message: Identifiable, Hashable, Sendable {
+///
+/// `public` (REP-500): used as a parameter type in `LLMService.draft`
+/// which is public so `ReplyAIMLX.MLXDraftService` can conform.
+public struct Message: Identifiable, Hashable, Sendable {
     /// Direction of the bubble — `me` is the user, `them` is the contact.
     /// Stored as a raw String so existing on-disk fixtures and any future
     /// JSON projections stay stable as the enum evolves.
-    enum Author: String, Sendable, Hashable { case them, me }
+    public enum Author: String, Sendable, Hashable { case them, me }
 
-    let id: UUID
-    let from: Author
-    let text: String
-    let time: String
+    public let id: UUID
+    public let from: Author
+    public let text: String
+    public let time: String
     /// chat.db `message.ROWID`, used by the rule engine to track which
     /// messages we've already evaluated. Zero for fixtures / mocks that
     /// don't care about dedup.
-    let rowID: Int64
+    public let rowID: Int64
     /// Projected from `message.cache_has_attachments` (1 = true). False
     /// for fixtures and mocks that don't set it explicitly.
-    let hasAttachment: Bool
+    public let hasAttachment: Bool
     /// Projected from `message.is_read`. False if the column is NULL or 0.
-    let isRead: Bool
+    public let isRead: Bool
     /// Projected from `message.date_delivered`. Nil when the column is 0
     /// (message not yet delivered, or a received message where the field
     /// isn't populated).
-    let deliveredAt: Date?
+    public let deliveredAt: Date?
 
-    init(
+    public init(
         id: UUID = UUID(),
         from: Author,
         text: String,

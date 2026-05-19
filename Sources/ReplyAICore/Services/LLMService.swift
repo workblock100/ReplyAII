@@ -64,7 +64,9 @@ public enum LLMServiceProvider {
 
 /// Hard-coded drafts from Fixtures, emitted as a token stream with realistic pacing.
 /// Used by the UI exactly the way MLX will be wired.
-struct StubLLMService: LLMService {
+public struct StubLLMService: LLMService {
+    public init() {}
+
     /// Production default for the per-token streaming delay range
     /// (nanoseconds). 22–58 ms is the cadence shipped to demo users
     /// — fast enough to feel like a live model, slow enough that the
@@ -95,7 +97,7 @@ struct StubLLMService: LLMService {
     var tokenDelay: ClosedRange<UInt64> = StubLLMService.defaultTokenDelay
     var initialDelay: UInt64 = StubLLMService.defaultInitialDelay
 
-    func draft(
+    public func draft(
         thread: MessageThread,
         tone: Tone,
         history: [Message]

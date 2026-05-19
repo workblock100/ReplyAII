@@ -7,7 +7,7 @@ import SwiftUI
 /// only when a corresponding `ChannelService` implementation lands;
 /// otherwise the per-channel filter UI ends up offering toggles for
 /// channels the inbox can't actually source threads from.
-enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
+public enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     case imessage
     case whatsapp
     case slack
@@ -15,9 +15,9 @@ enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     case sms
     case telegram
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var label: String {
+    public var label: String {
         switch self {
         case .imessage: "iMessage"
         case .whatsapp: "WhatsApp"
@@ -29,10 +29,10 @@ enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     }
 
     /// Human-readable channel name suitable for UI display.
-    var displayName: String { label }
+    public var displayName: String { label }
 
     /// SF Symbol name representing this channel.
-    var iconName: String {
+    public var iconName: String {
         switch self {
         case .imessage: "message.fill"
         case .whatsapp: "phone.bubble.fill"
@@ -48,7 +48,7 @@ enum Channel: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
     /// `Theme.Color.channel*` token for the case so the theme owns the
     /// hex values and a future light-mode swap or rebrand only edits
     /// `Theme.swift`. Pinned by `ChannelTests.testDotColorMatchesThemeChannelToken`.
-    var dotColor: Color {
+    public var dotColor: Color {
         switch self {
         case .imessage: Theme.Color.channelIMessage
         case .whatsapp: Theme.Color.channelWhatsApp

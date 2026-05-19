@@ -6,12 +6,14 @@ import SwiftUI
 ///
 /// In a production build we'd gate this behind a debug flag; for v1 it's
 /// the default root so we can sweep across all 34 states.
-struct AppPrototypeView: View {
+public struct AppPrototypeView: View {
     @State private var screen: ScreenID = .appInbox
     @State private var navOpen: Bool = true
     @Environment(\.openWindow) private var openWindow
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         HStack(spacing: 0) {
             if navOpen {
                 ScreenNav(screen: $screen, onClose: { withAnimation(Theme.Motion.std) { navOpen = false } })

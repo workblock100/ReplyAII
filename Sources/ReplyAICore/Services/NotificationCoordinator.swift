@@ -32,7 +32,7 @@ extension UNUserNotificationCenter: NotificationCenterProtocol {
 /// wire coordinator.inbox = viewModel.
 @Observable
 @MainActor
-final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate {
+public final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate {
 
     static let categoryID    = "REPLYAI_THREAD"
     static let replyActionID = "REPLY"
@@ -83,7 +83,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
 
     private let center: NotificationCenterProtocol
 
-    init(center: NotificationCenterProtocol = UNUserNotificationCenter.current()) {
+    public init(center: NotificationCenterProtocol = UNUserNotificationCenter.current()) {
         self.center = center
     }
 
@@ -170,7 +170,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    nonisolated func userNotificationCenter(
+    public nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
@@ -184,7 +184,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         completionHandler()
     }
 
-    nonisolated func userNotificationCenter(
+    public nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
