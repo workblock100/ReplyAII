@@ -7,5 +7,25 @@
 	     (Sandboxed apps can never be added to the FDA TCC list.) -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- REP-ALERT-260504-1650 (rediscovered 2026-05-19 after the "fix"
+	     supposedly shipped): MLX dylibs (MLXLLM, MLXHuggingFace, HuggingFace,
+	     Tokenizers) are SwiftPM-built without Apple Team ID signatures.
+	     With hardened runtime enabled (per project.yml), LaunchServices'
+	     library-validation check rejects them on `open`-style launches,
+	     forcing the process to exit ~28ms after main(). Direct-exec
+	     bypasses LaunchServices and the validation entirely. Add this
+	     entitlement so the bundle can load its own SwiftPM-built dylibs
+	     under hardened runtime. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- MLX uses Metal JIT-compiled kernels; without this entitlement
+	     hardened runtime can block the JIT step. Same scope as above:
+	     only matters when `useMLX = true`. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<!-- MLX's Metal kernel compile path writes executable memory pages.
+	     Required on Apple Silicon with hardened runtime when MLX is in use. -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
 </dict>
 </plist>

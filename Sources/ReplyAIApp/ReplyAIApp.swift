@@ -74,7 +74,14 @@ struct ReplyAIApp: App {
             // independently — the ternary form makes the compiler search for
             // a common concrete type of MLXDraftService and StubLLMService,
             // which doesn't exist (they share only protocol conformance).
-            if useMLX { return MLXDraftService() }
+            //
+            // We hand out LazyMLXDraftService (not MLXDraftService directly)
+            // so the actual MLXDraftService() construction is deferred from
+            // InboxScreen's @State engine init (runs at view-tree mount
+            // during foreground launch) to first-draft-requested. This
+            // bypasses REP-ALERT-260504-1650's foreground-LaunchServices
+            // exit-on-launch — see LazyMLXDraftService for the diagnosis.
+            if useMLX { return LazyMLXDraftService() }
             return StubLLMService()
         }
         UserDefaults.registerReplyAIDefaults()
