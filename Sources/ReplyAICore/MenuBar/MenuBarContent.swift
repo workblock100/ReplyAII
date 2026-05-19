@@ -40,7 +40,7 @@ public struct MenuBarContent: View {
         /// header. Shared identity glyph across MenuBarContent,
         /// AppPrototypeView, SidebarView, OnboardingStage, WelcomeGate,
         /// and InboxFrame — eight call sites in current main, all
-        /// inline `Text("R")`. THIS hoist intentionally only changes
+        /// inline `Text(BrandStrings.letter)`. THIS hoist intentionally only changes
         /// the local-to-MenuBarContent rendering; the other seven sites
         /// keep their inline literal until a future fire migrates them
         /// (would touch every shipping screen and warrant a

@@ -37,7 +37,7 @@ struct SfcNotificationView: View {
                     .fill(Theme.Color.accent)
                     .frame(width: 18, height: 18)
                     .overlay(
-                        Text("R")
+                        Text(BrandStrings.letter)
                             .font(Theme.Font.sans(11, weight: .bold))
                             .foregroundStyle(Theme.Color.accentInk)
                     )

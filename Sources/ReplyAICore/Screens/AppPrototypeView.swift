@@ -208,12 +208,12 @@ private struct ScreenNav: View {
                         .fill(Theme.Color.accent)
                         .frame(width: 28, height: 28)
                         .overlay(
-                            Text("R")
+                            Text(BrandStrings.letter)
                                 .font(Theme.Font.sans(15, weight: .bold))
                                 .foregroundStyle(Theme.Color.accentInk)
                         )
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("ReplyAI")
+                        Text(BrandStrings.name)
                             .font(Theme.Font.sans(14, weight: .semibold))
                             .foregroundStyle(Theme.Color.fg)
                         Text("APP PROTOTYPE")

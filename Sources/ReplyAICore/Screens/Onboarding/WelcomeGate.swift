@@ -68,7 +68,7 @@ public struct WelcomeGate: View {
                 .fill(Theme.Color.accent)
                 .frame(width: 64, height: 64)
                 .overlay(
-                    Text("R")
+                    Text(BrandStrings.letter)
                         .font(Theme.Font.sans(34, weight: .bold))
                         .foregroundStyle(Theme.Color.accentInk)
                 )

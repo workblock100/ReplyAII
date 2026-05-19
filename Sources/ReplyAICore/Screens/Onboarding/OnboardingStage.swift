@@ -58,11 +58,11 @@ struct OnboardingStage<Content: View, Cta: View, Secondary: View>: View {
                     .fill(Theme.Color.accent)
                     .frame(width: 26, height: 26)
                     .overlay(
-                        Text("R")
+                        Text(BrandStrings.letter)
                             .font(Theme.Font.sans(14, weight: .bold))
                             .foregroundStyle(Theme.Color.accentInk)
                     )
-                Text("ReplyAI")
+                Text(BrandStrings.name)
                     .font(Theme.Font.sans(13, weight: .semibold))
                     .foregroundStyle(Theme.Color.fg)
             }

@@ -48,7 +48,7 @@ struct SfcMenubarView: View {
             Text("Edit").font(Theme.Font.sans(11))
             Spacer()
             HStack(spacing: 10) {
-                Text("R").foregroundStyle(Theme.Color.accent).font(Theme.Font.sans(11, weight: .bold))
+                Text(BrandStrings.letter).foregroundStyle(Theme.Color.accent).font(Theme.Font.sans(11, weight: .bold))
                 Text("100%").font(Theme.Font.sans(11))
                 Text("Fri 2:41 PM").font(Theme.Font.sans(11))
             }
@@ -114,11 +114,11 @@ struct SfcMenubarView: View {
                 .fill(Theme.Color.accent)
                 .frame(width: 22, height: 22)
                 .overlay(
-                    Text("R")
+                    Text(BrandStrings.letter)
                         .font(Theme.Font.sans(13, weight: .bold))
                         .foregroundStyle(Theme.Color.accentInk)
                 )
-            Text("ReplyAI")
+            Text(BrandStrings.name)
                 .font(Theme.Font.sans(13, weight: .semibold))
                 .foregroundStyle(Theme.Color.fg)
             Spacer()
