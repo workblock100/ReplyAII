@@ -225,22 +225,22 @@ final class ThemeTokensTests: XCTestCase {
     func testAccentStackOpacityLiteralsArePinned() {
         XCTAssertEqual(
             String(describing: Theme.Color.accentSoft),
-            "8% #D7FF3AFF",
+            "8% #8C73FFFF",
             "Theme.Color.accentSoft is the 8% accent wash on row highlights — drift restyles every accent-tinted hover/select state"
         )
         XCTAssertEqual(
             String(describing: Theme.Color.accentSofter),
-            "5% #D7FF3AFF",
+            "5% #8C73FFFF",
             "Theme.Color.accentSofter is the 5% static accent card wash — drift restyles every accent-tinted card surface"
         )
         XCTAssertEqual(
             String(describing: Theme.Color.accentRule),
-            "18% #D7FF3AFF",
+            "18% #8C73FFFF",
             "Theme.Color.accentRule is the 18% accent divider tint — drift shifts the visual weight of every accent-rule separator"
         )
         XCTAssertEqual(
             String(describing: Theme.Color.accentGlow),
-            "35% #D7FF3AFF",
+            "35% #8C73FFFF",
             "Theme.Color.accentGlow is the 35% accent halo on focused elements — drift restyles the focus affordance everywhere"
         )
     }
@@ -469,17 +469,20 @@ final class ThemeTokensTests: XCTestCase {
     // 0.227 × 255 to 57 = 0x39, not 0x3A, when the source value is the
     // double 0.227 exactly). A Color-literal change shifts at least one
     // byte and the equality fails.
-    func testAccentBrandLiteralIsPinnedChartreuseLime() {
+    func testAccentBrandLiteralIsPinnedPurpleViolet() {
         // SwiftUI's `String(describing:)` projects an sRGB Color to
-        // `#RRGGBBAA`. (0.843, 1.000, 0.227) lands as `#D7FF3AFF` after
-        // SwiftUI's internal rounding pass — the exact byte sequence is
-        // captured here. If Apple changes the rounding rule in a future
-        // macOS, this test fails and the new bytes need to land in code
-        // review rather than silently shifting the brand accent.
+        // `#RRGGBBAA`. (0.55, 0.45, 1.00) lands as `#8C73FFFF`:
+        //   R: 0.55 × 255 = 140.25 → 140 = 0x8C
+        //   G: 0.45 × 255 = 114.75 → 115 = 0x73
+        //   B: 1.00 × 255 = 255   = 0xFF
+        // REP-FLIP-2026-05-19 flipped the brand from chartreuse-lime
+        // (#D7FF3AFF) to purple-violet (#8C73FFFF) per user feedback. The
+        // chartreuse pin is preserved in `git log` if a future "let's go
+        // back to yellow" needs to surface as a deliberate revert.
         XCTAssertEqual(
             String(describing: Theme.Color.accent),
-            "#D7FF3AFF",
-            "Theme.Color.accent is the brand chartreuse-lime — drift here silently rebrands every CTA and accent surface in the app"
+            "#8C73FFFF",
+            "Theme.Color.accent is the brand purple-violet — drift here silently rebrands every CTA and accent surface in the app"
         )
     }
 
@@ -506,20 +509,20 @@ final class ThemeTokensTests: XCTestCase {
     }
 
     // `Theme.Color.accentInk` is the inverse text color rendered on top
-    // of the brand accent (chartreuse-lime) — every primary CTA's label
-    // ("Get started", "Send", "Open inbox"), the menu-bar `R` glyph, and
-    // unread-count badges all use this color. Drift here either washes
-    // out the contrast against the accent background (lighter ink → low
-    // contrast → fails accessibility AA) or makes the ink pop too hard
-    // (jet-black on chartreuse looks alarmist rather than confident).
-    // The bg1 pin above happens to match accentInk's current RGB exactly,
-    // but a designer who intentionally split them would still want
-    // accentInk byte-pinned independently — this test catches drift on
-    // either token without entangling the two.
-    func testAccentInkLiteralIsPinnedDeepInk() {
+    // of the brand accent — every primary CTA's label ("Get started",
+    // "Send", "Open inbox"), the menu-bar `R` glyph, and unread-count
+    // badges all use this color. REP-FLIP-2026-05-19 flipped it from
+    // near-black (deep ink — good contrast on chartreuse-lime) to pure
+    // white (good contrast on purple-violet). Black-on-purple passes
+    // WCAG AA on the new accent too, but white-on-purple is the cleaner
+    // brand statement.
+    func testAccentInkLiteralIsPinnedWhite() {
+        // SwiftUI projects pure white as the short literal "white"
+        // via its `String(describing:)` form (not the 8-char hex
+        // "#FFFFFFFF" form).
         XCTAssertEqual(
             String(describing: Theme.Color.accentInk),
-            "#0A0B0DFF",
+            "white",
             "Theme.Color.accentInk is the text color stacked on accent surfaces — drift silently changes contrast on every primary CTA"
         )
     }

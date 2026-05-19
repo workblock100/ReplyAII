@@ -29,13 +29,19 @@ enum Theme {
         static let lineStrong = SwiftUI.Color.white.opacity(0.12)
         static let lineFaint  = SwiftUI.Color.white.opacity(0.04)
 
-        // Accent
-        static let accent     = SwiftUI.Color(red: 0.843, green: 1.000, blue: 0.227)
-        static let accentInk  = SwiftUI.Color(red: 0.039, green: 0.043, blue: 0.051)
-        static let accentSoft = SwiftUI.Color(red: 0.843, green: 1.000, blue: 0.227).opacity(0.08)
-        static let accentSofter = SwiftUI.Color(red: 0.843, green: 1.000, blue: 0.227).opacity(0.05)
-        static let accentRule = SwiftUI.Color(red: 0.843, green: 1.000, blue: 0.227).opacity(0.18)
-        static let accentGlow = SwiftUI.Color(red: 0.843, green: 1.000, blue: 0.227).opacity(0.35)
+        // Accent — REP-FLIP-2026-05-19: yellow chartreuse-lime → purple-blue
+        // per user feedback "i dont like the yellow design i want blue or purple".
+        // The new hue (0.55, 0.45, 1.00) projects to #8C73FFFF and ties into the
+        // existing userFooter avatar gradient (0.79/0.64/1.00 → 0.48/0.36/1.00).
+        // Switched accentInk from near-black to pure white for legibility on the
+        // brighter purple — black-on-#8C73FF passes WCAG AA but feels muddy;
+        // white-on-#8C73FF is the cleaner brand statement.
+        static let accent     = SwiftUI.Color(red: 0.55, green: 0.45, blue: 1.00)
+        static let accentInk  = SwiftUI.Color(red: 1.00, green: 1.00, blue: 1.00)
+        static let accentSoft = SwiftUI.Color(red: 0.55, green: 0.45, blue: 1.00).opacity(0.08)
+        static let accentSofter = SwiftUI.Color(red: 0.55, green: 0.45, blue: 1.00).opacity(0.05)
+        static let accentRule = SwiftUI.Color(red: 0.55, green: 0.45, blue: 1.00).opacity(0.18)
+        static let accentGlow = SwiftUI.Color(red: 0.55, green: 0.45, blue: 1.00).opacity(0.35)
 
         // Semantic
         static let warn = SwiftUI.Color(red: 1.000, green: 0.702, blue: 0.278)
