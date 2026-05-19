@@ -16,22 +16,21 @@ Screen inventory: **34 / 34** complete.
 
 ## Build
 
-Two paths — pick whichever fits. Both share the same sources + resources.
+Two paths — pick whichever fits. Both share the same sources + resources. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full dev workflow, test gate, and branch strategy.
 
 ### A) SwiftPM + bundler (no Xcode required)
 
 ```bash
-cd ~/Code/ReplyAI
-./scripts/build.sh debug open
+./scripts/build.sh debug open   # build + bundle + launch
+./scripts/verify.sh             # full local gate: 3-skip Swift test + build + UI smoke
 ```
 
-Compiles with `swift build` (Command Line Tools' toolchain), wraps the
-executable into `build/ReplyAI.app`, ad-hoc codesigns, and launches.
+`build.sh` compiles with `swift build` (Command Line Tools' toolchain), wraps
+the executable into `build/ReplyAI.app`, ad-hoc codesigns, and launches.
 
 ### B) XcodeGen + Xcode
 
 ```bash
-cd ~/Code/ReplyAI
 xcodegen generate
 open ReplyAI.xcodeproj      # ⌘R in Xcode
 ```
@@ -76,7 +75,7 @@ Sources/ReplyAI/
 
 `StubLLMService` emits tokens from the hard-coded `Fixtures.drafts` table with 22–58ms inter-token delay and a 180ms cold-start — used by every demo / fixture / test path.
 
-`MLXDraftService` is the on-device path: `mlx-swift-lm` + `swift-huggingface` load `mlx-community/Llama-3.2-3B-Instruct-4bit` (~2 GB) into a cached `ModelContainer` and stream tokens through `ChatSession.streamResponse(...)`. Gated behind `Preferences.useMLX` (default false until REP-501→REP-505 ships the SPM split — see "Not yet wired" below).
+`MLXDraftService` is the on-device path: `mlx-swift-lm` + `swift-huggingface` load `mlx-community/Llama-3.2-3B-Instruct-4bit` (~2 GB) into a cached `ModelContainer` and stream tokens through `ChatSession.streamResponse(...)`. Gated behind `Preferences.useMLX` (default off) and isolated in the `ReplyAIMLX` SPM target so MLX symbols don't load until the user opts in — fixes the launch-time exit tracked by REP-501→REP-505.
 
 `DraftEngine` is an `@Observable @MainActor` cache keyed on `(threadID, tone)`. Sub-views read state from it via `.environment(engine)` + `@Environment(DraftEngine.self)`. `prime` kicks off generation on first view; `regenerate` busts the cache for one (thread, tone) pair.
 
@@ -95,7 +94,6 @@ Sources/ReplyAI/
 ## Not yet wired
 
 - WhatsApp / Teams / Telegram / SMS channel integrations — stub `ChannelService` impls in `Sources/ReplyAI/Channels/{WhatsApp,Teams,Telegram,SMS}Channel.swift` throw `authorizationDenied` until a real backend lands. iMessage (`chat.db` + AppleScript fallback) and Slack (OAuth + Socket Mode) are shipped.
-- Voice profile training — `ob-voice` is a UI mock; no LoRA pipeline.
-- MLX runtime opt-in path is structurally fragile — `pref.model.useMLX = true` triggers an exit-on-launch (REP-ALERT-260504-1650) until the SPM split (REP-501→REP-505) lands.
+- Voice profile training — `ob-voice` is a UI mock; no LoRA pipeline yet.
 
 (For an exhaustive ship state see [`AGENTS.md`'s "What's still stubbed"](AGENTS.md) section — this list focuses on what a contributor most likely cares about.)
