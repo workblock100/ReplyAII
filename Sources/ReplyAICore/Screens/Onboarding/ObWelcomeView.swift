@@ -41,10 +41,12 @@ struct ObWelcomeView: View {
             .padding(.top, 12)
         } cta: {
             PrimaryButton(title: "Get started", icon: "arrow.right")
+                .accessibilityIdentifier(ReplyAIUITestID.Onboarding.getStartedButton)
         } secondary: {
             Text("macOS 14.4 · Apple Silicon · 48MB")
                 .font(Theme.Font.mono(11))
                 .foregroundStyle(Theme.Color.fgMute)
         }
+        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.welcomeScreen)
     }
 }

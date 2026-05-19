@@ -40,6 +40,7 @@ struct TonePills: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(tone.rawValue) tone")
+                .accessibilityIdentifier(ReplyAIUITestID.Inbox.tonePill(tone))
             }
         }
     }

@@ -73,6 +73,7 @@ struct ThreadRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(ReplyAIUITestID.Inbox.threadRow(id: thread.id))
     }
 
     /// Selected row's accent bar — extracted so the matchedGeometryEffect

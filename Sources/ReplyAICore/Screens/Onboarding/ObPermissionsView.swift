@@ -47,6 +47,15 @@ struct ObPermissionsView: View {
         case contacts
         case notifications
         case accessibility
+
+        var uiTestKey: String {
+            switch self {
+            case .fullDiskAccess: "full-disk-access"
+            case .contacts: "contacts"
+            case .notifications: "notifications"
+            case .accessibility: "accessibility"
+            }
+        }
     }
 
     @State private var statuses: [Kind: Status] = [
@@ -95,9 +104,12 @@ struct ObPermissionsView: View {
             .padding(.top, 8)
         } cta: {
             PrimaryButton(title: "Continue", icon: "arrow.right")
+                .accessibilityIdentifier(ReplyAIUITestID.Onboarding.continueButton)
         } secondary: {
             GhostButton(title: "Skip for now")
+                .accessibilityIdentifier(ReplyAIUITestID.Onboarding.skipButton)
         }
+        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionsScreen)
         .task { refreshAll() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshAll()
@@ -148,8 +160,10 @@ struct ObPermissionsView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(status == .granted)
+                .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionButton(kind.uiTestKey))
             }
         }
+        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionCard(kind.uiTestKey))
     }
 
     // MARK: - State refresh

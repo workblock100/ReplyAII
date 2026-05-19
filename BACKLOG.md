@@ -303,6 +303,7 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
   - SKILL.md smoke-launch section grows a `swift test --filter ReplyAIUITests` step
   - One-time `xctest` grant (Screen Recording / Accessibility) documented in AGENTS.md gotchas — once granted, runs forever in headless fires
   - A fire that ships a regression (e.g. button label changed, inbox window empty) gets caught by the UI tests and the wip merge is skipped
+- progress_2026-05-19-1539 (Codex): groundwork landed for durable UI selectors before introducing the XCUITest target. Added `ReplyAIUITestID` constants and pinned them with 5 XCTest cases, then applied accessibility identifiers to the launch/gallery surface (`prototypeRoot`, `screenContent`, `openInboxButton`), onboarding welcome + permissions controls/cards, inbox root, thread list, thread rows, composer editor, and tone pills. Gate: `swift test --skip ContactsResolverTests --skip InboxViewModelIsSyncingTests --skip InboxViewModelTests` => 1974 tests / 2 skipped / 0 failures in 15.5s. Build: `./scripts/build.sh debug` clean. Smoke: bundled app stayed alive with a 1360x852 ReplyAI window and no crash/fatal/database-lock log signatures in the scan window. Next continuation: add the actual UI-test target or smoke-click harness on top of these identifiers; do not use visible copy selectors.
 - test_plan: After the target exists, deliberately introduce a regression on a wip branch (e.g. rename `WelcomeView`'s "Get started" button to "Continue") and verify the smoke-launch step skips the merge with reason "ui-test-failed".
 
 ### REP-UI-STR-HOIST-001 — hoist inline UI string literals to per-view `Strings` enums + literal pins
@@ -3431,4 +3432,3 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
   - `grep -rh "^\s*func test" Tests/ReplyAITests/ | wc -l` before/after — must be equal or higher
   - Manual app launch with MLX enabled in Settings, verify `MLXDraftService.draft(...)` stream produces tokens
   - `swift package show-dependencies --target ReplyAITests 2>&1 | grep mlx` must return empty
-

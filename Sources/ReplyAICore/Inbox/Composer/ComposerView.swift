@@ -115,6 +115,7 @@ struct ComposerView: View {
                 .foregroundStyle(Theme.Color.fg)
                 .lineSpacing(3.5)
                 .frame(minHeight: 48)
+                .accessibilityIdentifier(ReplyAIUITestID.Inbox.composerEditor)
 
             if state.isStreaming {
                 // Streaming caret sits at the top-trailing edge so it
