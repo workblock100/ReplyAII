@@ -83,13 +83,23 @@ public final class NotificationCoordinator: NSObject, UNUserNotificationCenterDe
 
     private let center: NotificationCenterProtocol
 
-    public init(center: NotificationCenterProtocol = UNUserNotificationCenter.current()) {
+    /// Public no-arg init used by ReplyAIApp at @main launch. The protocol-
+    /// accepting init below stays `internal` because `NotificationCenterProtocol`
+    /// is internal (test-only seam) — exposing it across modules would force the
+    /// whole protocol and every UNUserNotificationCenter method shape into the
+    /// public ABI without external callers actually needing the seam.
+    public convenience override init() {
+        self.init(center: UNUserNotificationCenter.current())
+    }
+
+    init(center: NotificationCenterProtocol) {
         self.center = center
+        super.init()
     }
 
     /// Call once at app launch. Registers the inline-reply category and requests
     /// notification authorization if not yet determined. Idempotent.
-    func setUp() async {
+    public func setUp() async {
         let replyAction = UNTextInputNotificationAction(
             identifier: Self.replyActionID,
             title: InlineReplyAction.title,

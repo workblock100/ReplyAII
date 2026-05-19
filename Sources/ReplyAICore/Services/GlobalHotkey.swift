@@ -13,6 +13,8 @@ import Carbon.HIToolbox
 /// instance) when shutting down. Calling `register` twice on the same instance
 /// is a no-op.
 public final class GlobalHotkey: @unchecked Sendable {
+    public init() {}
+
     /// 4-byte signature used by Carbon's hotkey ID. Must be a unique-per-app
     /// FourCharCode; we pick `RPLY` so a debugger trace makes the source clear.
     private static let signature: OSType = 0x52504C59 // 'RPLY'
@@ -66,7 +68,7 @@ public final class GlobalHotkey: @unchecked Sendable {
     /// Default ⌘⇧R combo. Other combinations are easy to add later — pass a
     /// `keyCode` from `kVK_*` and the modifier bitmask in the same form
     /// Carbon expects (`cmdKey | shiftKey | optionKey | controlKey`).
-    func register(
+    public func register(
         keyCode: UInt32 = UInt32(kVK_ANSI_R),
         modifiers: UInt32 = UInt32(cmdKey | shiftKey),
         onPressed: @escaping () -> Void
@@ -153,7 +155,7 @@ public enum ReplyAIWindowSummoner {
     /// drift on either side silently degrades `⌘⇧R` to the slower
     /// notification-fallback path on every summon. Pinned by
     /// `GlobalHotkeyContractTests.testInboxWindowTitleConstantIsInbox`.
-    static let inboxWindowTitle = "Inbox"
+    public static let inboxWindowTitle = "Inbox"
 
     /// Scene id used by `WindowGroup(_, id:)` in `ReplyAIApp` and every
     /// `openWindow(id:)` call site (MenuBarContent, AppPrototypeView,
@@ -162,9 +164,9 @@ public enum ReplyAIWindowSummoner {
     /// any caller routes that one button to a stale id (button no-ops
     /// while the others continue to work). Pinned by
     /// `GlobalHotkeyContractTests.testInboxWindowIDConstantIsInbox`.
-    static let inboxWindowID = "inbox"
+    public static let inboxWindowID = "inbox"
 
-    static func summon() {
+    public static func summon() {
         NSApp.activate(ignoringOtherApps: true)
         // Fast path: an existing inbox window? Surface it directly via AppKit
         // so we don't need a SwiftUI View in scope. SwiftUI's WindowGroup

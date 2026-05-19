@@ -174,7 +174,7 @@ extension UserDefaults {
     ///
     /// - Parameter defaults: UserDefaults instance to seed. Defaults to
     ///   `.standard` in production; tests pass an isolated suite.
-    static func registerReplyAIDefaults(in defaults: UserDefaults = .standard) {
+    public static func registerReplyAIDefaults(in defaults: UserDefaults = .standard) {
         defaults.register(defaults: [
             PreferenceKey.crashReports:     PreferenceDefaults.crashReports,
             PreferenceKey.licenseUpdates:   PreferenceDefaults.licenseUpdates,

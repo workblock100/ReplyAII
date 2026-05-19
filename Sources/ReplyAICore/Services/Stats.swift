@@ -13,7 +13,7 @@ public final class Stats: @unchecked Sendable {
     /// Process-wide shared instance used by production code paths that
     /// don't have an injected Stats (e.g. RulesStore on load). Tests
     /// construct their own instances to avoid cross-test interference.
-    static let shared = Stats(fileURL: defaultFileURL())
+    public static let shared = Stats(fileURL: defaultFileURL())
 
     /// Codable snapshot of every counter. Used as both the on-disk
     /// shape and the value callers see through `snapshot()`.
@@ -337,7 +337,7 @@ public final class Stats: @unchecked Sendable {
     /// disk synchronously. Call on app shutdown to avoid losing the last
     /// session's increments before the 2 s window expires.
     /// No-op when `fileURL` is nil.
-    func flushNow() {
+    public func flushNow() {
         writeLock.lock()
         pendingWrite?.cancel()
         pendingWrite = nil

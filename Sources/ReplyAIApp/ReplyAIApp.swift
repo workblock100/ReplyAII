@@ -64,7 +64,13 @@ struct ReplyAIApp: App {
         // protection is that no MLXDraftService construction happens until
         // the first window scene needs one.
         LLMServiceProvider.make = { useMLX in
-            useMLX ? MLXDraftService() : StubLLMService()
+            // Explicit if/return form (instead of ternary) so each branch
+            // coerces through the closure's `any LLMService` contextual type
+            // independently — the ternary form makes the compiler search for
+            // a common concrete type of MLXDraftService and StubLLMService,
+            // which doesn't exist (they share only protocol conformance).
+            if useMLX { return MLXDraftService() }
+            return StubLLMService()
         }
         UserDefaults.registerReplyAIDefaults()
         let count = UserDefaults.standard.integer(forKey: PreferenceKey.launchCount)
