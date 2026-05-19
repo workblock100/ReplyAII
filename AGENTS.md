@@ -40,6 +40,8 @@ SwiftPM builds without Xcode. Xcode is installed at `/Applications/Xcode.app` an
 cd ~/Code/ReplyAI
 ./scripts/build.sh debug open   # compile, bundle, codesign, launch
 ./scripts/build.sh release      # release build, doesn't launch
+./scripts/verify.sh             # three-skip XCTest gate + debug bundle +
+                                # first-run AX smoke-click
 ./scripts/smoke-ui.swift        # AX smoke-click: force first-run onboarding,
                                 # verify permission controls, press Get
                                 # started, press replyai.app.prototype.open-
@@ -54,7 +56,8 @@ swift test                      # run the XCTest suite — but see the gotcha be
 #    --skip InboxViewModelTests
                                 # plain `swift test` hangs intermittently on the
                                 # Contacts XPC handshake; the three-skip form
-                                # completes in ~15s warm with 1927 passes.
+                                # completes in ~15s warm with 1974 executed,
+                                # 2 skipped, 0 failures.
 
 # Xcode path:
 xcodegen generate && open ReplyAI.xcodeproj
@@ -76,6 +79,10 @@ The bundler script (`scripts/build.sh`) substitutes `$(VAR)` placeholders in `In
   button, finds `replyai.app.prototype.open-inbox` via Accessibility,
   presses it, selects a thread row, and fails unless the "Inbox" window,
   composer editor, and warm tone pill appear.
+- Full local verification gate: run `./scripts/verify.sh`. Use
+  `./scripts/verify.sh --clean-stale` if a previous XCTest/SwiftPM worker is
+  clearly wedged; that flag intentionally kills stale `xctest`, `swift test`,
+  `swift-frontend`, and `swift-build` processes before starting the gate.
 
 ## Repo layout
 
