@@ -43,6 +43,11 @@ struct RootView: View {
 @main
 struct ReplyAIApp: App {
     @State private var coordinator = NotificationCoordinator()
+    /// REP-044: shared observable backing the menu-bar icon's badge.
+    /// The MenuBarExtra label below subscribes via SwiftUI's @State
+    /// mechanism; the InboxScreen pushes new counts into this from its
+    /// `.onChange(of: model.threads)` modifier.
+    @State private var menuBarBadge = MenuBarBadgeState.shared
     /// Held for the lifetime of the app; releasing it would deregister the
     /// system-wide ⌘⇧R hotkey. SwiftUI keeps `@StateObject`-style retains for
     /// any value-type state but a plain `let` is fine here — `App`'s lifetime
@@ -121,8 +126,21 @@ struct ReplyAIApp: App {
         // Real NSStatusItem presence — R icon lives in the system menu bar
         // whenever the app is running. Clicking opens the waiting-threads
         // popover.
-        MenuBarExtra("ReplyAI", systemImage: "r.square.fill") {
+        // REP-044: label is now a ViewBuilder so we can overlay the
+        // unread-thread count on the R glyph reactively. Falls back to
+        // the bare R when count is zero so unread-free inboxes don't
+        // show visual noise.
+        MenuBarExtra {
             MenuBarContent()
+        } label: {
+            if menuBarBadge.unreadCount > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "r.square.fill")
+                    Text("\(menuBarBadge.unreadCount)")
+                }
+            } else {
+                Image(systemName: "r.square.fill")
+            }
         }
         .menuBarExtraStyle(.window)
     }

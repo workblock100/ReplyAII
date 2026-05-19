@@ -129,6 +129,13 @@ public struct InboxScreen: View {
             await coordinator?.setUp()
             await model.syncFromIMessage()
         }
+        // REP-044: push the unread-thread count to the menu-bar badge
+        // whenever the threads array mutates. The inbox window is the
+        // primary syncer; the menu-bar icon reflects whatever the inbox
+        // has most recently seen.
+        .onChange(of: model.threads.map { $0.unread }, initial: true) { _, _ in
+            MenuBarBadgeState.shared.unreadCount = model.threads.filter { $0.unread > 0 }.count
+        }
         .task(id: model.selectedThreadID) {
             await model.loadMessages(for: model.selectedThreadID)
         }
