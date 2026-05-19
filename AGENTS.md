@@ -41,7 +41,8 @@ cd ~/Code/ReplyAI
 ./scripts/build.sh debug open   # compile, bundle, codesign, launch
 ./scripts/build.sh release      # release build, doesn't launch
 ./scripts/verify.sh             # three-skip XCTest gate + debug bundle +
-                                # first-run AX smoke-click
+                                # first-run AX smoke-click; concise by
+                                # default, add --verbose for full logs
 ./scripts/smoke-ui.swift        # AX smoke-click: force first-run onboarding,
                                 # verify permission controls, press Get
                                 # started, press replyai.app.prototype.open-
@@ -83,6 +84,8 @@ The bundler script (`scripts/build.sh`) substitutes `$(VAR)` placeholders in `In
   `./scripts/verify.sh --clean-stale` if a previous XCTest/SwiftPM worker is
   clearly wedged; that flag intentionally kills stale `xctest`, `swift test`,
   `swift-frontend`, and `swift-build` processes before starting the gate.
+  The default output prints only final summaries and log paths; add
+  `--verbose` when debugging a specific failure.
 
 ## Repo layout
 
