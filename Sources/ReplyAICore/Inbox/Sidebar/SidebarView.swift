@@ -15,6 +15,72 @@ struct SidebarView: View {
     /// on this flag so a Reduce Motion user gets instant cuts.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// REP-UI-STR-HOIST-001 view 2 of 5. Inline `Text("…")` literals
+    /// hoisted to per-view constants so a copy review or i18n pass is a
+    /// single-file diff with literal-pin test coverage. Brand strings
+    /// ("R", "ReplyAI") and demo-only profile strings ("JS", "Jordan Song",
+    /// "pro · mac") are intentionally left inline: brand strings get a
+    /// `BrandStrings.swift` consolidation pass after every per-view hoist
+    /// settles; demo profile data gets replaced with real user data when
+    /// the account layer ships. `internal` access so `@testable import
+    /// ReplyAICore` reaches the constants.
+    enum Strings {
+        /// Search shortcut hint displayed at the right of the brand row.
+        /// Matches the global keyboard map (`Services/GlobalHotkey.swift`).
+        static let searchShortcutHint = "⌘K"
+
+        /// Placeholder in the search TextField. Verb-less noun phrase per
+        /// the design system's long-form placeholder convention.
+        static let searchPlaceholder = "Search anyone, anything"
+
+        /// Section header above the inbox folder list. Plural noun.
+        static let foldersSection = "Inboxes"
+
+        /// Section header above the channel filter list. Plural noun.
+        static let channelsSection = "Channels"
+
+        /// Sync chip label when no real sync has happened — the inbox is
+        /// displaying `Fixtures.demoChatThreads` and ⌘R will trigger a
+        /// real sync. The middle character is U+00B7 (middle dot), not a
+        /// hyphen.
+        static let syncIdle = "fixtures · ⌘R to sync"
+
+        /// Sync chip label while the sync is in flight. Trailing horizontal
+        /// ellipsis (U+2026), not three periods.
+        static let syncing = "syncing…"
+
+        /// Sync chip label when iMessage `chat.db` access is denied — the
+        /// user needs Full Disk Access in System Settings. Channel-agnostic
+        /// per the 2026-04-23 pivot (Slack-only users see this for FDA).
+        static let syncDenied = "needs full disk access"
+
+        /// Prefix before the relative-time string in the live state.
+        /// Composed as "live · <Ns ago>" or "live · <Nm ago>" — see
+        /// `relativeString(for:)`.
+        static let syncLivePrefix = "live · "
+
+        /// Prefix before the truncated error string in the failed state.
+        /// Composed as "error · <first 24 chars of msg>".
+        static let syncFailedPrefix = "error · "
+
+        /// Max characters of the underlying error message that we render
+        /// in the failed sync state. Anything longer is truncated to keep
+        /// the chip within the 220-pt sidebar width without wrapping.
+        static let syncFailedMessageMaxLength = 24
+
+        /// Relative-time string when the last sync was within 5 seconds ago.
+        static let relativeJustNow = "just now"
+
+        /// Suffix for seconds-ago strings (e.g. "12\(secondsAgoSuffix)").
+        static let secondsAgoSuffix = "s ago"
+
+        /// Suffix for minutes-ago strings (e.g. "5\(minutesAgoSuffix)").
+        static let minutesAgoSuffix = "m ago"
+
+        /// Suffix for hours-ago strings (e.g. "2\(hoursAgoSuffix)").
+        static let hoursAgoSuffix = "h ago"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Reserve vertical room for the macOS traffic lights that sit above us.
@@ -27,7 +93,7 @@ struct SidebarView: View {
             searchPill
                 .padding(.horizontal, 8)
 
-            SectionLabel(text: "Inboxes")
+            SectionLabel(text: Strings.foldersSection)
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
                 .padding(.bottom, 6)
@@ -35,7 +101,7 @@ struct SidebarView: View {
             foldersNav
                 .padding(.horizontal, 8)
 
-            SectionLabel(text: "Channels")
+            SectionLabel(text: Strings.channelsSection)
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
                 .padding(.bottom, 6)
@@ -86,7 +152,7 @@ struct SidebarView: View {
                 .font(Theme.Font.sans(13, weight: .semibold))
                 .foregroundStyle(Theme.Color.fg)
             Spacer()
-            Text("⌘K")
+            Text(Strings.searchShortcutHint)
                 .font(Theme.Font.mono(10))
                 .foregroundStyle(Theme.Color.fgFaint)
         }
@@ -98,7 +164,7 @@ struct SidebarView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Color.fgMute)
                 .accessibilityHidden(true)
-            TextField("Search anyone, anything", text: $model.searchQuery)
+            TextField(Strings.searchPlaceholder, text: $model.searchQuery)
                 .textFieldStyle(.plain)
                 .font(Theme.Font.sans(12))
                 .foregroundStyle(Theme.Color.fg)
@@ -229,20 +295,20 @@ struct SidebarView: View {
 
     private var syncLabel: String {
         switch model.syncStatus {
-        case .idle:               return "fixtures · ⌘R to sync"
-        case .syncing:            return "syncing…"
-        case .live(let at):       return "live · \(relativeString(for: at))"
-        case .denied:             return "needs full disk access"
-        case .failed(let msg):    return "error · \(msg.prefix(24))"
+        case .idle:               return Strings.syncIdle
+        case .syncing:            return Strings.syncing
+        case .live(let at):       return Strings.syncLivePrefix + relativeString(for: at)
+        case .denied:             return Strings.syncDenied
+        case .failed(let msg):    return Strings.syncFailedPrefix + msg.prefix(Strings.syncFailedMessageMaxLength)
         }
     }
 
     private func relativeString(for date: Date) -> String {
         let s = Int(Date().timeIntervalSince(date))
-        if s < 5 { return "just now" }
-        if s < 60 { return "\(s)s ago" }
+        if s < 5 { return Strings.relativeJustNow }
+        if s < 60 { return "\(s)\(Strings.secondsAgoSuffix)" }
         let m = s / 60
-        return m < 60 ? "\(m)m ago" : "\(m / 60)h ago"
+        return m < 60 ? "\(m)\(Strings.minutesAgoSuffix)" : "\(m / 60)\(Strings.hoursAgoSuffix)"
     }
 
     private var userFooter: some View {
