@@ -65,7 +65,13 @@ public enum LLMServiceProvider {
 /// Hard-coded drafts from Fixtures, emitted as a token stream with realistic pacing.
 /// Used by the UI exactly the way MLX will be wired.
 public struct StubLLMService: LLMService {
-    public init() {}
+    public init(
+        tokenDelay: ClosedRange<UInt64> = StubLLMService.defaultTokenDelay,
+        initialDelay: UInt64 = StubLLMService.defaultInitialDelay
+    ) {
+        self.tokenDelay = tokenDelay
+        self.initialDelay = initialDelay
+    }
 
     /// Production default for the per-token streaming delay range
     /// (nanoseconds). 22–58 ms is the cadence shipped to demo users
@@ -81,7 +87,7 @@ public struct StubLLMService: LLMService {
     /// `LLMServiceTests.testDefaultTokenDelayConstantIs22To58Ms`.
     static let tokenDelayLowerBoundNanoseconds: UInt64 = 22_000_000
     static let tokenDelayUpperBoundNanoseconds: UInt64 = 58_000_000
-    static let defaultTokenDelay: ClosedRange<UInt64> =
+    public static let defaultTokenDelay: ClosedRange<UInt64> =
         tokenDelayLowerBoundNanoseconds ... tokenDelayUpperBoundNanoseconds
 
     /// Production default for the cold-start "thinking" pause before
@@ -92,7 +98,7 @@ public struct StubLLMService: LLMService {
     /// produces a jarring instant-first-token; drift up makes every
     /// stub draft feel slow. Pinned by
     /// `LLMServiceTests.testDefaultInitialDelayConstantIs180Ms`.
-    static let defaultInitialDelay: UInt64 = 180_000_000
+    public static let defaultInitialDelay: UInt64 = 180_000_000
 
     var tokenDelay: ClosedRange<UInt64> = StubLLMService.defaultTokenDelay
     var initialDelay: UInt64 = StubLLMService.defaultInitialDelay

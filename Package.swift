@@ -79,12 +79,23 @@ let package = Package(
         ),
         // Tests depend on ReplyAICore ONLY — never on ReplyAIMLX or the
         // executable. This is the load-bearing invariant of REP-500: an
-        // MLXDraftService-touching test would have to live in a separate
-        // test target (none exist today).
+        // MLXDraftService-touching test must live in `ReplyAIMLXTests`
+        // (below), not here, so the main test suite never links MLX.
         .testTarget(
             name: "ReplyAITests",
             dependencies: ["ReplyAICore"],
             path: "Tests/ReplyAITests"
+        ),
+        // MLX-specific tests. Depends on ReplyAIMLX (and transitively
+        // ReplyAICore). Pulls MLX into its build graph by design — these
+        // tests are how the MLX-touching contracts stay pinned. Run them
+        // only when you intend to compile MLX (40+ min cold cache); the
+        // autopilot's primary test gate uses `--skip` on these or invokes
+        // `swift test --filter ReplyAITests` to stay off the MLX path.
+        .testTarget(
+            name: "ReplyAIMLXTests",
+            dependencies: ["ReplyAIMLX", "ReplyAICore"],
+            path: "Tests/ReplyAIMLXTests"
         ),
     ]
 )

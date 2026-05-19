@@ -1011,9 +1011,12 @@ final class DraftEngineTests: XCTestCase {
     func testLowConfidenceThresholdLiteralIsZeroPointFour() {
         XCTAssertEqual(DraftEngine.DraftState.lowConfidenceThreshold, 0.4, accuracy: 1e-9,
             "DraftState.lowConfidenceThreshold drift either over-warns (too high) or hides uncertain drafts (too low)")
-        XCTAssertLessThan(DraftEngine.DraftState.lowConfidenceThreshold,
-                          MLXDraftService.defaultDraftConfidence,
-            "lowConfidenceThreshold must stay strictly less than MLXDraftService.defaultDraftConfidence — otherwise every MLX draft routes through cmp-lowconf")
+        // The cross-module inequality (lowConfidenceThreshold <
+        // MLXDraftService.defaultDraftConfidence) is enforced in
+        // ReplyAIMLXTests.MLXDraftServiceTests.testDefaultDraftConfidenceExceedsCoreLowConfidenceThreshold,
+        // where the test target can see both modules. Keeping it here would
+        // force ReplyAITests to link MLX, defeating REP-500's load-bearing
+        // invariant (tests must build without MLX's 45-90min cold compile).
     }
 
     // MARK: - primingKey format pin

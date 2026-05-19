@@ -1,4 +1,5 @@
 import XCTest
+@testable import ReplyAIMLX
 @testable import ReplyAICore
 
 /// Pin tests for `MLXDraftService` constants. We don't load the model in
@@ -296,5 +297,16 @@ final class MLXDraftServiceTests: XCTestCase {
                        "warmingMessage must end with U+2026 HORIZONTAL ELLIPSIS — drift to `...` (three dots) changes kerning vs Apple convention")
         XCTAssertFalse(MLXDraftService.warmingMessage.hasSuffix("..."),
                        "must not end in three ASCII dots")
+    }
+
+    /// Cross-module invariant moved here from `DraftEngineTests` so the
+    /// main test target stays MLX-free (REP-500). The check: every MLX
+    /// draft must default to a confidence strictly above the engine's
+    /// low-confidence routing threshold — otherwise every MLX draft
+    /// would render through the cmp-lowconf composer.
+    func testDefaultDraftConfidenceExceedsCoreLowConfidenceThreshold() {
+        XCTAssertLessThan(DraftEngine.DraftState.lowConfidenceThreshold,
+                          MLXDraftService.defaultDraftConfidence,
+            "lowConfidenceThreshold must stay strictly less than MLXDraftService.defaultDraftConfidence — otherwise every MLX draft routes through cmp-lowconf")
     }
 }
