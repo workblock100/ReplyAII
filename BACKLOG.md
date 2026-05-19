@@ -1938,7 +1938,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P1
 - effort: M
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: 3dcdd9c (autopilot self-merged 2026-05-19 per feedback-replyai-autopilot-self-review; ObDoneView gains a Limited Mode variant CTA + warn-toned summary card when demoModeActive=true; new LimitedModeBanner.swift renders above the inbox layout with a one-click deep-link to System Settings' Privacy pane and a session-only dismiss. 8 string-pin XCTest cases added across both surfaces; full test gate 1939/1939 in 15.8s; build.sh debug green; 3-layer smoke launch green (PID 14857, 1360x852 window, no crash signatures).)
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/Screens/Onboarding/` (existing screens), `Sources/ReplyAI/Inbox/InboxViewModel.swift`
 - scope: **Pivot-aligned (UX — app must be useful with zero permissions).** When the user completes onboarding without granting FDA, Notifications, or Contacts, the app currently shows a broken or empty state. Add a "Limited mode" path: if `Preferences.demoModeActive == true` after onboarding, the onboarding completion screen shows a "Continue in Limited Mode" CTA instead of the primary "Set up iMessage" path. Tapping it sets `Preferences.hasCompletedOnboarding = true` and opens the inbox in demo mode. A dismissable banner in the inbox ("You're in Limited Mode — grant permissions to see real conversations") points to Settings. This is UI-sensitive; worker pushes to `wip/` branch for human copy + layout review. Prereq: REP-228 (demo mode fixtures) should be merged before this ships.
