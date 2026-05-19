@@ -108,8 +108,10 @@ actor SearchIndex {
     ///   Pass `nil` (the default) for an in-memory database — suitable for
     ///   tests where isolation matters more than persistence.
     init(databaseURL: URL? = nil) {
-        open(url: databaseURL)
-        createSchema()
+        db = Self.openDatabase(url: databaseURL)
+        if let db {
+            Self.createSchema(in: db)
+        }
     }
 
     /// Convenience URL pointing to the shared app-support search database.
@@ -376,17 +378,16 @@ actor SearchIndex {
 
     // MARK: - Setup
 
-    private func open(url: URL?) {
+    private static func openDatabase(url: URL?) -> OpaquePointer? {
         var handle: OpaquePointer?
         let path = url?.path ?? Self.inMemoryDatabasePath
         guard sqlite3_open_v2(path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
-            return
+            return nil
         }
-        self.db = handle
+        return handle
     }
 
-    private func createSchema() {
-        guard let db else { return }
+    private static func createSchema(in db: OpaquePointer) {
         sqlite3_exec(db, SQL.createMessagesFTSTable, nil, nil, nil)
     }
 
