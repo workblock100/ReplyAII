@@ -536,7 +536,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P0
 - effort: L
 - ui_sensitive: false
-- status: deprioritized
+- status: done_by_alternative
+- done_on: 2026-05-19 main `540d760` — same structural goal shipped via the REP-501→REP-505 chain (the architect's 5-step decomposition of REP-500). `Package.swift` now splits ReplyAICore + ReplyAIMLX + ReplyAI + ReplyAITests + ReplyAIMLXTests targets; test target links `ReplyAICore` only so `swift test` no longer pays the MLX C++ compile cost.
 - claimed_by: null
 - blocker: **Superseded by REP-500 (architect-decomposed into REP-501→REP-505).** REP-500 is the same goal — extract MLX into a separate SPM target so test compile doesn't link MLX — but with a concrete 5-step decomposition that fits the 13-min worker budget. NOTE: as of 2026-05-04 the original wip branch `wip/2026-04-24-205912-mlx-spm-target` (commit `0b0d66f`) is gone from origin (verified by autopilot 2026-05-04-0211); REP-501 has been reset to `status: open` and the chain needs to be re-attempted from scratch. Track progress via the REP-501→REP-505 chain; do not re-claim REP-285.
 - files_to_touch: `Package.swift` (commit message MUST start with `build:` prefix)
