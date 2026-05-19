@@ -1631,17 +1631,18 @@ final class ArchiveSearchIndexTests: XCTestCase {
 /// A ChannelService that returns successive thread batches on each call.
 /// After exhausting the provided batches, repeats the last one.
 private final class MutableMockChannel: ChannelService, @unchecked Sendable {
-    private let lock = NSLock()
-    private var batches: [[MessageThread]]
-    private var callIndex = 0
+    private let storage: Locked<([[MessageThread]], Int)>
 
-    init(batches: [[MessageThread]]) { self.batches = batches }
+    init(batches: [[MessageThread]]) {
+        self.storage = Locked((batches, 0))
+    }
 
     func recentThreads(limit: Int) async throws -> [MessageThread] {
-        lock.lock(); defer { lock.unlock() }
-        let i = min(callIndex, batches.count - 1)
-        callIndex += 1
-        return batches[i]
+        storage.withLock { state in
+            let i = min(state.1, state.0.count - 1)
+            state.1 += 1
+            return state.0[i]
+        }
     }
 
     func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
@@ -2241,21 +2242,20 @@ final class InboxViewModelThreadCacheTests: XCTestCase {
         let first  = makeThread(id: "t-first",  name: "First")
         let second = makeThread(id: "t-second", name: "Second")
 
-        var callCount = 0
         final class SequencedChannel: ChannelService, @unchecked Sendable {
-            private let lock = NSLock()
-            private var _count = 0
-            let batches: [[MessageThread]]
-            init(_ batches: [[MessageThread]]) { self.batches = batches }
+            private let storage: Locked<([[MessageThread]], Int)>
+            init(_ batches: [[MessageThread]]) {
+                self.storage = Locked((batches, 0))
+            }
             func recentThreads(limit: Int) async throws -> [MessageThread] {
-                lock.lock(); defer { lock.unlock() }
-                let idx = min(_count, batches.count - 1)
-                _count += 1
-                return batches[idx]
+                storage.withLock { state in
+                    let idx = min(state.1, state.0.count - 1)
+                    state.1 += 1
+                    return state.0[idx]
+                }
             }
             func messages(forThreadID id: String, limit: Int) async throws -> [Message] { [] }
         }
-        _ = callCount
 
         let seq = SequencedChannel([[first], [second]])
         let vm = InboxViewModel(threads: [], imessage: seq, contacts: fastContacts(),
@@ -2578,15 +2578,16 @@ final class InboxViewModelChatDBPivotFallbackTests: XCTestCase {
     private final class RecoveringChannel: ChannelService, @unchecked Sendable {
         // _failNext starts true; flips to false after the first call yields
         // its error. Subsequent calls return the configured live threads.
-        private let lock = NSLock()
-        private var _callCount = 0
+        private let callCount = Locked(0)
         private let liveThreads: [MessageThread]
         init(liveThreads: [MessageThread]) { self.liveThreads = liveThreads }
 
         func recentThreads(limit: Int) async throws -> [MessageThread] {
-            lock.lock(); defer { lock.unlock() }
-            _callCount += 1
-            if _callCount == 1 {
+            let isFirstCall = callCount.withLock { count in
+                count += 1
+                return count == 1
+            }
+            if isFirstCall {
                 throw ChannelError.databaseError(code: 5, message: "database is locked")
             }
             return liveThreads
@@ -3236,6 +3237,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     /// pass even if the constant value drifts in lockstep with the
     /// test literal. This pin freezes the named constants so a
     /// "let's namespace it" refactor surfaces independently.
+    @MainActor
     func testInboxPersistenceKeysMatchExpectedLiterals() {
         XCTAssertEqual(InboxViewModel.archivedKey, "pref.inbox.archivedThreadIDs",
             "archivedKey drift orphans every shipped user's archived list — old key sits unreachable on disk while new key reads empty")
@@ -3256,6 +3258,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     /// factory reset (user clicks "Factory reset" but their archived
     /// thread set persists). Pinned alongside the literal values so
     /// the wipe-coverage invariant is enforced at compile-pin level.
+    @MainActor
     func testInboxPersistenceKeysShareWipeNamespacePrefix() {
         let prefix = PreferenceKey.wipeNamespacePrefix
         for key in [InboxViewModel.archivedKey,
@@ -3281,6 +3284,7 @@ final class InboxViewModelPersistenceKeyContractTests: XCTestCase {
     /// hypothetical scoped-wipe. Pin extends
     /// `testInboxPersistenceKeysShareWipeNamespacePrefix` (which
     /// asserts the broader `pref.` prefix) with the sub-namespace.
+    @MainActor
     func testInboxScopedKeysShareInboxSubPrefix() {
         let inboxSubPrefix = "pref.inbox."
         let inboxScopedKeys: [String] = [
