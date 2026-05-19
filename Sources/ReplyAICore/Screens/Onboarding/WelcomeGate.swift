@@ -12,6 +12,35 @@ public struct WelcomeGate: View {
 
     @AppStorage(PreferenceKey.onboardingCompleted) private var completed = false
 
+    /// REP-UI-STR-HOIST-001 view 3 of 5. The literals below are the
+    /// first thing every new user reads, so pinning them catches a
+    /// copy-edit that silently rebrands the app's promise. The single
+    /// brand glyph "R" at line ~42 stays inline — `BrandStrings.swift`
+    /// will absorb it after every per-view hoist settles.
+    public enum Strings {
+        /// Hero title. Brand word "ReplyAI" is intentionally part of the
+        /// title literal — the line reads as a sentence, not as "[brand]
+        /// welcome screen". A future BrandStrings pass may split it.
+        public static let heroTitle = "Welcome to ReplyAI"
+
+        /// Hero subtitle. The product's brand promise — three independent
+        /// clauses separated by periods: scope ("unified inbox"), control
+        /// surface ("keyboard-first"), trust ("on-device, never leaves
+        /// this Mac"). Edits here are marketing-grade and need product
+        /// review; the pin keeps that gate explicit.
+        public static let heroSubtitle = "A unified, keyboard-first inbox for every channel you message in. Drafts in your voice, on-device. Your messages never leave this Mac."
+
+        /// Footer reassurance — the user can defer permission grants and
+        /// pick this back up in Settings. Period-terminated; matches the
+        /// design system's secondary-text terminal punctuation.
+        public static let footerSettingsHint = "You can revisit any of this in Settings later."
+
+        /// Primary CTA. Two words, lowercase second word — matches the
+        /// rest of the onboarding-flow primary CTAs ("Get started", not
+        /// "Get Started" / "Start" / "Continue").
+        public static let getStartedLabel = "Get started"
+    }
+
     public var body: some View {
         ZStack {
             Theme.Color.bg1.ignoresSafeArea()
@@ -44,11 +73,11 @@ public struct WelcomeGate: View {
                         .foregroundStyle(Theme.Color.accentInk)
                 )
             VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome to ReplyAI")
+                Text(Strings.heroTitle)
                     .font(Theme.Font.sans(28, weight: .semibold))
                     .tracking(-0.7)
                     .foregroundStyle(Theme.Color.fg)
-                Text("A unified, keyboard-first inbox for every channel you message in. Drafts in your voice, on-device. Your messages never leave this Mac.")
+                Text(Strings.heroSubtitle)
                     .font(Theme.Font.sans(14))
                     .foregroundStyle(Theme.Color.fgMute)
                     .lineSpacing(4)
@@ -60,7 +89,7 @@ public struct WelcomeGate: View {
 
     private var footer: some View {
         HStack {
-            Text("You can revisit any of this in Settings later.")
+            Text(Strings.footerSettingsHint)
                 .font(Theme.Font.sans(12))
                 .foregroundStyle(Theme.Color.fgMute)
             Spacer()
@@ -68,7 +97,7 @@ public struct WelcomeGate: View {
                 completed = true
             } label: {
                 HStack(spacing: 8) {
-                    Text("Get started")
+                    Text(Strings.getStartedLabel)
                         .font(Theme.Font.sans(13, weight: .medium))
                     Image(systemName: "arrow.right")
                         .font(.system(size: 11, weight: .semibold))
