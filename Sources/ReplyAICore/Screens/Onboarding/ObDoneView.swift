@@ -14,7 +14,10 @@ struct ObDoneView: View {
     @AppStorage(PreferenceKey.demoModeActive) private var demoModeActive = PreferenceDefaults.demoModeActive
 
     /// Pinned copy. The Limited Mode variant lives next to the default
-    /// so a copy review covers both states at once.
+    /// so a copy review covers both states at once. REP-UI-STR-HOIST-001
+    /// view 5 of 5 finished by hoisting the 4 inline literals below
+    /// (`readyBadge` / `limitedBadge` / `tipBadge` / `tipBody`) into this
+    /// enum and adding pin-test coverage.
     enum Strings {
         static let defaultEyebrow      = "You're ready"
         static let defaultTitleLead    = "That's it.\n"
@@ -29,6 +32,26 @@ struct ObDoneView: View {
         static let limitedReadyDetail  = "You skipped some permissions, so ReplyAI will start in Limited Mode with sample threads. Grant access from Settings any time to see your real messages."
         static let limitedCTA          = "Continue in Limited Mode"
         static let limitedSecondary    = "You can grant permissions later in Settings."
+
+        /// Card eyebrow (default state) — uppercase mono-spaced badge above
+        /// the "Voice profile trained …" sentence. Matches the design
+        /// system's status-badge convention (uppercase, ≤8 chars, tracking 1).
+        static let readyBadge          = "READY"
+
+        /// Card eyebrow (Limited Mode state) — same shape as `readyBadge`
+        /// but flagged with `Theme.Color.warn` instead of accent so the
+        /// user immediately notices the degraded state.
+        static let limitedBadge        = "LIMITED"
+
+        /// Second-card eyebrow — uppercase mono-spaced badge above the
+        /// TIP body sentence. Same shape constraints as the status badges.
+        static let tipBadge            = "TIP"
+
+        /// TIP body sentence. Loadbearing onboarding copy: gives the user
+        /// a concrete next-action and primes them for the ⌘↵ moment that
+        /// converts cold demos to real usage. Period-terminated; "⌘↵" is
+        /// rendered as glyphs, not the words "Command+Return".
+        static let tipBody             = "Try it on one real reply first. The first time ⌘↵ sends what you would've typed, you'll feel it."
     }
 
     var body: some View {
@@ -48,7 +71,7 @@ struct ObDoneView: View {
             HStack(alignment: .top, spacing: 12) {
                 Card(padding: 20) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(demoModeActive ? "LIMITED" : "READY")
+                        Text(demoModeActive ? Strings.limitedBadge : Strings.readyBadge)
                             .font(Theme.Font.mono(10))
                             .tracking(1.0)
                             .foregroundStyle(demoModeActive ? Theme.Color.warn : Theme.Color.accent)
@@ -62,11 +85,11 @@ struct ObDoneView: View {
                 }
                 Card(padding: 20) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("TIP")
+                        Text(Strings.tipBadge)
                             .font(Theme.Font.mono(10))
                             .tracking(1.0)
                             .foregroundStyle(Theme.Color.fgMute)
-                        Text("Try it on one real reply first. The first time ⌘↵ sends what you would've typed, you'll feel it.")
+                        Text(Strings.tipBody)
                             .font(Theme.Font.sans(14))
                             .foregroundStyle(Theme.Color.fgDim)
                             .lineSpacing(5)
