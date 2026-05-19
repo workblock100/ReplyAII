@@ -897,7 +897,8 @@ Prioritized, scoped task list. **Operating mode (2026-05): single-agent autopilo
 - priority: P2
 - effort: S
 - ui_sensitive: true
-- status: open
+- status: done
+- done_on: 57218b7 (autopilot self-merged 2026-05-19 per feedback-replyai-autopilot-self-review; new MenuBarBadgeState shared @Observable holds a single Int, MenuBarExtra changed to content:label: form rendering R + count when unreadCount > 0, InboxScreen pushes counts via .onChange of threads' unread fields. 4 string/state-pin XCTest cases; full test gate 1949/1949; build clean; 3-layer smoke green PID 18451.)
 - claimed_by: null
 - files_to_touch: `Sources/ReplyAI/MenuBar/MenuBarContent.swift`, `Sources/ReplyAI/App/ReplyAIApp.swift`
 - scope: The `MenuBarExtra` currently shows just the `R` label. Add an unread-thread count badge (e.g. `Text("R (\(unread))")` or a `ZStack` overlay with a `Circle` + count label). Count comes from `InboxViewModel.threads.filter { $0.unread > 0 }.count`. Hide badge when count is 0. UI-sensitive → worker pushes to `wip/`. Human reviews icon treatment before merge.
