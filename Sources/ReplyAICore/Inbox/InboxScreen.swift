@@ -101,7 +101,6 @@ public struct InboxScreen: View {
         .frame(minWidth: 1180, minHeight: 720)
         .background(Theme.Color.bg1)
         .preferredColorScheme(.dark)
-        .accessibilityIdentifier(ReplyAIUITestID.Inbox.root)
         .environment(engine)
         .overlay {
             if paletteOpen {

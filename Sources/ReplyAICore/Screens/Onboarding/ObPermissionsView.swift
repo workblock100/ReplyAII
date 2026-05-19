@@ -109,7 +109,6 @@ struct ObPermissionsView: View {
             GhostButton(title: "Skip for now")
                 .accessibilityIdentifier(ReplyAIUITestID.Onboarding.skipButton)
         }
-        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionsScreen)
         .task { refreshAll() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshAll()
@@ -163,7 +162,6 @@ struct ObPermissionsView: View {
                 .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionButton(kind.uiTestKey))
             }
         }
-        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.permissionCard(kind.uiTestKey))
     }
 
     // MARK: - State refresh

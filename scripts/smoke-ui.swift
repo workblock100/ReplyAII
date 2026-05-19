@@ -9,6 +9,9 @@ private let bundleID = "co.replyai.mac"
 private let onboardingCompletedKey = "pref.app.onboardingCompleted"
 private let useMLXKey = "pref.model.useMLX"
 private let openInboxID = "replyai.app.prototype.open-inbox"
+private let threadRowPrefix = "replyai.inbox.thread-row."
+private let composerEditorID = "replyai.inbox.composer.editor"
+private let warmToneID = "replyai.inbox.tone-pill.warm"
 
 private let repo = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 private let defaultAppPath = repo.appendingPathComponent("build/ReplyAI.app").path
@@ -103,7 +106,7 @@ private func elementAttribute(_ element: AXUIElement, _ attribute: CFString) -> 
 }
 
 private func findElement(
-    identifier: String,
+    matching predicate: (String) -> Bool,
     in element: AXUIElement,
     depth: Int = 0,
     visited: inout Int
@@ -111,12 +114,13 @@ private func findElement(
     visited += 1
     guard visited <= 5_000, depth <= 24 else { return nil }
 
-    if stringAttribute(element, "AXIdentifier" as CFString) == identifier {
+    if let identifier = stringAttribute(element, "AXIdentifier" as CFString),
+       predicate(identifier) {
         return element
     }
 
     for child in elementArrayAttribute(element, kAXChildrenAttribute as CFString) {
-        if let match = findElement(identifier: identifier, in: child, depth: depth + 1, visited: &visited) {
+        if let match = findElement(matching: predicate, in: child, depth: depth + 1, visited: &visited) {
             return match
         }
     }
@@ -124,10 +128,22 @@ private func findElement(
 }
 
 private func waitForElement(identifier: String, appElement: AXUIElement, timeout: TimeInterval) -> AXUIElement? {
+    waitForElement(matching: { $0 == identifier }, appElement: appElement, timeout: timeout)
+}
+
+private func waitForElement(identifierPrefix: String, appElement: AXUIElement, timeout: TimeInterval) -> AXUIElement? {
+    waitForElement(matching: { $0.hasPrefix(identifierPrefix) }, appElement: appElement, timeout: timeout)
+}
+
+private func waitForElement(
+    matching predicate: @escaping (String) -> Bool,
+    appElement: AXUIElement,
+    timeout: TimeInterval
+) -> AXUIElement? {
     let deadline = Date().addingTimeInterval(timeout)
     repeat {
         var visited = 0
-        if let element = findElement(identifier: identifier, in: appElement, visited: &visited) {
+        if let element = findElement(matching: predicate, in: appElement, visited: &visited) {
             return element
         }
         Thread.sleep(forTimeInterval: 0.2)
@@ -138,6 +154,12 @@ private func waitForElement(identifier: String, appElement: AXUIElement, timeout
 private func windowTitles(appElement: AXUIElement) -> [String] {
     elementArrayAttribute(appElement, kAXWindowsAttribute as CFString).compactMap {
         stringAttribute($0, kAXTitleAttribute as CFString)
+    }
+}
+
+private func windowElement(title: String, appElement: AXUIElement) -> AXUIElement? {
+    elementArrayAttribute(appElement, kAXWindowsAttribute as CFString).first {
+        stringAttribute($0, kAXTitleAttribute as CFString) == title
     }
 }
 
@@ -152,6 +174,17 @@ private func waitForWindow(title: String, appElement: AXUIElement, timeout: Time
     return false
 }
 
+private func waitForWindowElement(title: String, appElement: AXUIElement, timeout: TimeInterval) -> AXUIElement? {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if let window = windowElement(title: title, appElement: appElement) {
+            return window
+        }
+        Thread.sleep(forTimeInterval: 0.2)
+    } while Date() < deadline
+    return nil
+}
+
 private func pressElementOrButtonAncestor(_ element: AXUIElement) -> AXError {
     let directPressError = AXUIElementPerformAction(element, kAXPressAction as CFString)
     if directPressError == .success {
@@ -159,16 +192,56 @@ private func pressElementOrButtonAncestor(_ element: AXUIElement) -> AXError {
     }
 
     var current = element
+    var clickCandidates = [element]
     for _ in 0..<8 {
         guard let parent = elementAttribute(current, kAXParentAttribute as CFString) else {
-            return directPressError
+            break
         }
-        if stringAttribute(parent, kAXRoleAttribute as CFString) == kAXButtonRole {
+        clickCandidates.append(parent)
+        if stringAttribute(parent, kAXRoleAttribute as CFString) == (kAXButtonRole as String) {
             return AXUIElementPerformAction(parent, kAXPressAction as CFString)
         }
         current = parent
     }
+
+    for candidate in clickCandidates {
+        if clickElementCenter(candidate) {
+            return .success
+        }
+    }
     return directPressError
+}
+
+private func pointAttribute(_ element: AXUIElement, _ attribute: CFString) -> CGPoint? {
+    guard let value = copyAttribute(element, attribute) else { return nil }
+    let axValue = value as! AXValue
+    guard AXValueGetType(axValue) == .cgPoint else { return nil }
+    var point = CGPoint.zero
+    guard AXValueGetValue(axValue, .cgPoint, &point) else { return nil }
+    return point
+}
+
+private func sizeAttribute(_ element: AXUIElement, _ attribute: CFString) -> CGSize? {
+    guard let value = copyAttribute(element, attribute) else { return nil }
+    let axValue = value as! AXValue
+    guard AXValueGetType(axValue) == .cgSize else { return nil }
+    var size = CGSize.zero
+    guard AXValueGetValue(axValue, .cgSize, &size) else { return nil }
+    return size
+}
+
+private func clickElementCenter(_ element: AXUIElement) -> Bool {
+    guard let position = pointAttribute(element, kAXPositionAttribute as CFString),
+          let size = sizeAttribute(element, kAXSizeAttribute as CFString) else {
+        return false
+    }
+
+    let point = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.25)
+    return true
 }
 
 private func collectReplyAIIdentifiers(in element: AXUIElement, depth: Int = 0, visited: inout Int, into output: inout [String]) {
@@ -194,6 +267,13 @@ private func exposedReplyAIIdentifiers(appElement: AXUIElement) -> [String] {
     return output.sorted()
 }
 
+private func printExposedIdentifiers(root: AXUIElement) {
+    let exposed = exposedReplyAIIdentifiers(appElement: root).joined(separator: "\n  ")
+    if !exposed.isEmpty {
+        fputs("smoke-ui: exposed ReplyAI identifiers:\n  \(exposed)\n", stderr)
+    }
+}
+
 guard AXIsProcessTrusted() else {
     fail("Accessibility permission is not granted to this shell")
 }
@@ -204,10 +284,7 @@ let app = launchApp()
 let appElement = AXUIElementCreateApplication(app.processIdentifier)
 
 guard let openInbox = waitForElement(identifier: openInboxID, appElement: appElement, timeout: 10) else {
-    let exposed = exposedReplyAIIdentifiers(appElement: appElement).joined(separator: "\n  ")
-    if !exposed.isEmpty {
-        fputs("smoke-ui: exposed ReplyAI identifiers:\n  \(exposed)\n", stderr)
-    }
+    printExposedIdentifiers(root: appElement)
     fail("open-inbox button identifier did not appear")
 }
 
@@ -220,5 +297,28 @@ guard waitForWindow(title: "Inbox", appElement: appElement, timeout: 5) else {
     fail("Inbox window did not appear after pressing open-inbox")
 }
 
+guard let inboxWindow = waitForWindowElement(title: "Inbox", appElement: appElement, timeout: 5) else {
+    fail("Inbox window appeared in title list but AX element was unavailable")
+}
+
+guard let firstThreadRow = waitForElement(identifierPrefix: threadRowPrefix, appElement: inboxWindow, timeout: 8) else {
+    fail("no thread row identifier appeared in Inbox window")
+}
+
+let firstThreadID = stringAttribute(firstThreadRow, "AXIdentifier" as CFString) ?? "\(threadRowPrefix)<unknown>"
+let threadPressError = pressElementOrButtonAncestor(firstThreadRow)
+guard threadPressError == .success else {
+    fail("AX press failed for first thread row \(firstThreadID): \(threadPressError.rawValue)")
+}
+
+guard waitForElement(identifier: composerEditorID, appElement: inboxWindow, timeout: 8) != nil else {
+    printExposedIdentifiers(root: inboxWindow)
+    fail("composer editor identifier did not appear after selecting \(firstThreadID)")
+}
+
+guard waitForElement(identifier: warmToneID, appElement: inboxWindow, timeout: 8) != nil else {
+    fail("warm tone-pill identifier did not appear after selecting \(firstThreadID)")
+}
+
 let titles = windowTitles(appElement: appElement).joined(separator: ", ")
-print("smoke-ui: PASS - open-inbox AX press opened Inbox window [\(titles)]")
+print("smoke-ui: PASS - open-inbox click, thread selection, composer, and warm tone verified [\(titles)]")

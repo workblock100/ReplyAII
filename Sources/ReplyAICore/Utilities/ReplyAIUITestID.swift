@@ -6,21 +6,13 @@ import Foundation
 /// control identity, while copy can still evolve through product review.
 public enum ReplyAIUITestID {
     public enum App {
-        public static let prototypeRoot = "replyai.app.prototype.root"
         public static let openInboxButton = "replyai.app.prototype.open-inbox"
-        public static let screenContent = "replyai.app.prototype.screen-content"
     }
 
     public enum Onboarding {
-        public static let welcomeScreen = "replyai.onboarding.welcome"
         public static let getStartedButton = "replyai.onboarding.get-started"
-        public static let permissionsScreen = "replyai.onboarding.permissions"
         public static let continueButton = "replyai.onboarding.permissions.continue"
         public static let skipButton = "replyai.onboarding.permissions.skip"
-
-        public static func permissionCard(_ key: String) -> String {
-            "replyai.onboarding.permissions.card.\(key)"
-        }
 
         public static func permissionButton(_ key: String) -> String {
             "replyai.onboarding.permissions.button.\(key)"
@@ -28,8 +20,6 @@ public enum ReplyAIUITestID {
     }
 
     public enum Inbox {
-        public static let root = "replyai.inbox.root"
-        public static let threadList = "replyai.inbox.thread-list"
         public static let composerEditor = "replyai.inbox.composer.editor"
 
         public static func threadRow(id: String) -> String {

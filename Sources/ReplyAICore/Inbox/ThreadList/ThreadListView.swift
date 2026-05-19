@@ -50,7 +50,6 @@ struct ThreadListView: View {
                     }
                 }
             }
-            .accessibilityIdentifier(ReplyAIUITestID.Inbox.threadList)
         }
         .frame(width: 320)
         .background(Color(red: 0.043, green: 0.047, blue: 0.058)) // #0b0c0f

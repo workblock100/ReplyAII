@@ -47,6 +47,5 @@ struct ObWelcomeView: View {
                 .font(Theme.Font.mono(11))
                 .foregroundStyle(Theme.Color.fgMute)
         }
-        .accessibilityIdentifier(ReplyAIUITestID.Onboarding.welcomeScreen)
     }
 }
