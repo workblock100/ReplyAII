@@ -1,0 +1,38 @@
+# EditorConfig — cross-editor consistency for ReplyAI
+# https://editorconfig.org
+#
+# Pins indentation, line endings, and trailing-newline rules so that
+# Xcode, VS Code, and any third-party editor a contributor uses can't
+# silently introduce whitespace drift.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.swift]
+indent_size = 4
+max_line_length = 120
+
+[*.{sh,bash}]
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.{json,md}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[*.entitlements]
+# .entitlements files are XML plists; Xcode writes them with tab indents.
+indent_style = tab
+
+[Info.plist]
+indent_style = tab
