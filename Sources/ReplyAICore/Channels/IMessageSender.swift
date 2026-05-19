@@ -251,7 +251,41 @@ enum IMessageSender {
     /// loudly from AppleScript, which is correct — the thread lacks a
     /// GUID to address).
     static func chatGUID(for thread: MessageThread) -> String {
-        if let guid = thread.chatGUID, !guid.isEmpty { return guid }
+        // Prefer the chat.db-projected GUID, with one carve-out:
+        //
+        // chat.db on modern macOS can produce 3-field GUIDs whose service
+        // prefix is something other than `iMessage` or `SMS` — `any;…`
+        // shows up on short codes / RCS-promoted chats / merged-canonical
+        // rows. Messages.app's send verb rejects those prefixes. When
+        // the GUID has the right 3-field shape but the wrong prefix,
+        // drop it and synthesize from `thread.channel + thread.id`.
+        // Discovered 2026-05-19 by Elijah hitting `Invalid chat GUID
+        // 'any;-;29196': must match iMessage;[+-];<identifier>.` on a
+        // real-thread reply.
+        //
+        // Totally malformed inputs (whitespace-only, single token, no
+        // semicolons) still pass through verbatim — `validateChatGUID`
+        // catches them downstream and surfaces a clean `invalidChatGUID`
+        // error, preserving the pre-2026-05-19 fail-fast contract for
+        // garbage input vs. the silent-synthesis case for *almost*-valid
+        // GUIDs that just have the wrong service prefix.
+        if let guid = thread.chatGUID, !guid.isEmpty {
+            let parts = guid.split(
+                separator: Self.chatGUIDFieldSeparator,
+                maxSplits: 2,
+                omittingEmptySubsequences: false
+            )
+            let hasWellFormedShape = parts.count == 3
+            let prefixIsKnownService = parts.first.map { first in
+                first == Substring(Self.iMessageServiceID) ||
+                first == Substring(Self.smsServiceID)
+            } ?? false
+            if !hasWellFormedShape || prefixIsKnownService {
+                return guid
+            }
+            // Well-formed shape, unrecognized service prefix → drop the
+            // chat.db-supplied GUID and synthesize a fresh one below.
+        }
         let service = thread.channel == .sms ? Self.smsServiceID : Self.iMessageServiceID
         return "\(service)\(Self.chatGUID1to1Separator)\(thread.id)"
     }

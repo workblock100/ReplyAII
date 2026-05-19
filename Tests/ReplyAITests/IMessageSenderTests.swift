@@ -179,6 +179,64 @@ final class IMessageSenderTests: XCTestCase {
         )
     }
 
+    /// 2026-05-19 regression: chat.db on modern macOS surfaces 3-field
+    /// GUIDs with non-iMessage/SMS service prefixes on short codes and
+    /// merged-canonical rows (`any;-;29196`, hypothetically `RCS;-;<id>`,
+    /// etc.). Messages.app's AppleScript `send` verb rejects those
+    /// prefixes with `Invalid chat GUID 'any;-;29196': must match
+    /// iMessage;[+-];<identifier>.` Discovered when Elijah tried to
+    /// reply to a short code (5-digit SMS sender 29196) and got the
+    /// validation error toast instead of an actual send.
+    ///
+    /// Fix: `chatGUID(for:)` now drops chat.db GUIDs whose service prefix
+    /// isn't a known one (`iMessage` / `SMS`) and synthesizes from
+    /// `thread.channel + thread.id` instead — same path used when chat.db
+    /// returns no GUID at all. The pin asserts the new shape produces a
+    /// valid GUID that round-trips through `validateChatGUID`.
+    func testUnknownServicePrefixSynthesizesFromChannelAndID() {
+        // The exact case Elijah hit — short code "29196" on .sms.
+        let smsShortCode = MessageThread(
+            id: "29196", channel: .sms, name: "29196",
+            avatar: "2", preview: "", time: "",
+            chatGUID: "any;-;29196"   // chat.db's weird short-code shape
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: smsShortCode),
+            "SMS;-;29196",
+            "any-prefix GUID on a .sms thread must synthesize to SMS;-;<id> — preserving the chat.db GUID verbatim would surface the Invalid chat GUID validation error Elijah hit on 2026-05-19"
+        )
+        XCTAssertNoThrow(
+            try IMessageSender.validateChatGUID("SMS;-;29196", for: .sms),
+            "synthesized GUID must pass the same validation Messages.app expects"
+        )
+
+        // Same shape, .imessage channel — synthesizes with iMessage prefix.
+        let imessageWeird = MessageThread(
+            id: "abc123", channel: .imessage, name: "Weird Row",
+            avatar: "W", preview: "", time: "",
+            chatGUID: "rcs;-;abc123"   // hypothetical RCS row
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: imessageWeird),
+            "iMessage;-;abc123",
+            "non-iMessage/SMS prefix on a .imessage thread must synthesize with iMessage prefix"
+        )
+
+        // Boundary: a partial 2-field GUID is malformed and should pass
+        // through verbatim (failing validation downstream), NOT silently
+        // synthesize — that would mask a real chat.db corruption.
+        let partialGUID = MessageThread(
+            id: "handle", channel: .imessage, name: "X",
+            avatar: "X", preview: "", time: "",
+            chatGUID: "any;29196"   // missing the middle field
+        )
+        XCTAssertEqual(
+            IMessageSender.chatGUID(for: partialGUID),
+            "any;29196",
+            "malformed 2-field GUID must pass verbatim — only well-formed (3-field) GUIDs with unknown service prefixes synthesize"
+        )
+    }
+
     func testEmptyChatGUIDStringTreatedAsNil() {
         // COALESCE(c.guid, '') in IMessageChannel can surface "" for
         // freak rows; the sender should ignore empties and synthesize.
